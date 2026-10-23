@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "Hostels",
+    "slug": "hostels",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "scheme": "hostels",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "ios": { "supportsTablet": false, "bundleIdentifier": "com.hostels.app" },
+    "android": { "package": "com.hostels.app" },
+    "plugins": ["expo-router"],
+    "experiments": { "typedRoutes": false }
+  }
+}

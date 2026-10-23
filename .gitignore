@@ -1,0 +1,16 @@
+node_modules/
+.expo/
+.expo-shared/
+dist/
+build/
+.next/
+*.log
+.env
+.env.local
+.DS_Store
+.bun/
+*.tsbuildinfo
+.claude/settings.local.json
+apps/api/uploads/
+test-results/
+playwright-report/

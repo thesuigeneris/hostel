@@ -1,0 +1,12 @@
+{
+  "name": "hostels",
+  "private": true,
+  "version": "0.0.1",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev:api": "bun --filter @hostels/api dev",
+    "dev:mobile": "bun --filter @hostels/mobile start",
+    "typecheck": "bun --filter '*' typecheck"
+  },
+  "packageManager": "bun@1.3.10"
+}
