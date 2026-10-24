@@ -166,6 +166,13 @@ export default function HostelLife() {
                 <Button small variant="secondary" title="Reply" busy={busy === `c${p.id}`} disabled={!replies[p.id]?.trim()} onPress={() => act(`c${p.id}`, async () => { await api.resident.comment(p.id, replies[p.id]!); setReplies((r) => ({ ...r, [p.id]: '' })); })} />
               </Row>
               <Row>
+                <Button
+                  small
+                  variant={p.likedByMe ? 'secondary' : 'ghost'}
+                  title={`${p.likedByMe ? '♥' : '♡'} ${p.likes}`}
+                  busy={busy === `l${p.id}`}
+                  onPress={() => act(`l${p.id}`, () => api.resident.like(p.id, !p.likedByMe))}
+                />
                 {p.mine ? (
                   <Button small variant="ghost" title="Delete" onPress={() => act(`d${p.id}`, () => api.resident.deletePost(p.id))} />
                 ) : (
