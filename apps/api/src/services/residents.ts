@@ -32,19 +32,35 @@ export async function linkInvitedResidencies(user: User) {
 export async function myResidencies(user: User) {
   await linkInvitedResidencies(user);
   const rows = await getDb()
-    .select({ residency: schema.residencies, hostel: { id: schema.hostels.id, name: schema.hostels.name, slug: schema.hostels.slug, area: schema.hostels.area } })
+    .select({
+      residency: schema.residencies,
+      hostel: {
+        id: schema.hostels.id,
+        name: schema.hostels.name,
+        slug: schema.hostels.slug,
+        area: schema.hostels.area,
+        foodAvailable: schema.hostels.foodAvailable,
+      },
+    })
     .from(schema.residencies)
     .innerJoin(schema.hostels, eq(schema.hostels.id, schema.residencies.hostelId))
     .where(eq(schema.residencies.userId, user.id))
     .orderBy(desc(schema.residencies.startDate));
   const today = clock.today();
   return Promise.all(
-    rows.map(async (r) => ({
-      ...toResidency(r.residency),
-      hostel: r.hostel,
-      canReview: reviewEligibility(r.residency, today).ok,
-      hasReview: !!(await myReview(user.id, r.residency.hostelId)),
-    })),
+    rows.map(async (r) => {
+      const eligibility = reviewEligibility(r.residency, today);
+      const review = await myReview(user.id, r.residency.hostelId);
+      return {
+        ...toResidency(r.residency),
+        hostel: r.hostel,
+        canReview: eligibility.ok,
+        reviewBlockedReason: eligibility.ok ? null : (eligibility.reason ?? null),
+        hasReview: !!review,
+        // The resident's own review, so the form can be edited in place (including when it was hidden).
+        review: review ? { ...toReview(review, { name: user.name, residency: r.residency }), hiddenReason: review.hiddenReason } : null,
+      };
+    }),
   );
 }
 

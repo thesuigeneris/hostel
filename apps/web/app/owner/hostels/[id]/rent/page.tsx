@@ -4,7 +4,7 @@ import { SubmitButton } from '@/components/SubmitButton';
 import { Upsell } from '@/components/Upsell';
 import { Card, Flash, Input, Select, Stat, StatusBadge, Table, Td } from '@/components/ui';
 import { api } from '@/lib/api';
-import { monthLabel, rupees, titleCase } from '@/lib/format';
+import { monthLabel, rupees, titleCase, whatsappLink } from '@/lib/format';
 import { ownerHostel } from '@/lib/owner';
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ month?: string; error?: string; ok?: string }> };
@@ -17,6 +17,9 @@ export default async function RentPage({ params, searchParams }: Props) {
   const sheet = await (await api()).owner.rent(id, month).catch((e) => (e instanceof ApiError && e.code === 'plan_required' ? null : Promise.reject(e)));
   if (!sheet) return <Upsell hostelId={id} plan="pro" feature="The rent tracker" suspended={h.plan.suspended} />;
   const today = istDate();
+  const unpaidRows = sheet.rows.filter((r) => r.status !== 'paid');
+  const reminder = (r: (typeof sheet.rows)[number]) =>
+    `Hi ${r.name.split(' ')[0] || 'there'}, a reminder from ${h.name}: rent for ${monthLabel(month)} is ${rupees(r.amountDue - r.amountPaid)}${r.amountPaid ? ` (after the ${rupees(r.amountPaid)} you paid)` : ''}. Please pay by UPI or cash at the office. Thank you!`;
 
   return (
     <div className="space-y-6">
@@ -34,11 +37,17 @@ export default async function RentPage({ params, searchParams }: Props) {
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat label={`Due in ${monthLabel(month)}`} value={rupees(sheet.totals.due)} />
         <Stat label="Collected" value={rupees(sheet.totals.collected)} />
-        <Stat label="Still unpaid" value={rupees(sheet.totals.unpaid)} />
+        <Stat label="Still unpaid" value={rupees(Math.max(0, sheet.totals.due - sheet.totals.collected))} hint={`${sheet.totals.unpaid} of ${sheet.rows.length} residents`} />
       </div>
       {sheet.rows.length === 0 ? (
         <Card className="text-sm text-ink-soft">No residents for this month. Add them in the Residents tab.</Card>
       ) : (
+        <>
+        {unpaidRows.length > 0 && month <= today.slice(0, 7) && (
+          <Card className="flex flex-wrap items-center justify-between gap-3 text-sm">
+            <span>{unpaidRows.length} {unpaidRows.length === 1 ? 'resident has' : 'residents have'} not paid in full. Send a friendly reminder on WhatsApp from the Remind link in each row.</span>
+          </Card>
+        )}
         <Table head={['Resident', 'Due', 'Paid', 'On', 'How', 'Note', 'Status', '']}>
           {sheet.rows.map((r) => (
             <tr key={r.residencyId}>
@@ -58,10 +67,18 @@ export default async function RentPage({ params, searchParams }: Props) {
                 </form>
               </Td>
               <Td><StatusBadge status={r.status === 'unpaid' ? 'due' : r.status} /></Td>
-              <Td><SubmitButton form={`rent-${r.residencyId}`} size="sm" variant="secondary">Save</SubmitButton></Td>
+              <Td>
+                <div className="flex items-center gap-2">
+                  <SubmitButton form={`rent-${r.residencyId}`} size="sm" variant="secondary">Save</SubmitButton>
+                  {r.status !== 'paid' && month <= today.slice(0, 7) && (
+                    <a href={whatsappLink(r.phone, reminder(r))} target="_blank" rel="noreferrer" className="text-sm">Remind</a>
+                  )}
+                </div>
+              </Td>
             </tr>
           ))}
         </Table>
+        </>
       )}
     </div>
   );

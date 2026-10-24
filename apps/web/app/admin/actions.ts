@@ -1,21 +1,41 @@
 'use server';
 
+import type { PartnerStandardId } from '@hostels/shared';
+import { revalidatePath } from 'next/cache';
 import { num, run, safePath, str } from '@/lib/actions';
 import { api } from '@/lib/api';
 
 const back = (form: FormData, fallback = '/admin') => safePath(str(form, '_back'), fallback);
+/** Listing and partner changes show on public hostel pages at once, not after their cache expires. */
+async function publicChange<T>(change: Promise<T>): Promise<T> {
+  const result = await change;
+  revalidatePath('/hostels/[slug]', 'page');
+  revalidatePath('/hostels');
+  return result;
+}
+const checklist = (form: FormData) => form.getAll('checklist').map(String) as PartnerStandardId[];
 
 export async function approveAction(form: FormData) {
-  await run(back(form), async () => (await api()).admin.approve(str(form, 'hostelId')), { ok: 'Listing is live' });
+  await run(back(form), async () => publicChange((await api()).admin.approve(str(form, 'hostelId'))), { ok: 'Listing is live' });
 }
 export async function rejectAction(form: FormData) {
-  await run(back(form), async () => (await api()).admin.reject(str(form, 'hostelId'), str(form, 'reason')), { ok: 'Listing sent back to the owner' });
+  await run(back(form), async () => publicChange((await api()).admin.reject(str(form, 'hostelId'), str(form, 'reason'))), { ok: 'Listing sent back to the owner' });
 }
 export async function verifyPartnerAction(form: FormData) {
-  await run(back(form), async () => (await api()).admin.verifyPartner(str(form, 'hostelId'), num(form, 'platformFeePct')), { ok: 'Partner verified' });
+  await run(
+    back(form),
+    async () => publicChange((await api()).admin.verifyPartner(str(form, 'hostelId'), num(form, 'platformFeePct'), { checklist: checklist(form), note: str(form, 'note') })),
+    { ok: 'Partner verified' },
+  );
+}
+export async function saveChecklistAction(form: FormData) {
+  await run(back(form), async () => (await api()).admin.saveChecklist(str(form, 'hostelId'), checklist(form), str(form, 'note')), { ok: 'Inspection progress saved' });
+}
+export async function voidOwnerBillAction(form: FormData) {
+  await run(back(form, '/admin/billing'), async () => (await api()).admin.voidOwnerInvoice(str(form, 'id'), str(form, 'reason')), { ok: 'Bill waived' });
 }
 export async function rejectPartnerAction(form: FormData) {
-  await run(back(form), async () => (await api()).admin.rejectPartner(str(form, 'hostelId'), str(form, 'reason')), { ok: 'Application declined' });
+  await run(back(form), async () => publicChange((await api()).admin.rejectPartner(str(form, 'hostelId'), str(form, 'reason'))), { ok: 'Application declined' });
 }
 export async function setFeeAction(form: FormData) {
   await run(back(form), async () => (await api()).admin.setFee(str(form, 'hostelId'), num(form, 'platformFeePct')), { ok: 'Fee updated' });

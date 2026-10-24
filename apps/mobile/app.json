@@ -5,20 +5,42 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "hostels",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "backgroundColor": "#FAF7F2",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.hostels.app",
+      "buildNumber": "1",
       "infoPlist": { "NSLocationWhenInUseUsageDescription": "Hostels uses your location to show hostels near you." }
     },
-    "android": { "package": "com.hostels.app", "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"] },
-    "web": { "bundler": "metro", "output": "single" },
+    "android": {
+      "package": "com.hostels.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "monochromeImage": "./assets/adaptive-icon-monochrome.png",
+        "backgroundColor": "#1F5C46"
+      },
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+    },
+    "web": { "bundler": "metro", "output": "single", "favicon": "./assets/favicon.png" },
     "plugins": [
       "expo-router",
       "expo-secure-store",
       "expo-web-browser",
-      ["expo-location", { "locationWhenInUsePermission": "Hostels uses your location to show hostels near you." }]
+      ["expo-location", { "locationWhenInUsePermission": "Hostels uses your location to show hostels near you." }],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Hostels uses your photos so you can add pictures of your hostel, an issue or a community post.",
+          "cameraPermission": "Hostels uses the camera so you can photograph an issue in your hostel."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        { "image": "./assets/splash-icon.png", "imageWidth": 200, "resizeMode": "contain", "backgroundColor": "#1F5C46" }
+      ]
     ],
     "experiments": { "typedRoutes": false }
   }

@@ -18,7 +18,9 @@ const BLURB = {
 export default async function PlanPage({ params, searchParams }: Props) {
   const { id } = await params;
   const q = await searchParams;
-  const [info, hostel] = await Promise.all([(await api()).owner.plan(id), ownerHostel(id)]);
+  const client = await api();
+  const [info, hostel, partner] = await Promise.all([client.owner.plan(id), ownerHostel(id), client.owner.partnerInfo(id)]);
+  const app = partner.application;
   const current = info.plan?.plan ?? 'free';
   const due = info.bills.find((b) => b.status === 'due');
 
@@ -71,6 +73,31 @@ export default async function PlanPage({ params, searchParams }: Props) {
           );
         })}
       </div>
+
+      <section>
+        <h2 className="text-lg font-semibold">Partner brand standards</h2>
+        <p className="mb-3 text-sm text-ink-soft">
+          {app?.status === 'verified'
+            ? `Verified${app.decidedAt ? ` on ${dateLabel(app.decidedAt)}` : ''}. Keep these up: residents report issues and their reviews are public.`
+            : app?.status === 'applied'
+              ? 'Our team will visit and check each of these. Getting them ready before the visit speeds things up.'
+              : 'Before a hostel carries the Hostels brand, our team visits in person and checks each of these.'}
+        </p>
+        <Card>
+          <ul className="space-y-2 text-sm">
+            {partner.standards.map((s) => {
+              const done = app?.checklist.includes(s.id);
+              return (
+                <li key={s.id} className="flex gap-2">
+                  <span className={done ? 'text-brand' : 'text-ink-muted'} aria-label={done ? 'checked' : 'not checked yet'}>{done ? '✓' : '○'}</span>
+                  <span className={done ? '' : 'text-ink-soft'}>{s.label}</span>
+                </li>
+              );
+            })}
+          </ul>
+          {app?.status === 'rejected' && app.reason && <p className="mt-3 text-sm text-danger">Last visit: {app.reason}</p>}
+        </Card>
+      </section>
 
       <section>
         <h2 className="mb-3 text-lg font-semibold">Plan bills</h2>

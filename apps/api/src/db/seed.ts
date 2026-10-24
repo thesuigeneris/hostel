@@ -12,6 +12,7 @@ import {
   OWNER_PLANS,
   planIncludesMeal,
   SKIP_CREDITS,
+  standardsFor,
   weekStart,
 } from '@hostels/shared';
 import { sql } from 'drizzle-orm';
@@ -20,6 +21,8 @@ import { runMigrations } from './migrate';
 import { DEMO_PHONES, EXTRA_OWNERS, FOOD_PARTNERS, HOSTELS, PHOTOS, RULES, THEMES } from './seed-data';
 
 export const ALL_TABLES = [
+  'audit_events',
+  'partner_applications',
   'login_handoffs',
   'rent_records',
   'owner_invoices',
@@ -124,6 +127,17 @@ export async function seed(db: DB, today = istDate()) {
       partnerStatus: h.partner ? 'verified' : 'none',
       platformFeePct: 10,
     });
+    if (h.partner) {
+      await db.insert(schema.partnerApplications).values({
+        id: newId('pap'),
+        hostelId,
+        status: 'verified',
+        checklist: standardsFor(h.foodAvailable).map((s) => s.id),
+        note: 'Seed data: inspected in person.',
+        appliedAt: istInstant(addMonths(today, -2), 10),
+        decidedAt: istInstant(addMonths(today, -2), 16),
+      });
+    }
     // Partners are on the Partner plan; every other free listing is on Pro so the management app has data.
     const plan = h.partner ? 'partner' : freeIndex++ % 2 === 0 ? 'pro' : 'free';
     const ownerPlanId = newId('opl');

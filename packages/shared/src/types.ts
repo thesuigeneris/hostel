@@ -349,9 +349,13 @@ export type Residency = {
 };
 
 export type MyResidency = Residency & {
-  hostel: { id: string; name: string; slug: string; area: string };
+  hostel: { id: string; name: string; slug: string; area: string; foodAvailable: boolean };
   canReview: boolean;
+  /** Why this stay cannot be reviewed yet (or any more), when `canReview` is false. */
+  reviewBlockedReason: string | null;
   hasReview: boolean;
+  /** The resident's own review of this hostel, if they wrote one. */
+  review: (Review & { hiddenReason: string | null }) | null;
 };
 
 export type IssueView = {
@@ -519,4 +523,6 @@ export type AdminStats = {
   flaggedReviews: number;
   openReports: number;
   overdueBills: number;
+  overdueOwnerBills: number;
+  suspendedHostels: number;
 };

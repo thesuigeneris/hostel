@@ -6,26 +6,34 @@ import { api } from '@/lib/api';
 import { dateLabel, GENDER_LABEL } from '@/lib/format';
 import { approveAction, rejectAction } from '../actions';
 
-type Props = { searchParams: Promise<{ status?: string; error?: string; ok?: string }> };
+type Props = { searchParams: Promise<{ status?: string; q?: string; error?: string; ok?: string }> };
 
 export default async function AdminListings({ searchParams }: Props) {
   const q = await searchParams;
   const status: HostelStatus = HOSTEL_STATUSES.includes(q.status as HostelStatus) ? (q.status as HostelStatus) : 'pending';
   const client = await api();
-  const hostels = await client.admin.hostels({ status });
+  const search = q.q?.trim() || undefined;
+  const hostels = await client.admin.hostels({ status, q: search });
   const details = await Promise.all(hostels.map((h) => client.admin.hostel(h.id)));
-  const path = `/admin/listings?status=${status}`;
+  const path = `/admin/listings?status=${status}${search ? `&q=${encodeURIComponent(search)}` : ''}`;
 
   return (
     <>
       <PageHeader title="Listings" />
       <Flash error={q.error} ok={q.ok} />
-      <nav className="mb-4 flex gap-2 text-sm">
-        {HOSTEL_STATUSES.map((s) => (
-          <Link key={s} href={`/admin/listings?status=${s}`} className={cx('rounded-full px-3 py-1 no-underline', s === status ? 'bg-brand text-white' : 'bg-surface text-ink-soft')}>{s}</Link>
-        ))}
-      </nav>
-      {details.length === 0 ? <Empty title={`No ${status} listings`} /> : (
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <nav className="flex gap-2 text-sm">
+          {HOSTEL_STATUSES.map((s) => (
+            <Link key={s} href={`/admin/listings?status=${s}${search ? `&q=${encodeURIComponent(search)}` : ''}`} className={cx('rounded-full px-3 py-1 no-underline', s === status ? 'bg-brand text-white' : 'bg-surface text-ink-soft')}>{s}</Link>
+          ))}
+        </nav>
+        <form className="flex gap-2">
+          <input type="hidden" name="status" value={status} />
+          <span className="w-60 flex-none"><Input name="q" defaultValue={search} placeholder="Name, area, link or phone" className="h-9" aria-label="Search listings" /></span>
+          <SubmitButton size="sm" variant="secondary">Search</SubmitButton>
+        </form>
+      </div>
+      {details.length === 0 ? <Empty title={search ? `No ${status} listings match “${search}”` : `No ${status} listings`} /> : (
         <div className="space-y-4">
           {details.map((h) => (
             <Card key={h.id}>
