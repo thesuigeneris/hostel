@@ -152,7 +152,8 @@ In stub mode (no keys), orders get `order_stub_…` ids and the key id `rzp_test
 bun run typecheck
 bun run lint
 bun run test         # API tests run against the hostels_test database
-bun --filter @hostels/web e2e   # Playwright golden path (see docs/RUN.md)
+bun --filter @hostels/web e2e   # Playwright golden path + persona flows (see docs/RUN.md)
+bun --filter @hostels/web e2e:fresh   # same, on a freshly reset hostels_e2e database
 ```
 
 ## Project structure
