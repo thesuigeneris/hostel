@@ -50,6 +50,21 @@ describe('OTP login', () => {
     expect(again.body.error).toBe('otp_invalid');
   });
 
+  test('a code for a phone that never asked for one is rejected', async () => {
+    const res = await call('/auth/verify', { body: { phone: '9876543210', otp: '123456' } });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('otp_invalid');
+  });
+
+  test('a returning phone signs back into the same account, and the older session keeps working', async () => {
+    const first = await login('9876543210');
+    const user = (await call('/me', { token: first })).body;
+    const second = await login('9876543210');
+    expect(second).not.toBe(first);
+    expect((await call('/me', { token: second })).body.id).toBe(user.id);
+    expect((await call('/me', { token: first })).body.id).toBe(user.id);
+  });
+
   test('wrong code counts toward a 5-attempt limit, after which even the right code fails', async () => {
     await call('/auth/otp', { body: { phone: '9876543210' } });
     for (let i = 0; i < 5; i++) {
