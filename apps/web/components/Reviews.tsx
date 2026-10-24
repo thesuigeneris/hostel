@@ -22,11 +22,11 @@ export function ReviewCard({ r, slug, canFlag }: { r: Review; slug: string; canF
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium">{r.author}</span>
-            <Badge tone="green">✓ Verified resident</Badge>
+            <Badge tone={source.strong ? 'green' : 'gray'}>{source.label}</Badge>
           </div>
           <div className="mt-1 text-xs text-ink-muted">
             {r.stay && <>Lived here {monthLabel(r.stay.from)} – {r.stay.to ? monthLabel(r.stay.to) : 'now'} · </>}
-            {source.strong ? 'Stay paid through Hostels' : 'Added by the hostel and confirmed by the resident'} · {dateLabel(r.createdAt)}
+            {dateLabel(r.createdAt)}
             {edited(r) && ` · edited ${dateLabel(r.updatedAt)}`}
           </div>
         </div>
