@@ -139,6 +139,25 @@ describe('search', () => {
     expect(names((await call('/hostels?q=char')).body)).toEqual(['Charlie']);
   });
 
+  test('only live listings are searchable, and an area with none returns an empty page', async () => {
+    const pending = await call('/owner/hostels', {
+      token: ownerToken,
+      body: { name: 'Delta', area: 'Gachibowli', lat: 17.44, lng: 78.35, genderType: 'boys', contactPhone: '9876500004' },
+    });
+    await call(`/owner/hostels/${pending.body.id}/rooms`, { token: ownerToken, body: { sharing: '2-sharing', monthlyRent: 9000, totalBeds: 4, bedsAvailable: 4 } });
+    await call(`/owner/hostels/${pending.body.id}/photos`, { token: ownerToken, body: { url: 'https://example.com/p.jpg' } });
+    expect((await call(`/owner/hostels/${pending.body.id}/submit`, { token: ownerToken, method: 'POST' })).body.status).toBe('pending');
+
+    expect((await call('/hostels?q=delta')).body).toMatchObject({ total: 0, items: [] });
+    expect(names((await call('/hostels?area=gachibowli')).body)).toEqual(['Alpha']);
+    expect((await call('/hostels?area=Kondapur')).body).toMatchObject({ total: 0, items: [] });
+  });
+
+  test('rent bounds include a room at exactly that rent', async () => {
+    expect(names((await call('/hostels?maxRent=8000&sort=rent_asc')).body)).toEqual(['Bravo', 'Charlie']);
+    expect(names((await call('/hostels?minRent=12000&sort=rent_asc')).body)).toEqual(['Alpha', 'Bravo']);
+  });
+
   test('summaries carry the cheapest matching room, beds free and the cover photo', async () => {
     const res = await call('/hostels?q=bravo');
     expect(res.body.items[0]).toMatchObject({ minRent: 5500, bedsAvailable: 1, coverPhotoUrl: 'https://example.com/a.jpg', isVerified: false });
