@@ -1,12 +1,17 @@
 {
   "name": "hostels",
   "private": true,
-  "version": "0.0.1",
-  "workspaces": ["apps/*", "packages/*"],
+  "version": "0.1.0",
+  "workspaces": ["apps/api", "apps/web", "packages/*"],
   "scripts": {
     "dev:api": "bun --filter @hostels/api dev",
-    "dev:mobile": "bun --filter @hostels/mobile start",
-    "typecheck": "bun --filter '*' typecheck"
+    "dev:web": "bun --filter @hostels/web dev",
+    "dev:mobile": "cd apps/mobile && bun install && bun run start",
+    "db:reset": "bun --filter @hostels/api db:reset",
+    "db:migrate": "bun --filter @hostels/api db:migrate",
+    "db:seed": "bun --filter @hostels/api db:seed",
+    "test": "bun --filter @hostels/shared test && bun --filter @hostels/api test",
+    "typecheck": "bun --filter @hostels/shared typecheck && bun --filter @hostels/api typecheck && bun --filter @hostels/web typecheck"
   },
   "packageManager": "bun@1.3.10"
 }

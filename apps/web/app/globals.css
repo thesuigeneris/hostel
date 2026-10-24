@@ -1,0 +1,46 @@
+@import 'tailwindcss';
+
+/* Design tokens — keep in sync with apps/mobile/lib/theme.ts */
+@theme {
+  --color-bg: #faf7f2;          /* warm off-white page */
+  --color-surface: #ffffff;
+  --color-ink: #1c2420;         /* body text */
+  --color-muted: #5f6b65;       /* secondary text */
+  --color-line: #e7e1d7;        /* borders */
+  --color-brand: #1f5f4a;       /* deep green */
+  --color-brand-dark: #154536;
+  --color-brand-soft: #e3efe9;
+  --color-food: #d9822b;        /* warm accent for food */
+  --color-food-soft: #fbeedd;
+  --color-danger: #b42318;
+  --color-danger-soft: #fdecea;
+  --color-warn: #b54708;
+  --color-warn-soft: #fef3e2;
+  --color-ok: #067647;
+  --color-ok-soft: #e6f4ec;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --radius-card: 14px;
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+/* Leaflet needs explicit sizing on its container */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-card);
+}

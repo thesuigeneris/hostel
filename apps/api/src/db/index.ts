@@ -2,17 +2,21 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
 
-export type DB = ReturnType<typeof drizzle<typeof schema>>;
+export const DEFAULT_DATABASE_URL = 'postgres://postgres:postgres@localhost:5432/hostels';
 
-let cached: { client: postgres.Sql; db: DB } | null = null;
+const client = postgres(process.env.DATABASE_URL ?? DEFAULT_DATABASE_URL, {
+  max: Number(process.env.DB_POOL_MAX ?? 10),
+  onnotice: () => {},
+});
 
-export function getDb(): DB | null {
-  if (!process.env.DATABASE_URL) return null;
-  if (cached) return cached.db;
-  const client = postgres(process.env.DATABASE_URL, { max: 10 });
-  const db = drizzle(client, { schema });
-  cached = { client, db };
-  return db;
+export const db = drizzle(client, { schema, casing: 'snake_case' });
+export type DB = typeof db;
+/** A transaction handle; services accept `DB | Tx` so they compose inside transactions. */
+export type Tx = Parameters<Parameters<DB['transaction']>[0]>[0];
+export type DbOrTx = DB | Tx;
+
+export async function closeDb() {
+  await client.end({ timeout: 5 });
 }
 
 export { schema };
