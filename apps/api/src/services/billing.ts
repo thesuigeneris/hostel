@@ -311,7 +311,15 @@ export async function cancelSubscription(user: User) {
       return toSubscription(cancelled);
     }
     if (sub.cancelAt) return toSubscription(sub);
-    const cancelAt = periodContaining(sub.startDate, clock.today()).end;
+    // A bill paid early for the next period keeps the plan running to the end of that period.
+    const [lastPaid] = await tx
+      .select({ periodEnd: schema.invoices.periodEnd })
+      .from(schema.invoices)
+      .where(and(eq(schema.invoices.subscriptionId, sub.id), eq(schema.invoices.status, 'paid')))
+      .orderBy(desc(schema.invoices.periodEnd))
+      .limit(1);
+    const currentEnd = periodContaining(sub.startDate, clock.today()).end;
+    const cancelAt = lastPaid && lastPaid.periodEnd > currentEnd ? lastPaid.periodEnd : currentEnd;
     const [updated] = await tx
       .update(schema.subscriptions)
       .set({ cancelAt })

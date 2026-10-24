@@ -246,6 +246,28 @@ describe('owner plans and platform bills', () => {
     expect((await call(`/owner/hostels/${other.hostel.id}/plan`, { token: ownerToken })).body.plan.plan).toBe('free');
   });
 
+  test('a plan change never voids the bill for a month already used', async () => {
+    const free = await liveHostel(ownerToken, adminToken);
+    const plan = () => call(`/owner/hostels/${free.hostel.id}/plan`, { token: ownerToken });
+    await call(`/owner/hostels/${free.hostel.id}/plan`, { token: ownerToken, body: { plan: 'pro' } }); // trial to 9 Dec
+    setClock('2026-12-04T06:00:00Z');
+    await runJobs();
+    const dec = (await plan()).body.bills[0];
+    await call(`/payments/${dec.id}/simulate`, { token: ownerToken, method: 'POST' });
+    setClock('2027-01-04T06:00:00Z');
+    await runJobs(); // 9 January bill, left unpaid
+    setClock('2027-01-20T06:00:00Z');
+    const down = await call(`/owner/hostels/${free.hostel.id}/plan`, { token: ownerToken, body: { plan: 'free' } });
+    expect(down.body.plan).toMatchObject({ pendingPlan: 'free', pendingPlanOn: '2027-02-09' });
+    setClock('2027-02-09T06:00:00Z');
+    await runJobs();
+    const after = (await plan()).body;
+    expect(after.plan).toMatchObject({ plan: 'free', suspended: true });
+    const jan = after.bills.find((b: { periodStart: string }) => b.periodStart === '2027-01-09');
+    expect(jan).toMatchObject({ status: 'due', isOverdue: true });
+    expect(after.bills.filter((b: { status: string }) => b.status === 'due')).toHaveLength(1);
+  });
+
   test('admins see owner bills; another owner cannot pay mine', async () => {
     const free = await liveHostel(ownerToken, adminToken);
     await call(`/owner/hostels/${free.hostel.id}/plan`, { token: ownerToken, body: { plan: 'pro' } });
