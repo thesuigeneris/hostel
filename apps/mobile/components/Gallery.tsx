@@ -32,7 +32,7 @@ export function Gallery({ photos, name, height = 260 }: { photos: HostelPhoto[];
       onScroll={(e) => onIndex?.(Math.round(e.nativeEvent.contentOffset.x / width))}
       scrollEventThrottle={64}
       renderItem={({ item, index: i }) => (
-        <Pressable disabled={!onTap} onPress={() => onTap?.(i)} accessibilityRole={onTap ? 'imagebutton' : 'image'} accessibilityLabel={`${name}, photo ${i + 1} of ${photos.length}`}>
+        <Pressable disabled={!onTap} onPress={() => onTap?.(i)} accessibilityRole={onTap ? 'button' : 'image'} accessibilityLabel={`${name}, photo ${i + 1} of ${photos.length}`}>
           <Image source={{ uri: item.url }} style={{ width, height: h, backgroundColor: onTap ? theme.colors.brandSoft : '#000' }} resizeMode={onTap ? 'cover' : 'contain'} />
         </Pressable>
       )}

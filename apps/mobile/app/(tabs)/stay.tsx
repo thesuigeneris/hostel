@@ -19,12 +19,12 @@ export default function MyStay() {
   const { user, ready } = useAuth();
   const { data, error, loading, refreshing, refresh, reload } = useLoad<Data | null>(async () => {
     if (!user) return null;
-    const isTenant = user.role === 'tenant';
-    const [mine, stays] = await Promise.all([isTenant ? api.me.subscription() : null, api.me.residencies()]);
+    // A subscription belongs to whoever holds it, whatever their role (an owner can also live somewhere).
+    const [mine, stays] = await Promise.all([api.me.subscription(), api.me.residencies()]);
     const active = mine?.subscription.status === 'active';
     const [menu, invoices] = await Promise.all([
       active && mine.subscription.mealPlan !== 'none' ? api.me.menu(7).catch(() => null) : null,
-      isTenant ? api.me.invoices() : [],
+      api.me.invoices(),
     ]);
     return { mine, menu, invoices, stays };
   }, [user?.id]);
