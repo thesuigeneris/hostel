@@ -1,5 +1,6 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { ApiError, type GenderType, type HostelInput, type OwnerPlanTier, type RentMethod, type SharingType, type VisitStatus } from '@hostels/shared';
 import { num, optional, run, safePath, str } from '@/lib/actions';
 import { api } from '@/lib/api';
@@ -134,7 +135,16 @@ export async function recordRentAction(form: FormData) {
 }
 
 export async function replyReviewAction(form: FormData) {
-  await run(back(form), async () => (await api()).owner.reply(str(form, 'reviewId'), str(form, 'reply')), { ok: 'Reply posted' });
+  await run(
+    back(form),
+    async () => {
+      const review = await (await api()).owner.reply(str(form, 'reviewId'), str(form, 'reply'));
+      // Replies show on the public listing, which caches reviews briefly.
+      revalidatePath('/hostels/[slug]', 'page');
+      return review;
+    },
+    { ok: 'Reply posted' },
+  );
 }
 
 export async function changePlanAction(form: FormData) {

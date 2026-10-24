@@ -48,20 +48,26 @@ export async function reportIssueAction(form: FormData) {
   await run(back(form), async () => {
     const client = await api();
     const photoUrl = await uploadPhoto(client, form);
-    return client.resident.reportIssue(hostelId, {
+    const issue = await client.resident.reportIssue(hostelId, {
       category: str(form, 'category') as IssueCategory,
       title: str(form, 'title'),
       description: str(form, 'description'),
       photoUrl,
     });
+    // The public issue record is cached briefly; count the new issue right away.
+    revalidatePath('/hostels/[slug]', 'page');
+    return issue;
   }, { to: (issue) => `/issues/${issue.id}?ok=${encodeURIComponent('Issue reported. The hostel has been notified.')}` });
 }
 
 export async function updateIssueAction(form: FormData) {
   const id = str(form, 'issueId');
-  await run(back(form, `/issues/${id}`), async () =>
-    (await api()).resident.updateIssue(id, { status: (str(form, 'status') || undefined) as IssueStatus | undefined, message: str(form, 'message') || undefined }),
-  );
+  await run(back(form, `/issues/${id}`), async () => {
+    const issue = await (await api()).resident.updateIssue(id, { status: (str(form, 'status') || undefined) as IssueStatus | undefined, message: str(form, 'message') || undefined });
+    // Status changes move the public issue record (resolved %, response times).
+    revalidatePath('/hostels/[slug]', 'page');
+    return issue;
+  });
 }
 
 export async function upvoteAction(form: FormData) {
