@@ -4,8 +4,8 @@
  * Motion policy (PRP-12).
  * - Section reveals: CSS transitions triggered by IntersectionObserver. No animation library ships on
  *   routes that only need a fade, and dashboards pay nothing.
- * - Interactive motion (drawers, dialogs) uses the free `motion` package inside those components only,
- *   wrapped in <MotionProvider> so `reducedMotion="user"` applies.
+ * - Drawers and dialogs are native <dialog> elements with a short CSS entrance (globals.css). An animation
+ *   library was measured (38.8 kB gzipped per route) and dropped: nothing here needed it.
  * - Everything honours prefers-reduced-motion. Content above the fold is never hidden, and content
  *   is visible without JavaScript.
  */

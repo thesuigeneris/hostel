@@ -42,13 +42,15 @@ The existing brand is kept and refined: warm off-white, one deep green, one warm
 - **Forms:** `Field` (with an "(optional)" marker), `Input`, `Select`, `Textarea`, `Checkbox`.
 - **Status:** `Badge` and `StatusBadge` (text plus colour, never colour alone), `VerifiedLabel` (explains itself in its title), `Flash` (`role=alert` or `status`), `Stars` (screen-reader text "out of 5").
 - **Layout and data:** `Card`, `Stat`, `Empty` (with an action), `Skeleton`, `Table` (`scope=col`), `Pagination` (windowed, `aria-current`).
-- **Media and navigation:** `Photo` (falls back to a placeholder when an image fails), `NavLinks` (`aria-current`), the `<details>` mobile menu, and a skip link.
+- **Media and navigation:** `Photo` (falls back to a placeholder when an image fails, including before hydration), `PhotoGallery` (swipe strip, grid, keyboard lightbox), `NavLinks` (`aria-current`), `OwnerTabs`, `ListingProgress` (`aria-current="step"`), the `<details>` mobile menu, and a skip link.
+- **Search:** `SearchFilters` (one GET form), `FilterDrawer` (inline on large screens, a native modal sheet on phones, inline without JavaScript), `AppliedFilters` (removable chips), `SearchViewToggle`, `SearchResults`.
+- **Status:** `StatusBadge kind=…` gives plain-language labels per record type, so "pending" reads differently for a payout and a subscription.
 
 ## Motion policy
 
 Defined in [`apps/web/components/motion.tsx`](../../apps/web/components/motion.tsx):
 - **Section reveal:** `IntersectionObserver` plus CSS (380 ms, ease-out). Only sections that start below the fold are hidden, and they show without JavaScript. No animation library is involved.
-- **Interactive motion** (drawers and dialogs, from batch 2): the free `motion` package via `MotionProvider` (`LazyMotion` + `domAnimation`, `reducedMotion="user"`). It is mounted only where used, so other routes don't download it. Mounting it in the root layout added 38.8 kB gzipped to every route; that was measured and reverted.
+- **Drawers and dialogs** (the filter sheet and the photo lightbox): native `<dialog>` elements with a 220 ms CSS entrance (`dialog.sheet` in `globals.css`). Focus trapping, Escape and an inert background come from the browser. The free `motion` package was trialled: mounting it added 38.8 kB gzipped to every route (measured). Once every interaction worked natively, nothing used it, so it was removed rather than shipped unused.
 - **Durations:** 150 ms feedback, 220 ms panels, 380 ms sections. Exits run at about 65 % of the entrance.
 - **Reduced motion:** a global CSS rule shortens transitions, `usePrefersReducedMotion()` gates reveals, and the 3D scene renders one still frame.
 - **Not allowed:** scroll hijacking, custom cursors, magnetic effects on booking or payment controls, stagger over more than 6 items, motion behind dense forms.
@@ -73,7 +75,7 @@ Files: `apps/web/components/hero/{HeroVisual.tsx, hostel-scene.ts, HeroIllustrat
 | Item | Licence | How it's used |
 |---|---|---|
 | [ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) @ `d14efff` | MIT | Read as guidance: the retheming method and the priority checklist (accessibility, touch, performance, layout, typography, animation, forms, navigation). No code copied. |
-| `motion` 13.5.1 | MIT | npm dependency (free package; no Motion+) |
+| `motion` 13.5.1 | MIT | Trialled, measured (38.8 kB gzipped per route) and removed; not shipped |
 | `three` 0.186.1 | MIT | npm dependency |
 | `@fontsource-variable/inter` 5.3.0, `@fontsource-variable/fraunces` 5.3.0 | OFL-1.1 | Self-hosted fonts |
 | `@axe-core/playwright` 4.13.0 | MPL-2.0 | Test-only accessibility scans |
@@ -84,3 +86,13 @@ No third-party images, 3D assets, logos or testimonials are used. The demo seed'
 ## Screenshots
 
 `screenshots/before-*` were taken at commit `57e09cb`; `after-*` after batch 1. Captured with Playwright Chromium against the demo seed. External photo hosts are blocked in the capture sandbox, so property photos show the placeholder.
+
+## Bundle (first-load JS, `next build`)
+
+| Route | Before (`57e09cb`) | After |
+|---|---|---|
+| `/` | 106 kB | 109 kB (+ `three` in 2 lazy chunks, only with WebGL) |
+| `/hostels` | 107 kB | 110 kB |
+| `/hostels/[slug]` | 108 kB | 110 kB |
+| `/for-owners`, `/owner`, `/admin/*`, `/account` | 106–107 kB | 106–107 kB |
+| `/owner/hostels/[id]`, `/owner/hostels/new` | 125 kB | 125 kB (Leaflet pin picker, unchanged) |

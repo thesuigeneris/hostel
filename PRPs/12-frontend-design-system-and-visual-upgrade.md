@@ -199,3 +199,9 @@ npm packages only (MIT, OFL, MPL). ₹0.
 - **Second full run.** It found a white-on-amber "Pay now" link (2.67:1) on the owner plan page, which only appears once a plan bill exists. It now uses the `food` button variant (dark text, 5.93:1).
 - **Roles.** Each role sees only its own navigation. Typing `/owner` or `/admin` as the wrong role is redirected by the server, not just hidden in the UI.
 - **Not swept.** States the demo seed doesn't create, such as a rejected listing, an overdue resident or an empty owner account. Those pages share the same primitives.
+
+### Batch 5: verification, bundle, summary (done)
+
+- `motion` was removed: nothing imported it once the sheet and lightbox used native `<dialog>`. The doc and the motion policy comment say why.
+- Bundle measured: `/` 106 → 109 kB, `/hostels` 107 → 110 kB, property page 108 → 110 kB, other routes unchanged within 1 kB.
+- Change summary with deliverables A–K and status labels: `docs/design/CHANGES.md`.

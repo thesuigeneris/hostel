@@ -17,7 +17,7 @@ Execute in this order. A PRP starts only after the ones it depends on are `done`
 | 09 | Zero-cost deployment configuration: Dockerfiles, production compose with TLS proxy, env hardening, free-tier research (no deploy) | M12 | 06 | planned |
 | 10 | Backup and recovery: `pg_dump` and upload backup scripts, restore drill on a disposable DB, runbook | M13 | 09 | planned |
 | 11 | Remaining hardening and spec items: general rate limiting, nonce-based CSP, review weighting for owner-added residents (open question) | M4 (general), M14 | 01–10 | planned |
-| 12 | [Frontend design system and visual upgrade](12-frontend-design-system-and-visual-upgrade.md): tokens, primitives, homepage with lazy 3D hero, search, property, owner onboarding, workspaces (requested separately; runs alongside 02–11 because it changes no API contracts) | UI, part of M11 | 01 | batch 1 done; batches 2–5 planned |
+| 12 | [Frontend design system and visual upgrade](12-frontend-design-system-and-visual-upgrade.md): tokens, primitives, homepage with lazy 3D hero, search, property, owner onboarding, workspaces (requested separately; runs alongside 02–11 because it changes no API contracts) | UI, part of M11 | 01 | done (summary: `docs/design/CHANGES.md`) |
 
 ## Blocked items (owner approval or credentials)
 
