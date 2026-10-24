@@ -13,7 +13,7 @@ type Props = { searchParams: Promise<{ to?: string; error?: string }> };
 
 export default async function MovePage({ searchParams }: Props) {
   const q = await searchParams;
-  await requireUser('/account/move', 'tenant');
+  await requireUser('/account/move');
   const mine = await (await api()).me.subscription();
   if (!mine || mine.subscription.status !== 'active') redirect('/account');
   const verified = await publicApi(60).hostels.search({ verified: 'true', limit: 50 });
