@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  @apply bg-bg font-sans text-ink antialiased;
+}
+
+a {
+  @apply underline-offset-2;
+}
+
+.leaflet-container {
+  font: inherit;
+}

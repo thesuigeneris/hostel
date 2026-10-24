@@ -1,17 +1,49 @@
 {
   "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
   "files": {
-    "ignore": ["**/node_modules", "**/.next", "**/.expo", "**/dist", "apps/api/migrations/meta", ".specify", ".claude", "**/next-env.d.ts"]
+    "ignore": [
+      "**/node_modules",
+      "**/.next",
+      "**/.expo",
+      "**/dist",
+      "apps/api/migrations/meta",
+      ".specify",
+      ".claude",
+      "**/next-env.d.ts"
+    ]
   },
-  "formatter": { "enabled": false },
-  "organizeImports": { "enabled": false },
+  "formatter": {
+    "enabled": false
+  },
+  "organizeImports": {
+    "enabled": false
+  },
   "linter": {
     "enabled": true,
     "rules": {
       "recommended": true,
-      "style": { "noNonNullAssertion": "off", "useTemplate": "off" },
-      "suspicious": { "noExplicitAny": "warn" },
-      "complexity": { "noForEach": "off" }
+      "style": {
+        "noNonNullAssertion": "off",
+        "useTemplate": "off"
+      },
+      "suspicious": {
+        "noExplicitAny": "warn"
+      },
+      "complexity": {
+        "noForEach": "off"
+      },
+      "a11y": {
+        "noLabelWithoutControl": {
+          "level": "error",
+          "options": {
+            "inputComponents": [
+              "Input",
+              "Select",
+              "Textarea"
+            ]
+          }
+        }
+      }
     }
   }
 }
