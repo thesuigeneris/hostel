@@ -1,11 +1,10 @@
 import { dateLabel, type MyVisit } from '@hostels/shared';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Linking, Text } from 'react-native';
+import { Text } from 'react-native';
 import { Button, Card, Empty, ErrorText, Field, H2, Loading, Notice, P, Row, Screen, StatusBadge } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { WEB_URL } from '@/lib/config';
 import { theme } from '@/lib/theme';
 import { useLoad } from '@/lib/useLoad';
 
@@ -60,12 +59,11 @@ export default function Profile() {
         <Button title="Save" variant="secondary" onPress={save} busy={busy} disabled={!name.trim()} />
       </Card>
 
-      {user.role !== 'tenant' && (
-        <Card tone="brand">
-          <P>Owner and admin tools are on the website.</P>
-          <Button small title="Open the dashboard" onPress={() => Linking.openURL(`${WEB_URL}${user.role === 'admin' ? '/admin' : '/owner'}`)} />
-        </Card>
-      )}
+      <Card tone="brand">
+        {user.role === 'tenant' ? <P>Own or run a hostel? List it free.</P> : <P>Run your hostel from here.</P>}
+        <Button small title={user.role === 'tenant' ? 'For hostel owners' : 'Owner dashboard'} onPress={() => router.push(user.role === 'tenant' ? '/owner/join' : '/owner')} />
+        {user.role === 'admin' && <Button small variant="secondary" title="Admin console" onPress={() => router.push('/admin')} />}
+      </Card>
 
       <H2>Visit requests</H2>
       {!visits?.length ? <P muted>You haven't requested any visits.</P> : visits.map((v) => (
