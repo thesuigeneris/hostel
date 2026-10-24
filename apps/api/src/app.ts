@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
+import { secureHeaders } from 'hono/secure-headers';
 import { HTTPException } from 'hono/http-exception';
 import { logger } from 'hono/logger';
 import { env } from './lib/env';
@@ -19,6 +20,8 @@ export function createApp(opts: { log?: boolean } = {}) {
   const app = new Hono<AppEnv>();
 
   if (opts.log ?? true) app.use('*', logger());
+  // Photos under /uploads are shown on the website and in the app, so they may be loaded cross-origin.
+  app.use('*', secureHeaders({ crossOriginResourcePolicy: 'cross-origin' }));
   app.use('*', cors({ origin: env.corsOrigins, allowHeaders: ['Authorization', 'Content-Type'], credentials: true }));
   app.use('*', async (c, next) => {
     // Uploads carry their own, larger limit.

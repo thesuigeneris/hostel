@@ -1,4 +1,4 @@
-import { FOOD_PLANS, type HostelDetail, istDate, MEALS, type MenuWeek, monthLabel, type Review, rupees, SHARING_LABEL, GENDER_LABEL, weekday } from '@hostels/shared';
+import { FOOD_PLANS, type HostelDetail, istDate, MEALS, type MenuWeek, monthLabel, type Review, reviewSource, rupees, SHARING_LABEL, GENDER_LABEL, weekday } from '@hostels/shared';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Image, Linking, ScrollView, Text, View } from 'react-native';
@@ -149,7 +149,7 @@ export default function HostelScreen() {
               <Text style={{ fontWeight: '600', color: theme.colors.text }}>{r.author}</Text>
               <Stars value={r.rating} />
             </Row>
-            <Row><Badge label="✓ Verified resident" tone="green" />{r.stay && <P muted>{monthLabel(r.stay.from)} – {r.stay.to ? monthLabel(r.stay.to) : 'now'}</P>}</Row>
+            <Row><Badge label={reviewSource(r.verifiedVia).label} tone={reviewSource(r.verifiedVia).strong ? 'green' : 'gray'} />{r.stay && <P muted>{monthLabel(r.stay.from)} – {r.stay.to ? monthLabel(r.stay.to) : 'now'}</P>}</Row>
             <P>{r.body}</P>
             {r.ownerReply && <P muted>Reply from the hostel: {r.ownerReply}</P>}
           </Card>

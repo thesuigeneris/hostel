@@ -91,6 +91,7 @@ export default async function StayHostelPage({ params, searchParams }: Props) {
         <form action={reviewAction} className="mt-4 space-y-4">
           <Back to={path} />
           <input type="hidden" name="hostelId" value={hostelId} />
+          <input type="hidden" name="slug" value={stay.hostel.slug} />
           <div className="grid gap-3 sm:grid-cols-5">
             <RatingSelect name="rating" label="Overall" />
             <RatingSelect name="cleanliness" label="Cleanliness" />
