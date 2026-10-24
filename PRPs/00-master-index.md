@@ -6,7 +6,7 @@ Execute in this order. A PRP starts only after the ones it depends on are `done`
 
 | # | PRP | Covers (map ids) | Depends on | Status |
 |---|---|---|---|---|
-| 01 | [Auth modes: demo isolation and zero-cost secure login](01-auth-demo-isolation-and-password-login.md) | M1, M2, M3, M4 (login) | none | executing |
+| 01 | [Auth modes: demo isolation and zero-cost secure login](01-auth-demo-isolation-and-password-login.md) | M1, M2, M3, M4 (login) | none | done (mobile runtime unverified) |
 | 02 | Authorization: property, resident and invite access audit; invite links that don't depend on phone ownership | access helpers, invites, staff/org question | 01 | planned |
 | 03 | Bed allocation and dates: atomic room edits, order call outside the transaction, IST and month-end period tests | M5, M6 | 01 | planned |
 | 04 | Financial records: payment mode (simulated/test/live), payouts and revenue excluding simulated, reconciliation view | M7 | 03 | planned |

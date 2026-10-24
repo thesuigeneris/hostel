@@ -1,5 +1,5 @@
 name: "PRP-01: Auth modes, demo isolation and zero-cost secure login"
-status: executing
+status: done (see LEDGER.md; mobile runtime unverified)
 confidence: 8/10. The API rules are fully specified and testable. Web and mobile login UI adds risk to the existing browser-test sign-in, which is mitigated by keeping the OTP form's labels unchanged.
 
 ## Goal
@@ -245,4 +245,9 @@ Checked against `.claude/commands/generate-prp.md`. Gaps found and fixed in this
 3. Sign-up spam (many accounts from one client) isn't covered by the per-phone throttle; it's recorded under PRP-11 general rate limiting.
 
 ## Execution notes
-(filled during execution)
+- **Found and fixed:** `truncateAll` used a hand-kept table list, so new tables (`login_throttle`) leaked between test runs. The list is now derived from the schema.
+- **Found and fixed:** demo-mode simulated payments under `NODE_ENV=production` also needed `verifyPaymentSignature` to accept stub signatures on demo instances. Demo instances also refuse Razorpay webhooks.
+- **Found and fixed:** the demo buttons' hidden `phone` inputs collided with the OTP form's `phone` field; renamed to `demoPhone`.
+- **Found (setup):** the API doesn't migrate on start. `docs/RUN.md` now says to run `db:migrate` before starting a new version (input for PRP-09).
+- **Changed from plan:** `POST /auth/otp` in production without SMS now returns 403 `method_disabled` (was 503 `internal`), to match the other disabled methods.
+- **Not done here:** mobile password change (the website covers it); a `password:reset` script (PRP-11).
