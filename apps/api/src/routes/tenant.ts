@@ -35,32 +35,33 @@ export const tenantRoutes = new Hono<AppEnv>()
   )
   .get('/me/visits', signedIn, async (c) => c.json(await myVisits(c.get('user'))))
 
-  // Subscription and bills.
+  // Subscription and bills. Starting a plan is for tenants; managing one is for whoever holds it,
+  // since a subscriber may later sign in as a hostel owner.
   .post('/hostels/:id/subscribe', tenant, async (c) =>
     c.json(await subscribe(c.get('user'), c.req.param('id'), await parseBody(c, subscribeSchema)), 201),
   )
-  .get('/me/subscription', tenant, async (c) => c.json(await mySubscription(c.get('user'))))
-  .post('/me/subscription/cancel', tenant, async (c) => c.json(await cancelSubscription(c.get('user'))))
-  .get('/me/invoices', tenant, async (c) => c.json(await myInvoices(c.get('user'))))
+  .get('/me/subscription', signedIn, async (c) => c.json(await mySubscription(c.get('user'))))
+  .post('/me/subscription/cancel', signedIn, async (c) => c.json(await cancelSubscription(c.get('user'))))
+  .get('/me/invoices', signedIn, async (c) => c.json(await myInvoices(c.get('user'))))
 
   // Food.
-  .get('/me/menu', tenant, async (c) => {
+  .get('/me/menu', signedIn, async (c) => {
     const { days } = parseQuery(c, z.object({ days: z.coerce.number().int().min(1).max(14).default(7) }));
     return c.json(await myMenu(c.get('user'), days));
   })
-  .post('/me/skips', tenant, async (c) => {
+  .post('/me/skips', signedIn, async (c) => {
     const { date, meal } = await parseBody(c, skipSchema);
     return c.json(await skipMeal(c.get('user'), date, meal), 201);
   })
-  .delete('/me/skips/:date/:meal', tenant, async (c) => {
+  .delete('/me/skips/:date/:meal', signedIn, async (c) => {
     const { date, meal } = parse(skipSchema, { date: c.req.param('date'), meal: c.req.param('meal') });
     return c.json(await unskipMeal(c.get('user'), date, meal));
   })
 
   // Moves.
-  .get('/me/moves', tenant, async (c) => c.json(await myMoves(c.get('user'))))
-  .post('/me/moves', tenant, async (c) => c.json(await scheduleMove(c.get('user'), await parseBody(c, moveSchema)), 201))
-  .delete('/me/moves/:id', tenant, async (c) => c.json(await cancelMove(c.get('user'), c.req.param('id'))))
+  .get('/me/moves', signedIn, async (c) => c.json(await myMoves(c.get('user'))))
+  .post('/me/moves', signedIn, async (c) => c.json(await scheduleMove(c.get('user'), await parseBody(c, moveSchema)), 201))
+  .delete('/me/moves/:id', signedIn, async (c) => c.json(await cancelMove(c.get('user'), c.req.param('id'))))
 
   // Residencies and reviews: any signed-in user (owners can be residents elsewhere).
   .get('/me/residencies', signedIn, async (c) => c.json(await myResidencies(c.get('user'))))
