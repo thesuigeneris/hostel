@@ -14,6 +14,8 @@ The build follows [the platform design](docs/superpowers/specs/2026-10-12-hostel
 - **Phase 4, mobile (done):** Expo SDK 58 app on the shared API client. Explore with filters, near me and a map; hostel pages with menus, ratings and verified reviews; phone login; subscribe; My Stay with the plan, bills, meal skips, move and cancel; hostel life with issues, the community board, neighbours and reviews; profile. Bills are paid on the website's checkout page: the app opens it with a one-time sign-in code, so the person never logs in twice.
 - **Phase 5, hardening (done):** a Playwright golden path across all three personas, a security review with fixes ([docs/security-review.md](docs/security-review.md)), and a step-by-step [run guide](docs/RUN.md).
 
+- **Best of both (branch `claude/hostels-best-of-both`):** this build plus the extras from the parallel `claude/hostels-platform` build: likes on the community board (web and app), hostel page views with a per-hostel owner insights row (views need Pro or Partner), an admin escalated-issues queue (open and unacknowledged for 48 hours, or unresolved after 7 days), and monthly recurring revenue on the admin overview (platform fees, paying owner plans, subscription gross, hostels in trial).
+
 Postgres (via Drizzle), MSG91 and Razorpay are wired in. Postgres is required. MSG91 and Razorpay run in stub mode until their keys are set in `apps/api/.env`: OTP is always `123456` without MSG91, and payments are simulated without Razorpay. See [Configuration](#configuration) for every key and how to get it.
 
 ## Prerequisites
