@@ -87,10 +87,11 @@ export async function verifyOtp(
   return createSession(user.id, now);
 }
 
-/** Admin comes only from ADMIN_PHONES. A tenant may upgrade to owner; roles are never downgraded here. */
+/** Admin comes only from ADMIN_PHONES, both ways. A tenant may upgrade to owner; owners are never downgraded here. */
 function resolveRole(phone: string, current: Role | null, requested?: 'tenant' | 'owner'): Role {
   if (env.adminPhones.includes(phone)) return 'admin';
-  if (current === 'admin' || current === 'owner') return current;
+  // Removed from ADMIN_PHONES: keep owner rights, since an admin may have created hostels.
+  if (current === 'admin' || current === 'owner') return 'owner';
   if (current === 'tenant') return requested === 'owner' ? 'owner' : 'tenant';
   return requested ?? 'tenant';
 }
@@ -131,7 +132,10 @@ export async function getSessionUser(token: string, now = new Date()): Promise<U
     .innerJoin(schema.users, eq(schema.users.id, s.userId))
     .where(and(eq(s.tokenHash, sha256Hex(token)), gt(s.expiresAt, now)))
     .limit(1);
-  return row ? toUser(row.user) : null;
+  if (!row) return null;
+  const user = toUser(row.user);
+  // Live sessions lose admin as soon as the phone leaves ADMIN_PHONES.
+  return user.role === 'admin' && !env.adminPhones.includes(user.phone) ? { ...user, role: 'owner' } : user;
 }
 
 export async function deleteSession(token: string) {
