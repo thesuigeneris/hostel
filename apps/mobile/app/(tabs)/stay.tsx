@@ -1,23 +1,19 @@
 import { dateLabel, FOOD_PLANS, type Invoice, type MyMenu, type MyResidency, type MySubscription, rupees, SHARING_LABEL, weekday } from '@hostels/shared';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Platform, Pressable, Text, View } from 'react-native';
-import { Badge, Button, Card, Empty, ErrorText, H2, Loading, P, Row, Screen, StatusBadge } from '@/components/ui';
+import { Pressable, Text, View } from 'react-native';
+import { Badge, Button, Card, Empty, ErrorState, ErrorText, H2, Loading, Notice, P, Row, Screen, StatusBadge } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { confirm } from '@/lib/confirm';
 import { openPayment } from '@/lib/pay';
+import { groupStays } from '@/lib/stay';
 import { theme } from '@/lib/theme';
 import { useLoad } from '@/lib/useLoad';
 
 type Data = { mine: MySubscription | null; menu: MyMenu | null; invoices: Invoice[]; stays: MyResidency[] };
 
-function confirm(title: string, message: string, onYes: () => void) {
-  if (Platform.OS === 'web') {
-    if (globalThis.confirm?.(`${title}\n\n${message}`)) onYes();
-    return;
-  }
-  Alert.alert(title, message, [{ text: 'Not now', style: 'cancel' }, { text: 'Yes', style: 'destructive', onPress: onYes }]);
-}
+const lifeTab = (hostelId: string, tab: string) => router.push({ pathname: '/home/[hostelId]', params: { hostelId, tab } });
 
 export default function MyStay() {
   const { user, ready } = useAuth();
@@ -34,12 +30,15 @@ export default function MyStay() {
   }, [user?.id]);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
 
-  async function act(key: string, fn: () => Promise<unknown>) {
+  async function act(key: string, fn: () => Promise<unknown>, done?: string) {
     setBusyKey(key);
     setActionError(null);
+    setOk(null);
     try {
       await fn();
+      if (done) setOk(done);
       await reload();
     } catch (e) {
       setActionError(errorMessage(e));
@@ -53,58 +52,77 @@ export default function MyStay() {
     return (
       <Screen>
         <Empty title="Your stay lives here">Log in to see your plan, this week's menu, bills and your hostel community.</Empty>
-        <Button title="Log in" onPress={() => router.push('/login')} />
+        <Button title="Log in" onPress={() => router.push({ pathname: '/login', params: { next: '/stay' } })} />
       </Screen>
     );
   }
-  if (!data) return <Screen><ErrorText>{error}</ErrorText></Screen>;
+  if (!data) return <Screen refreshing={refreshing} onRefresh={refresh}><ErrorState message={error} onRetry={reload} /></Screen>;
   const { mine, menu, invoices, stays } = data;
   const sub = mine?.subscription;
   const due = invoices.find((i) => i.status === 'due');
-  const homes = stays.filter((s) => s.status === 'active' || s.status === 'invited' || (s.status === 'ended' && s.canReview));
+  const { invites, current, past } = groupStays(stays);
+  const pay = (i: Invoice) => act(`pay${i.id}`, () => openPayment(i.id));
 
   return (
     <Screen refreshing={refreshing} onRefresh={refresh}>
       <ErrorText>{actionError ?? error}</ErrorText>
+      <Notice>{ok}</Notice>
 
       {due && (
         <Card tone="food">
           <Text style={{ fontWeight: '700', color: theme.colors.text }}>{due.isOverdue ? 'Your bill is overdue' : 'A bill is ready'}</Text>
           <P>{rupees(due.totalAmount)} for {dateLabel(due.periodStart)} – {dateLabel(due.periodEnd)}, due {dateLabel(due.dueDate)}</P>
-          <Button title={`Pay ${rupees(due.totalAmount)}`} variant="food" busy={busyKey === 'pay'} onPress={() => act('pay', () => openPayment(due.id))} />
+          <Button title={`Pay ${rupees(due.totalAmount)}`} variant="food" busy={busyKey === `pay${due.id}`} onPress={() => pay(due)} />
+          <P muted>Payment opens in your browser. Pull down to refresh when you're back.</P>
         </Card>
       )}
+
+      {invites.map((s) => (
+        <Card key={s.id} tone="brand">
+          <Text style={{ fontWeight: '700', color: theme.colors.text }}>{s.hostel.name} added you as a resident</Text>
+          <P>Since {dateLabel(s.startDate)}. Accept to join the hostel community and report issues.</P>
+          <Row>
+            <Button small title="Accept" busy={busyKey === `acc${s.id}`} onPress={() => act(`acc${s.id}`, () => api.me.acceptResidency(s.id), 'Welcome! You can now see your hostel community.')} />
+            <Button small variant="ghost" title="Not me" busy={busyKey === `dec${s.id}`} onPress={() => act(`dec${s.id}`, () => api.me.declineResidency(s.id), 'Invite declined')} />
+          </Row>
+        </Card>
+      ))}
 
       {mine && sub ? (
         <Card>
           <Row style={{ justifyContent: 'space-between' }}>
-            <Pressable onPress={() => router.push(`/hostel/${mine.hostel.slug}`)}><H2>{mine.hostel.name}</H2></Pressable>
+            <Pressable accessibilityRole="link" onPress={() => router.push(`/hostel/${mine.hostel.slug}`)}><H2>{mine.hostel.name}</H2></Pressable>
             <StatusBadge status={sub.status} />
           </Row>
           <P>{mine.hostel.area} · {SHARING_LABEL[mine.roomType.sharing]} · {FOOD_PLANS[sub.mealPlan].label}{sub.mealPlan !== 'none' ? ` (${sub.diet})` : ''}</P>
-          <P muted>This period {dateLabel(mine.currentPeriod.start)} – {dateLabel(mine.currentPeriod.end)} · rent {rupees(mine.roomType.monthlyRent)}</P>
+          <P muted>Member since {dateLabel(sub.startDate)} · this period {dateLabel(mine.currentPeriod.start)} – {dateLabel(mine.currentPeriod.end)} · rent {rupees(mine.roomType.monthlyRent)} /month</P>
           {sub.cancelAt && <Badge label={`Ends ${dateLabel(sub.cancelAt)}`} tone="food" />}
+          {sub.status === 'pending' && due && <P>Pay the first bill to confirm your bed. Unpaid holds are released after 30 minutes.</P>}
           {mine.scheduledMove && (
             <Row style={{ justifyContent: 'space-between' }}>
               <P>Moving on {dateLabel(mine.scheduledMove.moveDate)}</P>
-              <Button small variant="secondary" title="Cancel move" busy={busyKey === 'move'} onPress={() => act('move', () => api.me.cancelMove(mine.scheduledMove!.id))} />
+              <Button small variant="secondary" title="Cancel move" busy={busyKey === 'move'} onPress={() => act('move', () => api.me.cancelMove(mine.scheduledMove!.id), 'Move cancelled')} />
             </Row>
           )}
           {sub.status === 'active' && !sub.cancelAt && (
             <Row>
-              {!mine.scheduledMove && <Button small variant="secondary" title="Move" onPress={() => router.push('/move')} />}
+              {!mine.scheduledMove && <Button small variant="secondary" title="Move hostel or room" onPress={() => router.push('/move')} />}
+              <Button small variant="secondary" title="Hostel community" onPress={() => router.push(`/home/${mine.hostel.id}`)} />
               <Button
                 small
                 variant="ghost"
                 title="Cancel plan"
                 busy={busyKey === 'cancel'}
-                onPress={() => confirm('Cancel your plan?', 'It ends at the close of this billing period. Your bed is released then.', () => act('cancel', () => api.me.cancelSubscription()))}
+                onPress={() => confirm('Cancel your plan?', 'It ends at the close of this billing period. Your bed is released then.', () => act('cancel', () => api.me.cancelSubscription(), 'Your plan will end at the close of the current billing period.'))}
               />
             </Row>
           )}
         </Card>
-      ) : user.role === 'tenant' ? (
-        <Empty title="No plan yet">Verified hostels offer one monthly bill for bed and food, with no advance.</Empty>
+      ) : user.role === 'tenant' && current.length === 0 && invites.length === 0 ? (
+        <Card>
+          <Empty title="You're not linked to a hostel yet">Subscribe to a verified hostel for one monthly bill with no advance, or ask your hostel owner to add your phone number.</Empty>
+          <Button title="Browse verified hostels" onPress={() => router.push({ pathname: '/', params: { verified: 'true' } })} />
+        </Card>
       ) : null}
 
       {menu && (
@@ -130,12 +148,12 @@ export default function MyStay() {
                       <Button
                         small
                         variant={m.skipped ? 'secondary' : 'ghost'}
-                        title={m.skipped ? 'Undo' : `Skip −${rupees(m.credit)}`}
+                        title={m.skipped ? 'Undo skip' : `Skip −${rupees(m.credit)}`}
                         busy={busyKey === key}
                         onPress={() => act(key, () => (m.skipped ? api.me.unskip(d.date, m.meal) : api.me.skip({ date: d.date, meal: m.meal })))}
                       />
                     ) : (
-                      <Text style={{ color: theme.colors.muted, fontSize: 12 }}>{m.skipped ? 'Skipped' : 'Locked'}</Text>
+                      <Text style={{ color: theme.colors.muted, fontSize: 12 }}>{m.skipped ? `Skipped · −${rupees(m.credit)}` : 'Locked'}</Text>
                     )}
                   </Row>
                 );
@@ -145,19 +163,33 @@ export default function MyStay() {
         </View>
       )}
 
-      {homes.length > 0 && (
+      {current.length > 0 && (
         <View style={{ gap: theme.spacing.sm }}>
           <H2>Hostel life</H2>
-          {homes.map((s) => (
-            <Pressable key={s.id} onPress={() => router.push(`/home/${s.hostel.id}`)}>
-              <Card>
+          {current.map((s) => (
+            <Card key={s.id}>
+              <Pressable accessibilityRole="link" onPress={() => router.push(`/home/${s.hostel.id}`)}>
                 <Row style={{ justifyContent: 'space-between' }}>
                   <Text style={{ fontWeight: '700', color: theme.colors.text }}>{s.hostel.name}</Text>
                   <StatusBadge status={s.status} />
                 </Row>
-                <P muted>{s.status === 'invited' ? 'Your hostel added you. Tap to accept.' : s.status === 'ended' ? 'Review your stay' : 'Issues, community and neighbours'}</P>
-              </Card>
-            </Pressable>
+                <P muted>{s.hostel.area} · since {dateLabel(s.startDate)} · community, issues and neighbours</P>
+              </Pressable>
+              <Row>
+                <Button small title="Open" onPress={() => router.push(`/home/${s.hostel.id}`)} />
+                <Button small variant="secondary" title="Report an issue" onPress={() => lifeTab(s.hostel.id, 'issues')} />
+                {s.canReview && <Button small variant="secondary" title={s.hasReview ? 'Edit review' : 'Write a review'} onPress={() => lifeTab(s.hostel.id, 'review')} />}
+                {s.source === 'owner' && (
+                  <Button
+                    small
+                    variant="ghost"
+                    title="I moved out"
+                    busy={busyKey === `out${s.id}`}
+                    onPress={() => confirm('Mark yourself as moved out?', 'You leave the community board. You can still review your stay.', () => act(`out${s.id}`, () => api.me.moveOut(s.id), 'Marked as moved out. You can still review your stay.'))}
+                  />
+                )}
+              </Row>
+            </Card>
           ))}
         </View>
       )}
@@ -171,8 +203,28 @@ export default function MyStay() {
                 <Text style={{ fontWeight: '600', color: theme.colors.text }}>{dateLabel(i.periodStart)} – {dateLabel(i.periodEnd)}</Text>
                 <StatusBadge status={i.isOverdue ? 'overdue' : i.status} />
               </Row>
-              <P muted>Rent {rupees(i.rentAmount)} · food {rupees(i.foodAmount)}{i.creditAmount ? ` · credit −${rupees(i.creditAmount)}` : ''}</P>
-              <Text style={{ fontWeight: '700', color: theme.colors.text }}>{rupees(i.totalAmount)}</Text>
+              <P muted>Rent {rupees(i.rentAmount)} · food {rupees(i.foodAmount)}{i.creditAmount ? ` · skipped-meal credit −${rupees(i.creditAmount)}` : ''}</P>
+              <Row style={{ justifyContent: 'space-between' }}>
+                <Text style={{ fontWeight: '700', color: theme.colors.text }}>{rupees(i.totalAmount)}</Text>
+                {i.status === 'due' ? <Button small variant="food" title="Pay" busy={busyKey === `pay${i.id}`} onPress={() => pay(i)} /> : <P muted>{i.status === 'paid' ? `Paid${i.paidAt ? ` ${dateLabel(i.paidAt)}` : ''}` : 'Replaced by a newer bill'}</P>}
+              </Row>
+            </Card>
+          ))}
+        </View>
+      )}
+
+      {past.length > 0 && (
+        <View style={{ gap: theme.spacing.sm }}>
+          <H2>Places you've lived</H2>
+          {past.map((s) => (
+            <Card key={s.id}>
+              <Pressable accessibilityRole="link" onPress={() => router.push(`/hostel/${s.hostel.slug}`)}>
+                <Text style={{ fontWeight: '700', color: theme.colors.text }}>{s.hostel.name}</Text>
+                <P muted>{dateLabel(s.startDate)} – {dateLabel(s.endDate)}</P>
+              </Pressable>
+              {s.canReview ? (
+                <Button small variant="secondary" title={s.hasReview ? 'Edit review' : 'Review your stay'} onPress={() => lifeTab(s.hostel.id, 'review')} />
+              ) : s.hasReview ? <Badge label="Reviewed" tone="green" /> : null}
             </Card>
           ))}
         </View>

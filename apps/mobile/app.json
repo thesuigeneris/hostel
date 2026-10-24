@@ -18,7 +18,14 @@
       "expo-router",
       "expo-secure-store",
       "expo-web-browser",
-      ["expo-location", { "locationWhenInUsePermission": "Hostels uses your location to show hostels near you." }]
+      ["expo-location", { "locationWhenInUsePermission": "Hostels uses your location to show hostels near you." }],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Hostels uses your photos so you can attach one to an issue or a community post.",
+          "cameraPermission": "Hostels uses the camera so you can photograph an issue in your hostel."
+        }
+      ]
     ],
     "experiments": { "typedRoutes": false }
   }
