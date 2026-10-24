@@ -1,24 +1,19 @@
 import type { Config } from 'tailwindcss';
+import { colors, fonts, motion, radius, shadows, zIndex } from './lib/tokens';
 
-// Same tokens as apps/mobile/lib/theme.ts: warm off-white, one deep green, one warm food accent.
+// Built from lib/tokens.ts (same brand as apps/mobile/lib/theme.ts): warm off-white, one deep green, one warm food accent.
 export default {
   content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}'],
   theme: {
     extend: {
-      colors: {
-        bg: '#FAF7F2',
-        surface: '#FFFFFF',
-        ink: { DEFAULT: '#1C2421', soft: '#4B5550', muted: '#7A837E' },
-        line: '#E7E1D8',
-        brand: { DEFAULT: '#1F5C46', dark: '#164434', soft: '#E4EFE9' },
-        food: { DEFAULT: '#E08A2E', soft: '#FCEFDF' },
-        danger: { DEFAULT: '#B4382F', soft: '#FBE9E7' },
-      },
-      fontFamily: {
-        sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
-      },
-      borderRadius: { xl: '14px', '2xl': '20px' },
-      boxShadow: { card: '0 1px 2px rgba(28,36,33,0.06), 0 4px 16px rgba(28,36,33,0.06)' },
+      colors,
+      fontFamily: { sans: fonts.sans, display: fonts.display },
+      borderRadius: radius,
+      boxShadow: shadows,
+      zIndex,
+      maxWidth: { content: '72rem', prose: '42rem' },
+      transitionDuration: { feedback: `${motion.feedback}ms`, panel: `${motion.panel}ms`, section: `${motion.section}ms` },
+      transitionTimingFunction: { out: `cubic-bezier(${motion.easeOut.join(',')})`, in: `cubic-bezier(${motion.easeIn.join(',')})` },
     },
   },
   plugins: [],

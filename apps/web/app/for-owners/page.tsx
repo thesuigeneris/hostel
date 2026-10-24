@@ -14,7 +14,7 @@ const TIERS = [
   {
     id: 'free',
     tagline: 'Get found',
-    features: ['Listing with photos, rooms and live beds', 'Visit requests by phone and WhatsApp', 'Verified reviews from your residents', 'Issue reporting for your residents'],
+    features: ['Listing with photos, rooms and bed counts', 'Visit requests by phone and WhatsApp', 'Verified reviews from your residents', 'Issue reporting for your residents'],
   },
   {
     id: 'pro',

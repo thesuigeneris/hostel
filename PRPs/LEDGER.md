@@ -46,6 +46,22 @@ Gates run at `d774465`:
 | AUTH-WEB | Web password sign-up/log-in, demo buttons | `apps/web/app/login/*`, `apps/web/app/account/*` | `e2e/auth.spec.ts` (2 tests) | verified @d774465 |
 | AUTH-MOBILE | Mobile password, sign-up and demo login | `apps/mobile/app/login.tsx` | typecheck + `expo export --platform web` exit 0 | **unverified**: no native or web runtime run of the screen |
 
+## PRP-12 Frontend design system and visual upgrade
+
+| ID | Requirement | Implementation | Test / evidence | Status |
+|---|---|---|---|---|
+| UI-TOKENS | One token system, AA contrast for text | `apps/web/lib/tokens.ts` → `tailwind.config.ts` | contrast measured (`docs/design/system.md`); axe clean on `/`, `/hostels`, `/login`, `/for-owners` | verified (batch 1) |
+| UI-PRIMITIVES | Reusable primitives, no parallel system | `components/ui.tsx`, `Photo`, `NavLinks` | typecheck; all existing pages render (45-check sweep) | verified (batch 1) |
+| UI-SHELL | Skip link, focus, current page, mobile menu | `app/layout.tsx`, `SiteHeader.tsx`, `NavLinks.tsx` | `design.spec.ts` › skip link, › mobile menu | verified (batch 1) |
+| UI-HOME | Homepage sections from real data only | `app/page.tsx` | `design.spec.ts` › search works without 3D; code review: every number from the API or `@hostels/shared` constants | verified (batch 1) |
+| UI-3D | Lazy 3D hero with fallbacks | `components/hero/*` | `design.spec.ts` › 3D renders / reduced motion one frame / no WebGL static / three only on `/` | verified (batch 1), including › lost context falls back to the illustration (`WEBGL_lose_context`) |
+| UI-MOTION | Reduced-motion policy, no global animation cost | `components/motion.tsx`, `MotionProvider.tsx`, `globals.css` | reduced-motion test; bundle 106 → 108 kB on `/` | verified (batch 1) |
+| UI-RESPONSIVE | No overflow at 360–1440 | layout fixes on `/account`, `/hostels/[slug]` | `design.spec.ts` overflow ×5 widths; `baseline.mjs` 45/45 | verified for the swept routes; remaining workspace routes in batch 4 |
+| UI-SEARCH | Filter drawer, chips, pagination, no-results recovery | | | planned (batch 2) |
+| UI-PROPERTY | Gallery, price breakdown, availability freshness, axe fixes | | | planned (batch 2) |
+| UI-OWNERS | `/for-owners` and onboarding stepper | | | planned (batch 3) |
+| UI-WORKSPACES | Owner, resident, admin workspaces | | | planned (batch 4) |
+
 ## Later PRPs (rows filled when each PRP is generated)
 
 | PRP | Area | Status |
@@ -55,7 +71,7 @@ Gates run at `d774465`:
 | 04 | Payment mode separation (M7) | planned |
 | 05 | Workflow completeness against the spec | planned |
 | 06 | Uploads: private attachments, relative URLs, metadata stripping, photo loading (M8–M10) | planned |
-| 07 | Responsive and accessible web (M11) | planned |
+| 07 | Responsive and accessible web (M11) | partly covered by PRP-12 (axe + overflow tests added) |
 | 08 | Mobile runtime verification | planned |
 | 09 | Zero-cost deployment configuration (M12) | planned |
 | 10 | Backup and recovery (M13) | planned |

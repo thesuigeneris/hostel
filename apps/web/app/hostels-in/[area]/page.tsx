@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!area) return { title: 'Area not found' };
   return {
     title: `Hostels and PGs in ${area.area}, Hyderabad`,
-    description: `${area.count} hostels and PGs in ${area.area} with live beds, rent, food and verified resident reviews. Partner hostels need no advance.`,
+    description: `${area.count} hostels and PGs in ${area.area} with rent, food, owner-reported beds and resident reviews. Partner hostels need no advance.`,
     alternates: { canonical: `/hostels-in/${area.slug}` },
   };
 }

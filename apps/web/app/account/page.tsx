@@ -44,7 +44,7 @@ export default async function AccountPage({ searchParams }: Props) {
       )}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           {isTenant && (
             <section>
               <h2 className="mb-3 text-lg font-semibold">My plan</h2>

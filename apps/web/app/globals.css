@@ -1,3 +1,6 @@
+@import '@fontsource-variable/inter/wght.css';
+@import '@fontsource-variable/fraunces/opsz.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -8,16 +11,57 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  scroll-padding-top: 5rem; /* in-page anchors land below the sticky header */
 }
 
 body {
   @apply bg-bg font-sans text-ink antialiased;
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
 }
 
 a {
   @apply underline-offset-2;
 }
 
+/* Links get the same visible keyboard focus as buttons. */
+a:focus-visible,
+summary:focus-visible {
+  @apply rounded-md outline-none ring-2 ring-ring ring-offset-2 ring-offset-bg;
+}
+
+/* Display headings use Fraunces with automatic optical sizing; everything else stays Inter. */
+.font-display {
+  font-optical-sizing: auto;
+}
+
 .leaflet-container {
   font: inherit;
+}
+
+/* Section reveal (components/motion.tsx): only elements that started below the fold are hidden. */
+[data-reveal] {
+  transition:
+    opacity 380ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 380ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+[data-reveal='waiting'] {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

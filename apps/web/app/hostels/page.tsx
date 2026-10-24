@@ -9,7 +9,7 @@ import { publicApi } from '@/lib/api';
 
 export const metadata: Metadata = {
   title: 'Find a hostel or PG in Hyderabad',
-  description: 'Search hostels and PGs by area, rent, sharing and food. See live beds, real photos and verified resident reviews.',
+  description: 'Search hostels and PGs in Hyderabad by area, rent, sharing and food. See owner-reported beds, photos and reviews from residents who stayed.',
   alternates: { canonical: '/hostels' },
 };
 
