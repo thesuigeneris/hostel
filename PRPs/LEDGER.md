@@ -61,7 +61,7 @@ Gates run at `d774465`:
 | UI-PROPERTY | Gallery, price breakdown, availability freshness, axe fixes | `PhotoGallery`, `app/hostels/[slug]/page.tsx`; API `room_types.beds_updated_at` (migration 0005) | `listings.test.ts` › bed count freshness (mutation-checked); `search.spec.ts` › property page, › gallery, › sticky bar, › axe on property/area/map | verified (batch 2) |
 | UI-STATUS | Plain-language status labels per record type | `StatusBadge kind` in all 20 call sites; visit next-step text on `/account` | typecheck; existing e2e flows | implemented, visual check of every workspace pending (batch 4) |
 | UI-CACHE | Public pages reflect approvals and edits immediately (found during execution) | `publicApi` tag + `revalidateTag` in `run()` | `personas.spec.ts` › 2, `golden-path.spec.ts` (failed on stale cache before the fix) | verified (batch 2) |
-| UI-OWNERS | `/for-owners` and onboarding stepper | | | planned (batch 3) |
+| UI-OWNERS | `/for-owners` and onboarding stepper | `app/for-owners/page.tsx` (steps, owner FAQ from shared constants, unbacked "thousands of students" and "live bed counts" claims removed); `ListingProgress`; `OwnerTabs` (`aria-current`, labelled lock); owner rooms show bed freshness | `e2e/owners.spec.ts` (2 tests, incl. axe on `/for-owners`); full suite 32/32 | verified (batch 3) |
 | UI-WORKSPACES | Owner, resident, admin workspaces | | | planned (batch 4) |
 
 ## Later PRPs (rows filled when each PRP is generated)

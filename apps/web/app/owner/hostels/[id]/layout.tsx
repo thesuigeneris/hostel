@@ -1,6 +1,7 @@
 import { OWNER_PLANS } from '@hostels/shared';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { ListingProgress } from '@/components/ListingProgress';
 import { OwnerTabs } from '@/components/OwnerTabs';
 import { Badge, StatusBadge } from '@/components/ui';
 import { hasPlan, ownerHostel } from '@/lib/owner';
@@ -24,12 +25,13 @@ export default async function OwnerHostelLayout({ children, params }: { children
     <>
       <div className="mb-4 text-sm"><Link href="/owner">← All hostels</Link></div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">{h.name}</h1>
+        <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">{h.name}</h1>
         <StatusBadge kind="hostel" status={h.status} />
         <Badge tone={eff === 'free' ? 'gray' : 'green'}>{OWNER_PLANS[eff].label}</Badge>
         {h.plan.suspended && <Badge tone="red">Paused: bill overdue</Badge>}
         {h.status === 'live' && <Link href={`/hostels/${h.slug}`} className="text-sm">View public page</Link>}
       </div>
+      <ListingProgress hostel={h} />
       <OwnerTabs base={`/owner/hostels/${id}`} tabs={tabs} />
       {children}
     </>

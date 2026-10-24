@@ -181,3 +181,13 @@ npm packages only (MIT, OFL, MPL). ₹0.
   - API tests: 99/99, with a mutation check on `reserveBed`.
   - Typecheck 4/4, lint clean.
   - Axe on property, area, map and empty pages. Pin-only target-size findings are exempt under WCAG 2.5.8's equivalent-control rule: the text list.
+
+### Batch 3: owner acquisition and onboarding (done)
+
+- **`/for-owners`.**
+  - Steps from sign-up to live.
+  - Plans priced from `OWNER_PLANS`.
+  - An owner FAQ built from `DEFAULT_PLATFORM_FEE_PCT`, `OWNER_TRIAL_MONTHS`, `OWNER_DOWNGRADE_DAYS`, `REVIEW_MIN_STAY_DAYS`, `TRANSPARENCY_WINDOW_DAYS` and `ISSUE_AUTOCLOSE_DAYS`.
+  - Copy corrected against the code: the platform fee applies to all paid resident bills, rent and food (`generatePayouts`). The listing review is described as a read-through with a reason on rejection, since no checklist exists in code. Partner verification is the in-person visit described on the admin partners page.
+- **Onboarding.** `ListingProgress` shows steps 1–4 (details, rooms, photos, review) on the new-listing page and on every owner tab until the listing is live, computed from the listing itself.
+- **Found.** Overriding a button variant's colours through `className` loses to Tailwind's stylesheet order. The `/for-owners` hero and the lightbox Close button now use explicit classes; axe caught it.

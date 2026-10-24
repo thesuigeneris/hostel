@@ -119,7 +119,7 @@ function Lightbox({ photos, start, alt, onClose }: { photos: GalleryPhoto[]; sta
       <div className="flex h-full flex-col">
         <div className="flex items-center justify-between px-4 py-3">
           <p aria-live="polite" className="text-sm">Photo {i + 1} of {n}</p>
-          <button type="button" onClick={() => ref.current?.close()} className={buttonClass('ghost', 'md', 'text-white hover:bg-white/10 hover:text-white')}>
+          <button type="button" onClick={() => ref.current?.close()} className={cx('inline-flex h-11 items-center rounded-xl px-4 text-sm font-medium text-white hover:bg-white/10', focusRing)}>
             Close
           </button>
         </div>
