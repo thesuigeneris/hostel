@@ -7,6 +7,8 @@ import { defineConfig, devices } from '@playwright/test';
  *   createdb hostels_e2e   # once
  *   bun run test:e2e
  */
+// E2E_EXTERNAL=1 runs against servers you already started (E2E_WEB_URL / E2E_API_URL).
+const EXTERNAL = process.env.E2E_EXTERNAL === '1';
 const API_PORT = 4200;
 const WEB_PORT = 3200;
 const DB = process.env.E2E_DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/hostels_e2e';
@@ -22,13 +24,16 @@ export default defineConfig({
   retries: 0,
   reporter: [['list']],
   use: {
-    baseURL: `http://localhost:${WEB_PORT}`,
+    baseURL: process.env.E2E_WEB_URL ?? `http://localhost:${WEB_PORT}`,
     trace: 'retain-on-failure',
+    actionTimeout: 15_000,
     screenshot: 'only-on-failure',
     ...devices['Desktop Chrome'],
     launchOptions: chromium ? { executablePath: chromium } : {},
   },
-  webServer: [
+  webServer: EXTERNAL
+    ? []
+    : [
     {
       command: 'bun run db:reset && bun run src/index.ts',
       cwd: '../api',

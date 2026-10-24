@@ -71,6 +71,7 @@ export function LoginForm() {
 
   return step === 'phone' ? (
     <form
+      key="phone"
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
@@ -106,6 +107,7 @@ export function LoginForm() {
     </form>
   ) : (
     <form
+      key="otp"
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
