@@ -1,180 +1,84 @@
-import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
-import type { User } from '@hostels/shared';
-import { api } from '../../lib/api';
-import { theme } from '../../lib/theme';
+import { dateLabel, type MyVisit } from '@hostels/shared';
+import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { Linking, Text } from 'react-native';
+import { Button, Card, Empty, ErrorText, Field, H2, Loading, Notice, P, Row, Screen, StatusBadge } from '@/components/ui';
+import { api, errorMessage } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
+import { WEB_URL } from '@/lib/config';
+import { theme } from '@/lib/theme';
+import { useLoad } from '@/lib/useLoad';
 
 export default function Profile() {
-  const [user, setUser] = useState<User | null>(null);
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const { user, ready, signOut, refresh: refreshUser } = useAuth();
+  const { data: visits } = useLoad<MyVisit[]>(async () => (user ? api.me.visits() : []), [user?.id]);
+  const [name, setName] = useState(user?.name ?? '');
+  const [email, setEmail] = useState(user?.email ?? '');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const u = await api.me.get();
-      setUser(u);
-      setName(u.name);
-      setEmail(u.email ?? '');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  useEffect(() => {
+    setName(user?.name ?? '');
+    setEmail(user?.email ?? '');
+  }, [user]);
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
-  );
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      await api.me.update({ name, email: email || null });
-      Alert.alert('Saved');
-    } catch (e) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const signOut = async () => {
-    await api.auth.signOut();
-    router.replace('/');
-  };
-
-  if (loading || !user) {
+  if (!ready) return <Loading />;
+  if (!user) {
     return (
-      <View
-        style={{
-          flex: 1,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: theme.colors.bg,
-        }}
-      >
-        <ActivityIndicator />
-      </View>
+      <Screen>
+        <Empty title="Not logged in">Log in with your phone number to subscribe, pay bills and talk to your hostel.</Empty>
+        <Button title="Log in" onPress={() => router.push('/login')} />
+      </Screen>
     );
   }
 
+  async function save() {
+    setBusy(true);
+    setErr(null);
+    setOk(null);
+    try {
+      await api.me.update({ name: name.trim(), email: email.trim() || null });
+      await refreshUser();
+      setOk('Saved');
+    } catch (e) {
+      setErr(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <View style={{ flex: 1, padding: theme.spacing.xl, backgroundColor: theme.colors.bg }}>
-      <Text
-        style={{
-          fontSize: 13,
-          color: theme.colors.muted,
-          textTransform: 'uppercase',
-          letterSpacing: 1,
-        }}
-      >
-        Phone
-      </Text>
-      <Text
-        style={{
-          fontSize: 18,
-          color: theme.colors.text,
-          marginTop: 4,
-          marginBottom: theme.spacing.xl,
-        }}
-      >
-        {user.phone}
-      </Text>
+    <Screen>
+      <Card>
+        <H2>{user.name || 'Your profile'}</H2>
+        <P muted>+91 {user.phone}{user.phoneVerified ? ' · verified' : ' · not verified yet'}</P>
+        <Field label="Name" value={name} onChangeText={setName} maxLength={80} />
+        <Field label="Email" hint="For bill receipts. Optional." value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+        <ErrorText>{err}</ErrorText>
+        <Notice>{ok}</Notice>
+        <Button title="Save" variant="secondary" onPress={save} busy={busy} disabled={!name.trim()} />
+      </Card>
 
-      <Text
-        style={{
-          fontSize: 13,
-          color: theme.colors.muted,
-          textTransform: 'uppercase',
-          letterSpacing: 1,
-        }}
-      >
-        Name
-      </Text>
-      <TextInput
-        value={name}
-        onChangeText={setName}
-        placeholder="Your name"
-        placeholderTextColor={theme.colors.muted}
-        style={{
-          borderWidth: 1,
-          borderColor: theme.colors.border,
-          borderRadius: theme.radius.md,
-          padding: theme.spacing.md,
-          fontSize: 16,
-          color: theme.colors.text,
-          marginTop: 6,
-        }}
-      />
+      {user.role !== 'tenant' && (
+        <Card tone="brand">
+          <P>Owner and admin tools are on the website.</P>
+          <Button small title="Open the dashboard" onPress={() => Linking.openURL(`${WEB_URL}${user.role === 'admin' ? '/admin' : '/owner'}`)} />
+        </Card>
+      )}
 
-      <Text
-        style={{
-          fontSize: 13,
-          color: theme.colors.muted,
-          textTransform: 'uppercase',
-          letterSpacing: 1,
-          marginTop: theme.spacing.lg,
-        }}
-      >
-        Email (optional)
-      </Text>
-      <TextInput
-        value={email}
-        onChangeText={setEmail}
-        placeholder="you@example.com"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        placeholderTextColor={theme.colors.muted}
-        style={{
-          borderWidth: 1,
-          borderColor: theme.colors.border,
-          borderRadius: theme.radius.md,
-          padding: theme.spacing.md,
-          fontSize: 16,
-          color: theme.colors.text,
-          marginTop: 6,
-        }}
-      />
+      <H2>Visit requests</H2>
+      {!visits?.length ? <P muted>You haven't requested any visits.</P> : visits.map((v) => (
+        <Card key={v.id}>
+          <Row style={{ justifyContent: 'space-between' }}>
+            <Text style={{ fontWeight: '600', color: theme.colors.text }}>{v.hostel.name}</Text>
+            <StatusBadge status={v.status} />
+          </Row>
+          <P muted>{dateLabel(v.preferredDate)}{v.message ? ` · ${v.message}` : ''}</P>
+        </Card>
+      ))}
 
-      <TouchableOpacity
-        onPress={save}
-        disabled={saving}
-        style={{
-          backgroundColor: theme.colors.primary,
-          paddingVertical: theme.spacing.lg,
-          borderRadius: theme.radius.md,
-          marginTop: theme.spacing.xl,
-          opacity: saving ? 0.6 : 1,
-        }}
-      >
-        <Text
-          style={{
-            color: theme.colors.primaryText,
-            textAlign: 'center',
-            fontSize: 16,
-            fontWeight: '600',
-          }}
-        >
-          {saving ? 'Saving...' : 'Save'}
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity onPress={signOut} style={{ marginTop: theme.spacing.xl }}>
-        <Text
-          style={{
-            color: theme.colors.danger,
-            textAlign: 'center',
-            fontSize: 15,
-            fontWeight: '600',
-          }}
-        >
-          Sign out
-        </Text>
-      </TouchableOpacity>
-    </View>
+      <Button title="Log out" variant="ghost" onPress={signOut} />
+    </Screen>
   );
 }
