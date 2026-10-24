@@ -11,7 +11,18 @@ export type IdPrefix =
   | 'inv'
   | 'skp'
   | 'mov'
-  | 'pay';
+  | 'pay'
+  | 'res'
+  | 'rev'
+  | 'flg'
+  | 'iss'
+  | 'isu'
+  | 'pst'
+  | 'cmt'
+  | 'rpt'
+  | 'opl'
+  | 'oin'
+  | 'rnt';
 
 const ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyz';
 

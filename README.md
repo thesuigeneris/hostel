@@ -9,7 +9,8 @@ This is **v0**, the foundation scaffold from `/office-hours`. Read [DESIGN.md](.
 The build follows [the platform design](docs/superpowers/specs/2026-10-12-hostels-platform-design.md) and its [personas addendum](docs/superpowers/specs/2026-10-24-personas-addendum.md), phase by phase.
 
 - **Phase 1, foundation (done):** Postgres via Docker, full schema and migration, seed data, shared package (types, zod schemas, pricing, IST time helpers, ids, API client), API split into route modules, hardened phone-OTP login.
-- Phase 2 (API features), Phase 3 (website), Phase 4 (mobile) and Phase 5 (hardening) are next. The Expo app still talks to the v0 API shape until Phase 4.
+- **Phase 2, API features (done):** listings, rooms, photos and uploads, search (filters, near me, rating), visit requests, partner flow, subscriptions with bed reservation, bills, Razorpay checkout and webhook, weekly menus, meal skips with IST cut-offs, headcount, moves, cancel, payouts, background jobs; plus the addendum: residencies, verified reviews, issue reporting with public transparency stats, community board, owner plans and platform bills, and a rent tracker.
+- Phase 3 (website), Phase 4 (mobile) and Phase 5 (hardening) are next. The Expo app still talks to the v0 API shape until Phase 4.
 
 External services run in stub mode until keys are set in `apps/api/.env`: OTP is always `123456` without MSG91, and payments are simulated without Razorpay.
 
@@ -30,7 +31,9 @@ bun run db:seed      # migrates, then seeds Hyderabad demo data
 
 `bun run db:reset` wipes and reseeds.
 
-Demo logins (OTP `123456`): admin `9000000001`, owner `9000000002`, tenant `9000000003`.
+Demo logins (OTP `123456`): admin `9000000001`, owner `9000000002` (six partner hostels), tenant `9000000003` (three weeks into a plan, with issues and posts at Sunrise Residency). More tenants: `9000000100` to `9000000113`.
+
+Background jobs (expire unpaid plans, generate bills, complete moves, end cancelled plans, owner bills, plan changes, auto-close issues) run inside the API on startup and every 15 minutes. Set `JOBS=off` to disable them; admins can also trigger them with `POST /admin/jobs/run`. Uploaded photos are stored under `apps/api/uploads` (override with `UPLOAD_DIR`).
 
 ## Run
 
@@ -55,7 +58,7 @@ bun run test         # API tests run against the hostels_test database
 hostels/
 ├── apps/
 │   ├── api/                Bun + Hono + Drizzle + Postgres
-│   │   ├── src/routes/     auth, public, tenant, owner, admin
+│   │   ├── src/routes/     public, auth, tenant, resident, owner, admin, payments, uploads
 │   │   ├── src/services/   business logic
 │   │   ├── src/db/         schema, migrate, seed
 │   │   ├── src/lib/        env, errors, crypto, msg91, razorpay

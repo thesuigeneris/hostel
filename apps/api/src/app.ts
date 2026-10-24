@@ -9,6 +9,9 @@ import type { AppEnv } from './middleware/auth';
 import { adminRoutes } from './routes/admin';
 import { authRoutes } from './routes/auth';
 import { ownerRoutes } from './routes/owner';
+import { paymentRoutes, webhookRoutes } from './routes/payments';
+import { residentRoutes } from './routes/resident';
+import { uploadRoutes } from './routes/uploads';
 import { publicRoutes } from './routes/public';
 import { tenantRoutes } from './routes/tenant';
 
@@ -17,13 +20,21 @@ export function createApp(opts: { log?: boolean } = {}) {
 
   if (opts.log ?? true) app.use('*', logger());
   app.use('*', cors({ origin: env.corsOrigins, allowHeaders: ['Authorization', 'Content-Type'], credentials: true }));
-  app.use('*', bodyLimit({ maxSize: 1024 * 1024, onError: (c) => c.json({ error: 'validation', message: 'Request body is too large' }, 413) }));
+  app.use('*', async (c, next) => {
+    // Uploads carry their own, larger limit.
+    if (c.req.path === '/uploads') return next();
+    return bodyLimit({ maxSize: 1024 * 1024, onError: (cx) => cx.json({ error: 'validation', message: 'Request body is too large' }, 413) })(c, next);
+  });
 
   app.route('/', publicRoutes);
   app.route('/', authRoutes);
   app.route('/', tenantRoutes);
   app.route('/', ownerRoutes);
   app.route('/', adminRoutes);
+  app.route('/', residentRoutes);
+  app.route('/', paymentRoutes);
+  app.route('/', webhookRoutes);
+  app.route('/', uploadRoutes);
 
   app.notFound((c) => c.json({ error: 'not_found', message: 'Route not found' }, 404));
   app.onError((err, c) => {

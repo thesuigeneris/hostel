@@ -99,3 +99,21 @@ export function computePayout(grossAmount: number, feePct: number) {
 export function formatRupees(amount: number): string {
   return `₹${amount.toLocaleString('en-IN')}`;
 }
+
+/** What owners pay us, per hostel per month. Partner hostels also pay the platform fee on subscription bills. */
+export const OWNER_PLANS = {
+  free: { label: 'Free', price: 0 },
+  pro: { label: 'Pro', price: 999 },
+  partner: { label: 'Partner', price: 1999 },
+} as const;
+
+/** New Pro and Partner plans are free for their first month. */
+export const OWNER_TRIAL_MONTHS = 1;
+/** An owner bill this many days past due drops the hostel to the Free feature set. */
+export const OWNER_DOWNGRADE_DAYS = 15;
+
+export const REVIEW_MIN_STAY_DAYS = 14;
+export const REVIEW_WINDOW_AFTER_STAY_DAYS = 180;
+export const ISSUE_AUTOCLOSE_DAYS = 7;
+export const TRANSPARENCY_WINDOW_DAYS = 90;
+export const TRANSPARENCY_MIN_ISSUES = 3;

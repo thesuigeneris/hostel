@@ -7,6 +7,7 @@ import { env } from '../lib/env';
 import { AppError } from '../lib/errors';
 import { generateOtp, isMsg91Configured, sendOtp } from '../lib/msg91';
 import { toUser } from './mappers';
+import { linkInvitedResidencies } from './residents';
 
 export const OTP_TTL_SECONDS = 5 * 60;
 export const OTP_MAX_ATTEMPTS = 5;
@@ -20,6 +21,10 @@ function hashOtp(phone: string, otp: string) {
 }
 
 export async function requestOtp(phone: string, now = new Date()): Promise<OtpSent> {
+  // Stub mode accepts 123456 for every phone, so it must never serve real users.
+  if (env.isProduction && !isMsg91Configured()) {
+    throw new AppError('internal', 'SMS login is not configured on this server', 503);
+  }
   const db = getDb();
   const otp = generateOtp();
   const codeHash = hashOtp(phone, otp);
@@ -77,6 +82,7 @@ export async function verifyOtp(
   if (consumed.length === 0) throw invalid;
 
   const user = await findOrCreateUser(input.phone, input.role, input.name);
+  await linkInvitedResidencies(user);
   return createSession(user.id, now);
 }
 
