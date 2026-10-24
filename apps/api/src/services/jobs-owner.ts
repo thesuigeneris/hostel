@@ -1,2 +1,5 @@
-/** Background jobs for the owner area. Push onto `jobs` from ./jobs, e.g. jobs.push({ name, run }). */
-import './jobs';
+/** Background jobs for the owner area. */
+import { jobs } from './jobs';
+import { runSaasBilling } from './owner-saas';
+
+jobs.push({ name: 'saas-billing', run: runSaasBilling });
