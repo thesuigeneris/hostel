@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { getDb, schema } from '../src/db';
 import { assertResetAllowed } from '../src/db/seed';
 import { setClock } from '../src/lib/clock';
+import { hmacHex } from '../src/lib/crypto';
 import { grantAdmin } from '../src/services/auth';
 import { admin, liveHostel, newOwner, nextPhone } from './fixtures';
 import { call, login, resetDb } from './helpers';
@@ -176,6 +177,34 @@ describe('auth modes', () => {
       expect(paid.status).toBe(200);
       expect(paid.body.invoice.status).toBe('paid');
     });
+  });
+
+  test('a demo instance ignores correctly signed payment webhooks, so real payment events never mark demo bills paid', async () => {
+    const ownerToken = await newOwner();
+    const { hostel, rooms } = await liveHostel(ownerToken, await admin(), { partner: true });
+    const phone = nextPhone();
+    await login(phone);
+    await makeDemo(phone);
+    const webhook = (orderId: string) => {
+      const body = JSON.stringify({ event: 'payment.captured', payload: { payment: { entity: { id: `pay_${orderId}`, order_id: orderId } } } });
+      return call('/webhooks/razorpay', { body, headers: { 'x-razorpay-signature': hmacHex('test-webhook-secret', body) } });
+    };
+
+    await withEnv(demoInstance, async () => {
+      const session = await call('/auth/demo', { body: { phone } });
+      const sub = await call(`/hostels/${hostel.id}/subscribe`, { token: session.body.token, body: { roomTypeId: rooms[0].id, mealPlan: 'full', diet: 'veg' } });
+      expect(sub.status).toBe(201);
+      const hook = await webhook(sub.body.invoice.razorpayOrderId);
+      expect(hook.status).toBe(400);
+      expect(hook.body.error).toBe('signature_invalid');
+      expect((await call('/me/subscription', { token: session.body.token })).body.subscription.status).toBe('pending');
+    });
+
+    // Control: the same signed event is accepted on a standard instance, so the refusal above is the demo rule.
+    const tenant = await login(nextPhone());
+    const sub = await call(`/hostels/${hostel.id}/subscribe`, { token: tenant, body: { roomTypeId: rooms[0].id, mealPlan: 'full', diet: 'veg' } });
+    expect((await webhook(sub.body.invoice.razorpayOrderId)).status).toBe(200);
+    expect((await call('/me/subscription', { token: tenant })).body.subscription.status).toBe('active');
   });
 
   test('isolation applies to every session path: existing sessions and app-to-web handoff', async () => {

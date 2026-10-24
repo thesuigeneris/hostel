@@ -36,7 +36,7 @@ Gates run at `d774465`:
 | AUTH-THROTTLE | 5 tries per phone → 15-minute lock, unknown phones too, parallel-safe | `takeLoginAttempt` (atomic upsert with `setWhere`) | `› throttles per phone…`, `› throttle holds under parallel guesses` | verified @dd0faec |
 | AUTH-POLICY | 15–128 characters, blocklist, sequences, phone | `packages/shared/src/passwords.ts`, `registerSchema` | `packages/shared/test/passwords.test.ts` (5), `› password policy` | verified @dd0faec |
 | AUTH-DEMO | Demo login only for `is_demo`, never in production standard | `demoLogin`, `env.demoLoginEnabled` | `› demo login isolation`; runtime: production API `/auth/demo` → 403 | verified @dd0faec |
-| AUTH-DEMO-MODE | Demo instance: no OTP, password or sign-up; simulated payments; webhooks ignored | `env.appMode`, `otpMode`, `isRazorpayConfigured`, `verifyWebhookSignature` | `› demo mode instance…`; runtime: `APP_MODE=demo` web `/login` shows only demo buttons | verified @dd0faec (webhook refusal: code only, no test, **unverified**) |
+| AUTH-DEMO-MODE | Demo instance: no OTP, password or sign-up; simulated payments; webhooks ignored | `env.appMode`, `otpMode`, `isRazorpayConfigured`, `verifyWebhookSignature` | `› demo mode instance…`; runtime: `APP_MODE=demo` web `/login` shows only demo buttons | verified @dd0faec; webhook refusal verified by `auth-modes.test.ts` › a demo instance ignores correctly signed payment webhooks (mutation-checked; a standard instance accepts the same event) |
 | AUTH-ISOLATION-ALL | One guard on every session path | `loginAllowed` in `createSession` + `getSessionUser` | `› isolation applies to every session path` | verified @dd0faec |
 | AUTH-INVITE | Invites only for verified phones | `linkInvitedResidencies` guard | `› invites need a verified phone` | verified @dd0faec |
 | AUTH-ADMIN | `ADMIN_PHONES` needs a verified phone; `admin:grant` script | `resolveRole`, `grantAdmin`, `src/scripts/grant-admin.ts` | `› admin needs a verified phone…`, `› ADMIN_PHONES applies after OTP…` | verified @dd0faec (script CLI wrapper itself not run; `grantAdmin` is) |
@@ -44,7 +44,7 @@ Gates run at `d774465`:
 | AUTH-SEED-GUARD | `db:reset` refuses in production standard | `assertResetAllowed` | `› seed reset guard`; runtime: `NODE_ENV=production bun run db:reset` refused, data intact | verified @dd0faec |
 | AUTH-TRUNCATE | Test resets cover every table (found during execution) | `ALL_TABLES` derived from the schema | repeated API runs (3×) stable | verified @dd0faec |
 | AUTH-WEB | Web password sign-up/log-in, demo buttons | `apps/web/app/login/*`, `apps/web/app/account/*` | `e2e/auth.spec.ts` (2 tests) | verified @d774465 |
-| AUTH-MOBILE | Mobile password, sign-up and demo login | `apps/mobile/app/login.tsx` | typecheck + `expo export --platform web` exit 0 | **unverified**: no native or web runtime run of the screen |
+| AUTH-MOBILE | Mobile password, sign-up and demo login | `apps/mobile/app/login.tsx` | `apps/mobile/scripts/web-login-smoke.mjs` against the Expo web export and a live dev API: OTP login, password sign-up then login, demo button, wrong password refused (4/4) | verified in the web build; **native unverified** (secure storage, keyboards: needs a device) |
 
 ## PRP-12 Frontend design system and visual upgrade
 
