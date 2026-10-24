@@ -1,9 +1,9 @@
-import { ApiError, type IssueStatus } from '@hostels/shared';
+import { ApiError, ISSUE_AUTOCLOSE_DAYS, type IssueDetail, type IssueStatus } from '@hostels/shared';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { updateIssueAction, upvoteAction } from '@/app/stay/actions';
 import { SubmitButton } from '@/components/SubmitButton';
-import { Back, Badge, Card, Flash, PageHeader, StatusBadge, Textarea } from '@/components/ui';
+import { Back, Badge, Card, cx, Flash, PageHeader, StatusBadge, Textarea } from '@/components/ui';
 import { api, requireUser } from '@/lib/api';
 import { dateLabel, timeAgo, titleCase } from '@/lib/format';
 
@@ -19,6 +19,39 @@ const OWNER_NEXT: Record<IssueStatus, IssueStatus[]> = {
   closed: [],
 };
 
+const STEPS: { status: IssueStatus; label: string; at: (i: IssueDetail) => string | null }[] = [
+  { status: 'open', label: 'Reported', at: (i) => i.createdAt },
+  { status: 'acknowledged', label: 'Seen by the hostel', at: (i) => i.acknowledgedAt },
+  { status: 'in_progress', label: 'Being fixed', at: (i) => [...i.updates].reverse().find((u) => u.toStatus === 'in_progress')?.createdAt ?? null },
+  { status: 'resolved', label: 'Marked fixed', at: (i) => i.resolvedAt },
+  { status: 'closed', label: 'Closed', at: (i) => i.closedAt },
+];
+const ORDER: IssueStatus[] = ['open', 'acknowledged', 'in_progress', 'resolved', 'closed'];
+
+function hoursBetween(from: string, to: string) {
+  const h = (Date.parse(to) - Date.parse(from)) / 3_600_000;
+  return h < 1 ? 'under an hour' : h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} days`;
+}
+
+/** Where the issue is in its life, with when each step happened. */
+function Timeline({ issue }: { issue: IssueDetail }) {
+  const reached = ORDER.indexOf(issue.status);
+  return (
+    <ol className="mt-6 grid gap-2 sm:grid-cols-5">
+      {STEPS.map((step, idx) => {
+        const at = step.at(issue);
+        const done = idx <= reached || !!at;
+        return (
+          <li key={step.status} className={cx('rounded-xl border p-3 text-xs', done ? 'border-brand bg-brand-soft/50' : 'border-line bg-surface text-ink-muted')}>
+            <div className={cx('font-medium', done ? 'text-brand' : '')}>{done ? '✓ ' : ''}{step.label}</div>
+            <div className="mt-0.5">{at ? dateLabel(at) : done ? '' : 'Not yet'}</div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 export default async function IssuePage({ params, searchParams }: Props) {
   const { id } = await params;
   const q = await searchParams;
@@ -31,7 +64,10 @@ export default async function IssuePage({ params, searchParams }: Props) {
   });
   const owned = user.role !== 'tenant' && (await client.owner.hostels().catch(() => [])).some((h) => h.id === issue.hostelId);
   const ownerMoves = owned || user.role === 'admin' ? OWNER_NEXT[issue.status] : [];
-  const reporterMoves: IssueStatus[] = issue.mine && issue.status === 'resolved' ? ['closed', 'open'] : [];
+  // The reporter can confirm a fix any time, and reopen it only within the window before it closes on its own.
+  const reopenUntil = issue.resolvedAt ? Date.parse(issue.resolvedAt) + ISSUE_AUTOCLOSE_DAYS * 86_400_000 : 0;
+  const canReopen = Date.now() <= reopenUntil;
+  const reporterMoves: IssueStatus[] = issue.mine && issue.status === 'resolved' ? (canReopen ? ['closed', 'open'] : ['closed']) : [];
   const moveLabel: Record<string, string> = {
     acknowledged: 'Acknowledge', in_progress: 'Start work', resolved: 'Mark resolved', closed: 'Confirm fixed', open: 'Still broken, reopen',
   };
@@ -56,6 +92,13 @@ export default async function IssuePage({ params, searchParams }: Props) {
           {issue.needsResponse && <Badge tone="red">Waiting on the hostel</Badge>}
         </div>
       </Card>
+
+      <Timeline issue={issue} />
+      <p className="mt-2 text-xs text-ink-muted">
+        {issue.acknowledgedAt ? `The hostel responded in ${hoursBetween(issue.createdAt, issue.acknowledgedAt)}.` : 'The hostel has not responded yet.'}
+        {issue.resolvedAt && ` Fixed in ${hoursBetween(issue.createdAt, issue.resolvedAt)}.`}
+        {issue.mine && issue.status === 'resolved' && canReopen && ` Confirm the fix or reopen it by ${dateLabel(new Date(reopenUntil).toISOString())}; after that it closes on its own.`}
+      </p>
 
       <h2 className="mb-3 mt-8 text-lg font-semibold">Updates</h2>
       <ol className="space-y-3">

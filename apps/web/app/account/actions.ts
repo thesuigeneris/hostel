@@ -67,3 +67,7 @@ export async function scheduleMoveAction(form: FormData) {
 export async function cancelMoveAction(form: FormData) {
   await run('/account', async () => (await api()).me.cancelMove(str(form, 'moveId')), { ok: 'Move cancelled' });
 }
+
+export async function cancelVisitAction(form: FormData) {
+  await run('/account', async () => (await api()).me.cancelVisit(str(form, 'visitId')), { ok: 'Visit request withdrawn' });
+}

@@ -136,6 +136,7 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
       move: (input: MoveInput) => request<MoveRequest>('/me/moves', { body: input }),
       cancelMove: (id: string) => request<MoveRequest>(`/me/moves/${id}`, { method: 'DELETE' }),
       visits: () => request<MyVisit[]>('/me/visits'),
+      cancelVisit: (id: string) => request<VisitRequest>(`/me/visits/${id}`, { method: 'DELETE' }),
       residencies: () => request<MyResidency[]>('/me/residencies'),
       acceptResidency: (id: string) => request<Residency>(`/me/residencies/${id}/accept`, { method: 'POST' }),
       declineResidency: (id: string) => request<Residency>(`/me/residencies/${id}/decline`, { method: 'POST' }),
