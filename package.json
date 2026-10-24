@@ -12,6 +12,7 @@
     "db:seed": "bun --filter @hostels/api db:seed",
     "db:reset": "bun --filter @hostels/api db:reset",
     "dev:api": "bun --filter @hostels/api dev",
+    "dev:web": "bun --filter @hostels/web dev",
     "dev:mobile": "bun --filter @hostels/mobile start",
     "test": "bun --filter '*' test",
     "typecheck": "bun --filter '*' typecheck",

@@ -9,6 +9,7 @@ import {
   type MealPlan,
   MEALS,
   newId,
+  OWNER_PLANS,
   planIncludesMeal,
   SKIP_CREDITS,
   weekStart,
@@ -124,13 +125,33 @@ export async function seed(db: DB, today = istDate()) {
     });
     // Partners are on the Partner plan; every other free listing is on Pro so the management app has data.
     const plan = h.partner ? 'partner' : freeIndex++ % 2 === 0 ? 'pro' : 'free';
+    const ownerPlanId = newId('opl');
+    const planStart = addMonths(today, -2);
     await db.insert(schema.ownerPlans).values({
-      id: newId('opl'),
+      id: ownerPlanId,
       hostelId,
       plan,
-      startDate: addMonths(today, -2),
+      startDate: planStart,
       trialEndsOn: plan === 'free' ? null : addMonths(today, -1),
     });
+    if (plan !== 'free') {
+      // The month after the trial is already paid, so the demo hostels start in good standing.
+      const p = billingPeriod(planStart, 1);
+      await db.insert(schema.ownerInvoices).values({
+        id: newId('oin'),
+        ownerPlanId,
+        hostelId,
+        ownerId: owner,
+        plan,
+        periodStart: p.start,
+        periodEnd: p.end,
+        amount: OWNER_PLANS[plan].price,
+        dueDate: p.start,
+        status: 'paid',
+        razorpayPaymentId: `pay_seed_${hostelId.slice(4)}`,
+        paidAt: istInstant(p.start, 10),
+      });
+    }
     await db.insert(schema.hostelPhotos).values(
       [0, 1, 2].map((i) => ({ id: newId('pho'), hostelId, url: PHOTOS[(photoCursor + i) % PHOTOS.length]!, sortOrder: i })),
     );

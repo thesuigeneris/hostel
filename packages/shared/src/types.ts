@@ -308,3 +308,215 @@ export type ApiErrorBody = {
   message: string;
   issues?: { path: string; message: string }[];
 };
+
+// ---------------------------------------------------------------------------
+// Response shapes beyond the core records.
+
+export type Review = {
+  id: string;
+  hostelId: string;
+  rating: number;
+  cleanliness: number;
+  food: number | null;
+  safety: number;
+  responsiveness: number;
+  body: string;
+  ownerReply: string | null;
+  ownerRepliedAt: string | null;
+  hidden: boolean;
+  createdAt: string;
+  updatedAt: string;
+  author: string;
+  verifiedVia: ResidencySource | null;
+  stay: { from: ISODate; to: ISODate | null } | null;
+};
+
+export type Residency = {
+  id: string;
+  userId: string | null;
+  phone: string;
+  name: string;
+  hostelId: string;
+  roomTypeId: string | null;
+  source: ResidencySource;
+  subscriptionId: string | null;
+  monthlyRent: number | null;
+  startDate: ISODate;
+  endDate: ISODate | null;
+  status: ResidencyStatus;
+  directoryOptIn: boolean;
+  createdAt: string;
+};
+
+export type MyResidency = Residency & {
+  hostel: { id: string; name: string; slug: string; area: string };
+  canReview: boolean;
+  hasReview: boolean;
+};
+
+export type IssueView = {
+  id: string;
+  hostelId: string;
+  category: IssueCategory;
+  title: string;
+  description: string;
+  photoUrl: string | null;
+  status: IssueStatus;
+  createdAt: string;
+  acknowledgedAt: string | null;
+  resolvedAt: string | null;
+  closedAt: string | null;
+  reporter: { id: string; name: string } | null;
+  mine: boolean;
+  upvotes: number;
+  upvotedByMe: boolean;
+  needsResponse: boolean;
+};
+
+export type IssueDetail = IssueView & {
+  updates: {
+    id: string;
+    message: string;
+    fromStatus: IssueStatus | null;
+    toStatus: IssueStatus | null;
+    createdAt: string;
+    author: string;
+    byOwner: boolean;
+  }[];
+};
+
+export type CommunityPost = {
+  id: string;
+  kind: PostKind;
+  body: string;
+  photoUrl: string | null;
+  pinned: boolean;
+  hidden: boolean;
+  createdAt: string;
+  author: string;
+  mine: boolean;
+  comments: { id: string; body: string; hidden: boolean; createdAt: string; author: string; mine: boolean }[];
+};
+
+export type MySubscription = {
+  subscription: Subscription;
+  hostel: { id: string; slug: string; name: string; area: string };
+  roomType: RoomType;
+  currentPeriod: { index: number; start: ISODate; end: ISODate };
+  invoices: Invoice[];
+  scheduledMove: MoveRequest | null;
+};
+
+export type MenuDay = {
+  date: ISODate;
+  hostelId: string;
+  theme: string | null;
+  meals: {
+    meal: Meal;
+    inPlan: boolean;
+    vegDish: string | null;
+    nonVegDish: string | null;
+    foodPartner: string | null;
+    skipped: boolean;
+    cutoff: string;
+    canChange: boolean;
+    credit: number;
+  }[];
+};
+
+export type MyMenu = { mealPlan: MealPlan; diet: Diet; planLabel: string; days: MenuDay[] };
+
+export type Headcount = {
+  date: ISODate;
+  meals: { meal: Meal; total: number; veg: number; nonVeg: number; skipped: number }[];
+};
+
+export type OwnerInvoice = {
+  id: string;
+  ownerPlanId: string;
+  hostelId: string;
+  ownerId: string;
+  plan: OwnerPlanTier;
+  periodStart: ISODate;
+  periodEnd: ISODate;
+  amount: number;
+  status: InvoiceStatus;
+  dueDate: ISODate;
+  razorpayOrderId: string | null;
+  razorpayPaymentId: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  isOverdue: boolean;
+};
+
+export type OwnerPlanInfo = {
+  plan: {
+    id: string;
+    hostelId: string;
+    plan: OwnerPlanTier;
+    pendingPlan: OwnerPlanTier | null;
+    pendingPlanOn: ISODate | null;
+    startDate: ISODate;
+    trialEndsOn: ISODate | null;
+    suspended: boolean;
+  } | null;
+  price: number;
+  inTrial: boolean;
+  partnerStatus: PartnerStatus;
+  bills: OwnerInvoice[];
+};
+
+export type PlanState = { plan: OwnerPlanTier; suspended: boolean; effective: OwnerPlanTier };
+export type OwnerHostelDetail = HostelDetail & { plan: PlanState };
+
+export type PaymentPage = {
+  invoiceId: string;
+  kind: 'tenant' | 'owner';
+  amount: number;
+  status: InvoiceStatus;
+  description: string;
+  invoice: Invoice | OwnerInvoice;
+  keyId: string;
+  stub: boolean;
+};
+
+export type CheckoutOrder = { invoiceId: string; orderId: string; amount: number; currency: 'INR'; keyId: string; stub: boolean };
+
+export type RentSheet = {
+  month: string;
+  rows: {
+    residencyId: string;
+    name: string;
+    phone: string;
+    amountDue: number;
+    amountPaid: number;
+    paidOn: ISODate | null;
+    method: RentMethod | null;
+    note: string;
+    status: 'paid' | 'partial' | 'unpaid';
+  }[];
+  totals: { due: number; collected: number; unpaid: number };
+};
+
+export type OwnerVisit = VisitRequest & { hostelName: string; visitor: { name: string; phone: string } };
+export type MyVisit = VisitRequest & { hostel: { name: string; slug: string } };
+export type Subscriber = {
+  subscription: Subscription;
+  user: { id: string; name: string; phone: string };
+  sharing: SharingType;
+};
+export type PayoutView = Payout & { hostelName: string };
+export type OwnerPayouts = {
+  history: PayoutView[];
+  thisMonth: { month: string; hostels: { hostelId: string; hostelName: string; grossAmount: number; platformFee: number; netAmount: number }[] };
+};
+export type Area = { area: string; count: number; slug: string };
+export type AdminStats = {
+  listingsPending: number;
+  partnersApplied: number;
+  liveHostels: number;
+  activeSubscriptions: number;
+  flaggedReviews: number;
+  openReports: number;
+  overdueBills: number;
+};
