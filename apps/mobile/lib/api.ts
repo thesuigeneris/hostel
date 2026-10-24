@@ -8,7 +8,7 @@ import type {
   SubscribeInput,
   Subscription,
   User,
-} from '@hostels/shared';
+} from './legacy-types';
 
 const BASE_URL =
   process.env.EXPO_PUBLIC_API_URL ??

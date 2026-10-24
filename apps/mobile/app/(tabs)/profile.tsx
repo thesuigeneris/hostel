@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import type { User } from '@hostels/shared';
+import type { User } from '../../lib/legacy-types';
 import { api } from '../../lib/api';
 import { theme } from '../../lib/theme';
 

@@ -4,93 +4,67 @@ Subscription living for hostels and PGs in India. Food + bed bundled. No advance
 
 This is **v0**, the foundation scaffold from `/office-hours`. Read [DESIGN.md](./DESIGN.md) for the product thesis, 90-day plan, and architecture decisions.
 
-## Status: scaffolded, runs locally, lots stubbed
+## Status
 
-What works:
-- Backend API with `/hostels`, `/auth/otp`, `/auth/verify`, `/me`, `/me/subscription`, `/subscribe`, `/subscriptions/:id/cancel`
-- Mobile app (iOS + Android via Expo) with phone OTP login, hostel browse, hostel detail, subscribe flow with meal-plan picker, my plan with cancel, profile editing
-- 5 seeded hostels in Hyderabad (Gachibowli, Madhapur, Kondapur, HiTech City, Financial District)
-- Token-based auth (stored via AsyncStorage on device)
+The build follows [the platform design](docs/superpowers/specs/2026-10-12-hostels-platform-design.md) and its [personas addendum](docs/superpowers/specs/2026-10-24-personas-addendum.md), phase by phase.
 
-What's stubbed (intentionally — see DESIGN.md):
-- Real OTP delivery (MSG91 / Twilio). Dev OTP is always `123456` and is logged + shown on screen.
-- Real Razorpay subscription billing with autopay mandate.
-- Postgres persistence — using an in-memory store. **Data resets when the API restarts.**
-- KYC / Aadhaar verification.
-- Image upload (using Unsplash placeholder URLs).
-- Maps / location pins.
-- Hostel owner panel (Next.js — next iteration).
-- Admin panel.
-- WhatsApp Business API tenant comms.
-- Push notifications.
+- **Phase 1, foundation (done):** Postgres via Docker, full schema and migration, seed data, shared package (types, zod schemas, pricing, IST time helpers, ids, API client), API split into route modules, hardened phone-OTP login.
+- Phase 2 (API features), Phase 3 (website), Phase 4 (mobile) and Phase 5 (hardening) are next. The Expo app still talks to the v0 API shape until Phase 4.
+
+External services run in stub mode until keys are set in `apps/api/.env`: OTP is always `123456` without MSG91, and payments are simulated without Razorpay.
 
 ## Prerequisites
 
 - [Bun](https://bun.sh) 1.3+
-- For Android dev: Android Studio + emulator OR a physical Android phone with [Expo Go](https://expo.dev/go)
-- For iOS dev: macOS + Xcode (does not work on Windows directly — use Expo Go on a physical iPhone instead)
+- Docker (for Postgres), or any Postgres 16 with `hostels` and `hostels_test` databases
+- For the mobile app: Expo Go on a phone, or an Android/iOS simulator
 
 ## Setup
 
 ```bash
 bun install
+cp apps/api/.env.example apps/api/.env
+bun run db:up        # Postgres 16 on localhost:5432 (creates hostels + hostels_test)
+bun run db:seed      # migrates, then seeds Hyderabad demo data
 ```
+
+`bun run db:reset` wipes and reseeds.
+
+Demo logins (OTP `123456`): admin `9000000001`, owner `9000000002`, tenant `9000000003`.
 
 ## Run
 
-Two terminals.
-
 ```bash
-# Terminal 1 — API
-bun run dev:api
-# → http://localhost:4000
+bun run dev:api      # http://localhost:4000 (GET / shows db and stub status)
+bun run dev:mobile   # Expo
 ```
 
-```bash
-# Terminal 2 — Mobile
-bun run dev:mobile
-# → opens Expo CLI; press 'a' for Android emulator, or scan QR with Expo Go on your phone
-```
+On a physical phone, point the app at your laptop: `EXPO_PUBLIC_API_URL=http://192.168.1.10:4000 bun run dev:mobile`.
 
-If running the mobile app on a physical device on the same WiFi as your laptop, the device needs to reach the API. Set the API URL via env var:
+## Checks
 
 ```bash
-EXPO_PUBLIC_API_URL=http://192.168.1.10:4000 bun run dev:mobile
+bun run typecheck
+bun run lint
+bun run test         # API tests run against the hostels_test database
 ```
-
-Replace `192.168.1.10` with your laptop's LAN IP (Windows: `ipconfig` → IPv4 Address).
-
-## Test the flow
-
-1. Start API and mobile.
-2. On the welcome screen, enter any 10-digit number, hit Send OTP.
-3. The dev OTP `123456` is shown on-screen (also logged by the API in terminal 1).
-4. Verify → land on Browse with 5 hostels.
-5. Tap a hostel → see detail → Subscribe → pick meal plan → Pay (mocked, ~1s delay) → land on My Plan.
-6. Profile tab → set your name → Save.
-7. My Plan → Cancel subscription → goes back to "no active plan."
-8. API restart wipes everything (in-memory store). That's expected for v0.
 
 ## Project structure
 
 ```
 hostels/
 ├── apps/
-│   ├── api/                Bun + Hono backend (in-memory v0)
-│   │   └── src/
-│   │       ├── index.ts    Routes
-│   │       └── data.ts     Seed data + in-memory stores
-│   └── mobile/             Expo + React Native (iOS + Android)
-│       └── app/            Expo Router file-based routes
-│           ├── _layout.tsx
-│           ├── index.tsx   Welcome / phone OTP
-│           ├── (tabs)/     Tabs: Browse, My Plan, Profile
-│           ├── hostel/[id].tsx
-│           └── subscribe.tsx
-├── packages/
-│   └── shared/             Shared TypeScript types
-├── DESIGN.md               Product thesis, 90-day plan, decisions
-└── README.md
+│   ├── api/                Bun + Hono + Drizzle + Postgres
+│   │   ├── src/routes/     auth, public, tenant, owner, admin
+│   │   ├── src/services/   business logic
+│   │   ├── src/db/         schema, migrate, seed
+│   │   ├── src/lib/        env, errors, crypto, msg91, razorpay
+│   │   ├── migrations/     generated SQL (drizzle-kit)
+│   │   └── test/           bun test against hostels_test
+│   └── mobile/             Expo + React Native (Expo Router)
+├── packages/shared/        types, zod schemas, pricing, IST time, ids, API client
+├── docker-compose.yml      Postgres for dev and tests
+└── docs/superpowers/specs/ platform design + personas addendum
 ```
 
 ## Next steps (in order)

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Text, TouchableOpacity, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import type { Hostel, MealPlan } from '@hostels/shared';
+import type { Hostel, MealPlan } from '../lib/legacy-types';
 import { api } from '../lib/api';
 import { theme } from '../lib/theme';
 
@@ -39,7 +39,7 @@ export default function Subscribe() {
   const subscribe = async () => {
     setSubmitting(true);
     try {
-      await new Promise((r) => setTimeout(r, 1200));
+      await new Promise<void>((r) => setTimeout(r, 1200));
       await api.subscribe({ hostelId: hostel.id, mealPlan });
       router.replace('/(tabs)/plan');
     } catch (e) {
