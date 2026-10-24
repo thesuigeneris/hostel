@@ -260,7 +260,7 @@ export default async function HostelPage({ params }: { params: Promise<{ slug: s
           <Card className="p-5 text-sm">
             <div className="font-medium">Live here?</div>
             <p className="mt-1 text-muted">Join the resident community to report issues, talk to other residents and leave a review.</p>
-            <Link href={`/community/join?hostel=${h.id}`} className="mt-2 inline-block font-medium text-brand underline">
+            <Link href={`/community/join?hostel=${h.slug}`} className="mt-2 inline-block font-medium text-brand underline">
               Join {h.name}&apos;s community
             </Link>
           </Card>
