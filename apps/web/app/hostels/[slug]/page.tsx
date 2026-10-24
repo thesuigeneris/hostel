@@ -66,14 +66,21 @@ export default async function HostelPage({ params, searchParams }: Props) {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }} />
       <RecordView slug={h.slug} />
       <Flash error={q.error} ok={q.ok} />
-      <div className="grid gap-2 overflow-hidden rounded-2xl sm:grid-cols-3 sm:grid-rows-2">
+      {/* Capped height on larger screens so the name, price and Subscribe stay above the fold. */}
+      <div className="grid gap-2 overflow-hidden rounded-2xl sm:h-[380px] sm:grid-cols-3 sm:grid-rows-2">
         {h.photos.slice(0, 3).map((p, i) => (
-          <img key={p.id} src={p.url} alt={`${h.name}, view ${i + 1}`} className={`h-full w-full object-cover ${i === 0 ? 'aspect-[4/3] sm:col-span-2 sm:row-span-2' : 'hidden aspect-[4/3] sm:block'}`} />
+          <img
+            key={p.id}
+            src={p.url}
+            alt={`${h.name}, view ${i + 1}`}
+            className={`h-full min-h-0 w-full object-cover ${i === 0 ? 'aspect-[4/3] sm:col-span-2 sm:row-span-2 sm:aspect-auto' : 'hidden sm:block'}`}
+          />
         ))}
       </div>
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_360px]">
-        <div className="space-y-8">
+        {/* min-w-0 lets the menu table scroll inside instead of widening the page on phones. */}
+        <div className="min-w-0 space-y-8">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               {h.isVerified ? <Badge tone="green">✓ Verified partner · No advance</Badge> : <Badge>Free listing</Badge>}
