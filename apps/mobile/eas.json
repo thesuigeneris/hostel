@@ -1,0 +1,43 @@
+{
+  "cli": { "version": ">= 16.0.0", "appVersionSource": "remote" },
+  "build": {
+    "base": {
+      "node": "22.12.0",
+      "bun": "1.4.4"
+    },
+    "development": {
+      "extends": "base",
+      "distribution": "internal",
+      "android": { "buildType": "apk", "gradleCommand": ":app:assembleDebug" },
+      "env": {
+        "APP_VARIANT": "development",
+        "EXPO_PUBLIC_API_URL": "http://192.168.1.10:4000",
+        "EXPO_PUBLIC_WEB_URL": "http://192.168.1.10:3000"
+      }
+    },
+    "preview": {
+      "extends": "base",
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": {
+        "APP_VARIANT": "preview",
+        "EXPO_PUBLIC_API_URL": "https://api.staging.hostels.example.com",
+        "EXPO_PUBLIC_WEB_URL": "https://staging.hostels.example.com"
+      }
+    },
+    "production": {
+      "extends": "base",
+      "distribution": "store",
+      "autoIncrement": true,
+      "android": { "buildType": "app-bundle" },
+      "env": {
+        "APP_VARIANT": "production",
+        "EXPO_PUBLIC_API_URL": "https://api.hostels.example.com",
+        "EXPO_PUBLIC_WEB_URL": "https://hostels.example.com"
+      }
+    }
+  },
+  "submit": {
+    "production": { "android": { "track": "internal" } }
+  }
+}
