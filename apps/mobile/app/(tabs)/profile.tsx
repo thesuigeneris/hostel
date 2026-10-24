@@ -1,7 +1,7 @@
-import { dateLabel, type MyVisit } from '@hostels/shared';
+import { dateLabel, type MyVisit, titleCase } from '@hostels/shared';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Text } from 'react-native';
+import { Linking, Pressable, Text } from 'react-native';
 import { Button, Card, Empty, ErrorText, Field, H2, Loading, Notice, P, Row, Screen, StatusBadge } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -67,15 +67,18 @@ export default function Profile() {
 
       <H2>Visit requests</H2>
       {!visits?.length ? <P muted>You haven't requested any visits.</P> : visits.map((v) => (
-        <Card key={v.id}>
-          <Row style={{ justifyContent: 'space-between' }}>
-            <Text style={{ fontWeight: '600', color: theme.colors.text }}>{v.hostel.name}</Text>
-            <StatusBadge status={v.status} />
-          </Row>
-          <P muted>{dateLabel(v.preferredDate)}{v.message ? ` · ${v.message}` : ''}</P>
-        </Card>
+        <Pressable key={v.id} accessibilityRole="link" onPress={() => router.push(`/hostel/${v.hostel.slug}`)}>
+          <Card>
+            <Row style={{ justifyContent: 'space-between' }}>
+              <Text style={{ fontWeight: '600', color: theme.colors.text }}>{v.hostel.name}</Text>
+              <StatusBadge status={v.status} />
+            </Row>
+            <P muted>{dateLabel(v.preferredDate)}{v.message ? ` · ${v.message}` : ''}</P>
+          </Card>
+        </Pressable>
       ))}
 
+      <P muted>Signed in as {titleCase(user.role)}.</P>
       <Button title="Log out" variant="ghost" onPress={signOut} />
     </Screen>
   );

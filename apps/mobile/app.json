@@ -29,8 +29,14 @@
       "expo-router",
       "expo-secure-store",
       "expo-web-browser",
-      ["expo-image-picker", { "photosPermission": "Hostels uses your photos so you can add pictures of your hostel.", "cameraPermission": false }],
       ["expo-location", { "locationWhenInUsePermission": "Hostels uses your location to show hostels near you." }],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Hostels uses your photos so you can add pictures of your hostel, an issue or a community post.",
+          "cameraPermission": "Hostels uses the camera so you can photograph an issue in your hostel."
+        }
+      ],
       [
         "expo-splash-screen",
         { "image": "./assets/splash-icon.png", "imageWidth": 200, "resizeMode": "contain", "backgroundColor": "#1F5C46" }
