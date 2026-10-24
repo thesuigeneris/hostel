@@ -1,6 +1,7 @@
+import { PASSWORD_MIN_LENGTH } from '@hostels/shared';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { cancelMoveAction, cancelSubscriptionAction, skipMealAction, updateProfileAction } from '@/app/account/actions';
+import { cancelMoveAction, cancelSubscriptionAction, changePasswordAction, skipMealAction, updateProfileAction } from '@/app/account/actions';
 import { SubmitButton } from '@/components/SubmitButton';
 import { Back, Badge, Card, Empty, Field, Flash, Input, LinkButton, PageHeader, StatusBadge, Table, Td } from '@/components/ui';
 import { api, requireUser } from '@/lib/api';
@@ -26,7 +27,10 @@ export default async function AccountPage({ searchParams }: Props) {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
-      <PageHeader title={user.name ? `Hi, ${user.name.split(' ')[0]}` : 'Your account'} subtitle={`+91 ${user.phone}`} />
+      <PageHeader
+        title={user.name ? `Hi, ${user.name.split(' ')[0]}` : 'Your account'}
+        subtitle={`+91 ${user.phone}${user.phoneVerified ? ' · verified' : ' · not verified yet (log in once with a text-message code to verify)'}`}
+      />
       <Flash error={q.error} ok={q.ok} />
 
       {dueBill && (
@@ -176,6 +180,29 @@ export default async function AccountPage({ searchParams }: Props) {
               <SubmitButton variant="secondary" className="w-full">Save</SubmitButton>
             </form>
           </Card>
+          {!user.isDemo && (
+            <Card>
+              <h2 className="font-semibold">Password</h2>
+              <p className="mt-1 text-sm text-ink-soft">
+                {user.hasPassword ? 'Change the password you log in with.' : 'No password yet. Set one to log in without a text-message code.'}
+              </p>
+              <form action={changePasswordAction} className="mt-3 space-y-3">
+                {/* Lets password managers attach the password to the right account. */}
+                <input type="hidden" name="username" autoComplete="username" value={user.phone} readOnly />
+                {user.hasPassword && (
+                  <Field label="Current password">
+                    <Input type="password" name="currentPassword" autoComplete="current-password" required maxLength={128} />
+                  </Field>
+                )}
+                <Field label="New password" hint={`At least ${PASSWORD_MIN_LENGTH} characters. A few words with spaces works well.`}>
+                  <Input type="password" name="newPassword" autoComplete="new-password" required minLength={PASSWORD_MIN_LENGTH} maxLength={128} />
+                </Field>
+                <SubmitButton variant="secondary" className="w-full" pendingText="Saving…">
+                  {user.hasPassword ? 'Change password' : 'Set password'}
+                </SubmitButton>
+              </form>
+            </Card>
+          )}
           <Card>
             <h2 className="font-semibold">Living in a hostel?</h2>
             <p className="mt-1 text-sm text-ink-soft">Report issues, talk to your neighbours and review your stay.</p>

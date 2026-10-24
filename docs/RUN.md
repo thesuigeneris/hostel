@@ -58,9 +58,15 @@ The e2e suite starts the API and website if they are not running. It needs Chrom
 
 ## 5. Going live
 
+Run `bun run db:migrate` (in `apps/api`) before starting a new API version. The API doesn't migrate on start, and new code expects the new columns.
+
+Login works without SMS (phone + password). On a production standard instance, seeded demo accounts can't sign in and `db:reset` refuses to run. For a public demo instead, set `APP_MODE=demo` on a separate database; see the README.
+
+If SMS isn't set up, make your first admin from the server shell after they sign up: `bun run admin:grant <phone>`.
+
 Before real users, set these in `apps/api/.env` (the API refuses stub OTP and stub payments when `NODE_ENV=production`):
 
-- `MSG91_AUTH_KEY` and `MSG91_TEMPLATE_ID` for OTP texts
+- `MSG91_AUTH_KEY` and `MSG91_TEMPLATE_ID` for OTP texts (optional: without them people use passwords)
 - `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET`, with the webhook pointed at `https://<api-host>/webhooks/razorpay`
 - `OTP_PEPPER` to a long random value, `ADMIN_PHONES` to your team's numbers
 - `API_PUBLIC_URL`, `WEB_URL` and `CORS_ORIGINS` to the real hostnames, all on HTTPS

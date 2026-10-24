@@ -44,6 +44,21 @@ export async function updateProfileAction(form: FormData) {
   await run('/account', async () => (await api()).me.update({ name: str(form, 'name'), email: str(form, 'email') || null }), { ok: 'Profile saved' });
 }
 
+/** Passwords are used exactly as typed (never trimmed). */
+function rawField(form: FormData, key: string): string {
+  const v = form.get(key);
+  return typeof v === 'string' ? v : '';
+}
+
+export async function changePasswordAction(form: FormData) {
+  const current = rawField(form, 'currentPassword');
+  await run(
+    '/account',
+    async () => (await api()).me.setPassword({ newPassword: rawField(form, 'newPassword'), ...(current ? { currentPassword: current } : {}) }),
+    { ok: 'Password saved. Other devices were signed out.' },
+  );
+}
+
 export async function cancelSubscriptionAction() {
   await run('/account', async () => (await api()).me.cancelSubscription(), { ok: 'Your plan will end at the close of the current billing period.' });
 }

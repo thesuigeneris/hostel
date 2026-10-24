@@ -5,6 +5,12 @@ A pass over the API, website and app before the first real users. Each item list
 ## Checked and in place
 
 - **Login.** OTPs are stored as HMACs with a server pepper, expire in 5 minutes, allow 5 wrong tries, and at most 5 texts per phone per hour. Sessions are random tokens stored as SHA-256 hashes and last 30 days. Nobody can make themselves admin; only phones in `ADMIN_PHONES` become admins. Stub OTP is refused in production. (`apps/api/src/services/auth.ts`)
+- **Login without SMS (PRP-01).**
+  - Phone and password with argon2id, 15–128 characters, a blocklist, and generic errors that don't reveal whether a phone has an account.
+  - A per-phone lockout (5 tries, then 15 minutes) that also covers phones with no account and parallel guesses.
+  - Invites and `ADMIN_PHONES` need an OTP-verified phone.
+  - Demo accounts are refused on every session path of a production standard instance, and a demo instance admits only demo accounts.
+  - `db:reset` refuses in production. (`apps/api/src/services/auth.ts`, `apps/api/test/auth-modes.test.ts`)
 - **Who can do what.** Every non-public route has a role guard. Owner actions load the hostel, room, residency, review or visit through its owner, so one owner can't touch another's data. Residents can only see issues, posts and the neighbour list of a hostel they live in. Covered by the API tests. (`apps/api/src/services/access.ts`)
 - **Payments.** Razorpay payment and webhook signatures are checked in constant time after a length check. Marking a bill paid is idempotent, so a webhook and the checkout callback can both arrive safely. Simulated payments are refused in production. (`apps/api/src/services/payments.ts`)
 - **Uploads.** At most 5 MB. The file type comes from the file's first bytes, not its name or declared type, and only JPEG, PNG and WebP are kept. Files are served with the type of their stored extension and `nosniff`. (`apps/api/src/routes/uploads.ts`)
@@ -21,7 +27,7 @@ A pass over the API, website and app before the first real users. Each item list
 
 ## Still open before production
 
-- **General rate limiting.** Only OTP sending is rate-limited. Put the API behind a proxy or add a limiter for login, search, issue and post creation.
+- **General rate limiting.** Only OTP sending and password login are rate-limited (sign-up isn't). Put the API behind a proxy or add a limiter for login, search, issue and post creation.
 - **Inline scripts in the CSP.** Next.js needs `'unsafe-inline'` for scripts without nonces. Moving to nonce-based CSP via middleware would tighten it.
 - **Photo storage.** Uploads sit on the API's local disk. Move them to object storage (R2 or S3) before running more than one API instance.
 - **Owner-added residents.** They are labelled on reviews, but an owner could still add people who never lived there. Consider requiring a few months of rent records, or an admin spot-check, before their reviews count in the rating.

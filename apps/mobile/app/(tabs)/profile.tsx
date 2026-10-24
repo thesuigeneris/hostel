@@ -52,7 +52,7 @@ export default function Profile() {
     <Screen>
       <Card>
         <H2>{user.name || 'Your profile'}</H2>
-        <P muted>+91 {user.phone}</P>
+        <P muted>+91 {user.phone}{user.phoneVerified ? ' · verified' : ' · not verified yet'}</P>
         <Field label="Name" value={name} onChangeText={setName} maxLength={80} />
         <Field label="Email" hint="For bill receipts. Optional." value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
         <ErrorText>{err}</ErrorText>

@@ -70,7 +70,9 @@ To see what is live, check the API's startup lines or `GET /`:
 | `DATABASE_URL` | `postgres://postgres:postgres@localhost:5432/hostels` | Postgres for the API, `db:migrate` and `db:seed`. Tests ignore it and use `TEST_DATABASE_URL`, or `hostels_test` on localhost. |
 | `PORT` | `4000` | API port. |
 | `NODE_ENV` | unset | `production` refuses stub OTP logins and simulated payments. |
-| `ADMIN_PHONES` | none (`.env.example` sets `9000000001`) | Comma-separated 10-digit phones that become admin when they log in. This is the only way to get the admin role. |
+| `APP_MODE` | `standard` | `standard` serves real users. `demo` is a public demo: only seeded demo accounts can sign in (one tap), nobody can sign up, no SMS is sent, Razorpay keys and webhooks are ignored, and payments are simulated. |
+| `DEMO_LOGIN` | on outside production | Demo accounts (everyone the seed creates) in development. Ignored on a production standard instance, where demo accounts can never sign in. |
+| `ADMIN_PHONES` | none (`.env.example` sets the demo admin `9000000001`) | Comma-separated 10-digit phones that become admin after an **OTP-verified** login. A password sign-up never becomes admin this way. Without SMS, grant admin on the server with `bun run admin:grant <phone>` (in `apps/api`). |
 | `OTP_PEPPER` | `dev-otp-pepper` | Secret mixed into stored OTP hashes. Set a long random value anywhere but your laptop. |
 | `CORS_ORIGINS` | `http://localhost:3000,http://localhost:8081` | Browser origins allowed to call the API directly, such as the Expo web preview. The website calls the API from its server, so it needs no entry. |
 | `API_PUBLIC_URL` | `http://localhost:<PORT>` | Public base URL of the API. Used in links to uploaded photos. |
@@ -127,7 +129,18 @@ bun run db:studio     # optional: browse the data in Drizzle Studio
 
 When MSG91 is live, OTPs are random 6-digit codes and are not returned in the response. In both modes, codes are stored hashed, expire after 5 minutes, allow 5 tries, and a phone can request 5 codes an hour. The API takes 10-digit Indian numbers (a `+91`, `91` or `0` prefix is stripped) and sends them to MSG91 as `91XXXXXXXXXX`.
 
-Stub mode lets anyone log in as any phone with `123456`, so with `NODE_ENV=production` and no MSG91 keys, `POST /auth/otp` returns 503 instead.
+Stub mode lets anyone log in as any phone with `123456`, so with `NODE_ENV=production` and no MSG91 keys, text-message login is off (`POST /auth/otp` returns 403 `method_disabled`).
+
+### Logging in without SMS (₹0)
+
+People can always sign up and log in with **phone + password**, so the product works without paying for SMS:
+- **Passwords:** 15 to 128 characters, no composition rules; common, repeated, sequential and phone-number passwords are rejected. Hashed with argon2id (`Bun.password`).
+- **Lockout:** 5 wrong attempts per phone lock that phone for 15 minutes, whether or not it has an account. Errors are generic.
+- **Phone verification:** a password sign-up doesn't prove the phone, so owner invites (and `ADMIN_PHONES`) apply only after the person logs in once with a text-message code. Profiles show "verified" or "not verified yet".
+- **Changing a password** needs the current one, and signs out the account's other devices.
+- **No self-service reset** without SMS or email. Text-message login (when MSG91 is live) works as recovery; otherwise an admin resets it.
+
+`GET /auth/methods` tells the website and the app which methods this server offers.
 
 ### Razorpay (payments)
 
