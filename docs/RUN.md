@@ -48,10 +48,13 @@ All logins use OTP `123456` in dev mode.
 bun run typecheck
 bun run lint
 bun run test                     # API tests use the hostels_test database
-bun --filter @hostels/web e2e    # Playwright golden path against the dev database
+bun --filter @hostels/web e2e    # Playwright golden path + persona flows against the dev database
+bun --filter @hostels/web e2e:fresh   # same tests on a freshly reset hostels_e2e database
 ```
 
-The golden path starts the API and website if they are not running. It needs Chromium: run `bunx playwright install chromium` once. It creates a new owner, hostel and tenant on every run, so it can be repeated without a reset.
+The e2e suite starts the API and website if they are not running. It needs Chromium: run `bunx playwright install chromium` once (a Chromium at `/opt/pw-browsers/chromium` is used automatically). It creates a new owner, hostel and tenant on every run, so it can be repeated without a reset; the persona flows also act as seeded users, so reseed the dev database if you have run it several times.
+
+`e2e:fresh` resets and seeds a dedicated database (`createdb hostels_e2e` once; override with `E2E_DATABASE_URL`) and starts its own API and production web build on ports 4200 and 3200 (`E2E_API_PORT`, `E2E_WEB_PORT`), so it never touches your dev servers or data.
 
 ## 5. Going live
 
