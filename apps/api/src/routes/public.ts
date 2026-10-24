@@ -24,10 +24,6 @@ async function liveOr404(slug: string) {
 export const publicRoutes = new Hono<AppEnv>()
   .get('/hostels', async (c) => {
     const raw: Record<string, string> = { ...c.req.query() };
-    // z.coerce.boolean treats "false" as true; only "true"/"1" switch a flag on.
-    for (const k of ['food', 'verified']) {
-      if (raw[k] !== undefined && raw[k] !== 'true' && raw[k] !== '1') delete raw[k];
-    }
     for (const [k, v] of Object.entries(raw)) if (v === '') delete raw[k];
     return c.json(await searchHostels(parse(schemas.hostelSearchQuery, raw)));
   })

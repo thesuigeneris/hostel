@@ -56,8 +56,9 @@ export function onError(e: Error, c: Context) {
   if (e instanceof ZodError) {
     return c.json({ error: 'validation', message: 'Some fields are invalid', issues: zodIssues(e) }, 400);
   }
-  // Postgres unique violation that slipped past a service-level check.
-  if ((e as { code?: string }).code === '23505') {
+  // Postgres unique violation that slipped past a service-level check (Drizzle puts the code on `cause`).
+  const pg = e as { code?: string; cause?: { code?: string } };
+  if (pg.code === '23505' || pg.cause?.code === '23505') {
     return c.json({ error: 'conflict', message: 'That already exists' }, 409);
   }
   console.error('[api] unhandled error', e);

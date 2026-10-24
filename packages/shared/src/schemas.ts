@@ -35,6 +35,8 @@ export const phone = z
   .pipe(z.string().regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit Indian mobile number'));
 export const rupees = z.number().int().min(0).max(10_000_000);
 export const timestamp = z.string(); // ISO-8601 UTC
+/** Query-string boolean: only `true`/`1` are true (z.coerce.boolean would make 'false' true). */
+export const queryBool = z.preprocess((v) => (v === undefined || v === '' ? undefined : v === true || v === 'true' || v === '1'), z.boolean().optional());
 
 export const role = z.enum(ROLES);
 export const sharingType = z.enum(SHARING_TYPES);
@@ -195,8 +197,8 @@ export const hostelSearchQuery = z.object({
   maxRent: z.coerce.number().int().optional(),
   sharing: sharingType.optional(),
   gender: genderType.optional(),
-  food: z.coerce.boolean().optional(),
-  verified: z.coerce.boolean().optional(),
+  food: queryBool,
+  verified: queryBool,
   lat: z.coerce.number().optional(),
   lng: z.coerce.number().optional(),
   sort: z.enum(['recommended', 'price_asc', 'price_desc', 'rating', 'distance']).optional(),
