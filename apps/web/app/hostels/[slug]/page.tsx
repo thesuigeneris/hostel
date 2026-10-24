@@ -3,13 +3,26 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ClientHostelMap } from '@/components/MapLoader';
+import { ReviewCard } from '@/components/Reviews';
 import { SubmitButton } from '@/components/SubmitButton';
 import { Badge, Card, Field, Flash, Input, LinkButton, Stars, Textarea } from '@/components/ui';
-import { currentUser, publicApi, SITE_URL } from '@/lib/api';
-import { dateLabel, GENDER_LABEL, monthLabel, phoneLink, reviewSource, rupees, SHARING_LABEL, weekday, whatsappLink } from '@/lib/format';
-import { flagReviewAction, requestVisitAction } from './actions';
+import { api, currentUser, publicApi, SITE_URL } from '@/lib/api';
+import { dateLabel, GENDER_LABEL, phoneLink, rupees, SHARING_LABEL, weekday, whatsappLink } from '@/lib/format';
+import { requestVisitAction } from './actions';
 
-type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ error?: string; ok?: string }> };
+type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ error?: string; ok?: string; reviews?: string }> };
+
+const REVIEWS_PER_PAGE = 20;
+
+/** Median response and fix times read better as "under 1 h" or days than as raw hours. */
+function hoursLabel(h: number | null) {
+  if (h === null) return '—';
+  if (h < 1) return 'under 1 h';
+  return h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} days`;
+}
+
+/** The cheapest bed, or null for a listing whose rooms were all removed. */
+const cheapest = (rooms: { monthlyRent: number }[]) => (rooms.length ? Math.min(...rooms.map((r) => r.monthlyRent)) : null);
 
 async function load(slug: string) {
   try {
@@ -22,8 +35,9 @@ async function load(slug: string) {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const h = await load((await params).slug);
-  const minRent = Math.min(...h.roomTypes.map((r) => r.monthlyRent));
-  const description = `${h.name} in ${h.area}, Hyderabad. ${GENDER_LABEL[h.genderType]} hostel from ${rupees(minRent)}/month${h.isVerified ? ', no advance' : ''}${h.foodAvailable ? ', food available' : ''}.`;
+  const minRent = cheapest(h.roomTypes);
+  const rating = h.ratings.reviewCount ? ` Rated ${h.ratings.rating}/5 by ${h.ratings.reviewCount} verified residents.` : '';
+  const description = `${h.name} in ${h.area}, Hyderabad. ${GENDER_LABEL[h.genderType]} hostel${minRent ? ` from ${rupees(minRent)}/month` : ''}${h.isVerified ? ', no advance' : ''}${h.foodAvailable ? ', food available' : ''}.${rating}`;
   return {
     title: `${h.name}, ${h.area}`,
     description,
@@ -36,11 +50,18 @@ export default async function HostelPage({ params, searchParams }: Props) {
   const { slug } = await params;
   const q = await searchParams;
   const [h, user] = await Promise.all([load(slug), currentUser()]);
-  const [reviews, menu] = await Promise.all([
-    publicApi(30).hostels.reviews(slug).catch(() => []),
+  const reviewPages = Math.max(1, Math.ceil(h.ratings.reviewCount / REVIEWS_PER_PAGE));
+  const reviewPage = Math.min(Math.max(1, Number(q.reviews) || 1), reviewPages);
+  const client = user ? await api() : null;
+  const [reviews, menu, stays, visits] = await Promise.all([
+    publicApi(30).hostels.reviews(slug, reviewPage).catch(() => null),
     h.isVerified ? publicApi(300).hostels.menu(slug).catch(() => null) : Promise.resolve(null),
+    client ? client.me.residencies().catch(() => []) : Promise.resolve([]),
+    client ? client.me.visits().catch(() => []) : Promise.resolve([]),
   ]);
-  const minRent = Math.min(...h.roomTypes.map((r) => r.monthlyRent));
+  const myStay = stays.find((s) => s.hostel.id === h.id && (s.status === 'active' || s.status === 'ended'));
+  const openVisit = visits.find((v) => v.hostelId === h.id && v.status === 'new');
+  const minRent = cheapest(h.roomTypes);
   const today = istDate();
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -52,10 +73,21 @@ export default async function HostelPage({ params, searchParams }: Props) {
     telephone: `+91${h.contactPhone}`,
     address: { '@type': 'PostalAddress', streetAddress: h.address, addressLocality: h.area, addressRegion: 'Telangana', addressCountry: 'IN' },
     geo: { '@type': 'GeoCoordinates', latitude: h.lat, longitude: h.lng },
-    priceRange: `₹${minRent}+ per month`,
+    ...(minRent ? { priceRange: `₹${minRent}+ per month` } : {}),
     amenityFeature: h.amenities.map((a) => ({ '@type': 'LocationFeatureSpecification', name: a, value: true })),
     ...(h.ratings.reviewCount
       ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: h.ratings.rating, reviewCount: h.ratings.reviewCount, bestRating: 5 } }
+      : {}),
+    ...(reviews?.length
+      ? {
+          review: reviews.slice(0, 5).map((r) => ({
+            '@type': 'Review',
+            author: { '@type': 'Person', name: r.author },
+            datePublished: r.createdAt.slice(0, 10),
+            reviewBody: r.body,
+            reviewRating: { '@type': 'Rating', ratingValue: r.rating, bestRating: 5 },
+          })),
+        }
       : {}),
   };
 
@@ -64,11 +96,33 @@ export default async function HostelPage({ params, searchParams }: Props) {
       {/* biome-ignore lint/security/noDangerouslySetInnerHtml: JSON-LD for search engines, built from escaped JSON */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }} />
       <Flash error={q.error} ok={q.ok} />
-      <div className="grid gap-2 overflow-hidden rounded-2xl sm:grid-cols-3 sm:grid-rows-2">
-        {h.photos.slice(0, 3).map((p, i) => (
-          <img key={p.id} src={p.url} alt={`${h.name}, view ${i + 1}`} className={`h-full w-full object-cover ${i === 0 ? 'aspect-[4/3] sm:col-span-2 sm:row-span-2' : 'hidden aspect-[4/3] sm:block'}`} />
-        ))}
-      </div>
+      {myStay && (
+        <Card className="mb-4 flex flex-wrap items-center justify-between gap-3 border-brand bg-brand-soft/40 p-4">
+          <div className="text-sm">{myStay.status === 'active' ? 'You live here.' : 'You lived here.'} Residents can report issues, talk to neighbours and review their stay.</div>
+          <LinkButton href={`/stay/${h.id}`} size="sm">{myStay.status === 'active' ? 'Open my hostel' : 'Review your stay'}</LinkButton>
+        </Card>
+      )}
+      {h.photos.length > 0 ? (
+        <div className="grid gap-2 overflow-hidden rounded-2xl sm:grid-cols-3 sm:grid-rows-2">
+          {h.photos.slice(0, 3).map((p, i) => (
+            <img key={p.id} src={p.url} alt={`${h.name}, view ${i + 1}`} className={`h-full w-full object-cover ${i === 0 ? 'aspect-[4/3] sm:col-span-2 sm:row-span-2' : 'hidden aspect-[4/3] sm:block'}`} />
+          ))}
+        </div>
+      ) : (
+        <div className="grid aspect-[3/1] place-items-center rounded-2xl bg-brand-soft text-sm text-ink-muted">No photos yet</div>
+      )}
+      {h.photos.length > 1 && (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-sm text-brand">See all {h.photos.length} photos</summary>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+            {h.photos.map((p, i) => (
+              <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer">
+                <img src={p.url} alt={`${h.name}, view ${i + 1}`} loading="lazy" className="aspect-[4/3] w-full rounded-xl object-cover" />
+              </a>
+            ))}
+          </div>
+        </details>
+      )}
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_360px]">
         <div className="space-y-8">
@@ -170,50 +224,50 @@ export default async function HostelPage({ params, searchParams }: Props) {
               <p className="mt-2 text-sm text-ink-soft">No reviews yet. Only people who have lived here for at least two weeks can review.</p>
             )}
 
+            {!h.transparency && (
+              <p className="mt-4 rounded-xl bg-bg p-3 text-xs text-ink-muted">
+                Issue record: fewer than 3 issues were reported by residents here in the last 90 days, so there is no record to show yet.
+              </p>
+            )}
             {h.transparency && (
               <Card className="mt-4 bg-brand-soft/40">
                 <div className="font-medium">Issue record, last {h.transparency.windowDays} days</div>
                 <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                   <div><div className="text-lg font-semibold">{h.transparency.reported}</div><div className="text-ink-muted">issues reported</div></div>
                   <div><div className="text-lg font-semibold">{h.transparency.resolvedPct}%</div><div className="text-ink-muted">resolved</div></div>
-                  <div><div className="text-lg font-semibold">{h.transparency.medianHoursToFirstResponse ?? '—'} h</div><div className="text-ink-muted">median first response</div></div>
-                  <div><div className="text-lg font-semibold">{h.transparency.medianHoursToResolve ?? '—'} h</div><div className="text-ink-muted">median time to fix</div></div>
+                  <div><div className="text-lg font-semibold">{hoursLabel(h.transparency.medianHoursToFirstResponse)}</div><div className="text-ink-muted">median first response</div></div>
+                  <div><div className="text-lg font-semibold">{hoursLabel(h.transparency.medianHoursToResolve)}</div><div className="text-ink-muted">median time to fix</div></div>
                 </div>
                 <p className="mt-3 text-xs text-ink-muted">Reported by residents in the Hostels app. Issue details stay private to residents and the hostel.</p>
               </Card>
             )}
 
-            <div className="mt-4 space-y-3">
-              {reviews.map((r) => (
-                <Card key={r.id} className="p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{r.author}</span>
-                      <Badge tone={reviewSource(r.verifiedVia).strong ? 'green' : 'gray'}>{reviewSource(r.verifiedVia).label}</Badge>
-                      {r.stay && <span className="text-xs text-ink-muted">Lived here {monthLabel(r.stay.from)} – {r.stay.to ? monthLabel(r.stay.to) : 'now'}</span>}
-                    </div>
-                    <Stars value={r.rating} />
-                  </div>
-                  <p className="mt-2 text-sm text-ink-soft">{r.body}</p>
-                  {r.ownerReply && <div className="mt-3 rounded-xl bg-bg p-3 text-sm"><span className="font-medium">Reply from the hostel:</span> {r.ownerReply}</div>}
-                  {user && (
-                    <form action={flagReviewAction} className="mt-2">
-                      <input type="hidden" name="slug" value={h.slug} />
-                      <input type="hidden" name="reviewId" value={r.id} />
-                      <input type="hidden" name="reason" value="Reported from the hostel page" />
-                      <button type="submit" className="text-xs text-ink-muted hover:text-danger">Report this review</button>
-                    </form>
-                  )}
-                </Card>
-              ))}
+            <div id="reviews" className="mt-4 space-y-3">
+              {reviews === null && <p className="text-sm text-danger">Reviews could not be loaded right now. Refresh to try again.</p>}
+              {reviews?.map((r) => <ReviewCard key={r.id} r={r} slug={h.slug} canFlag={!!user} />)}
             </div>
+            {reviewPages > 1 && (
+              <nav aria-label="Review pages" className="mt-4 flex justify-center gap-2">
+                {Array.from({ length: reviewPages }, (_, i) => i + 1).map((p) => (
+                  <Link key={p} href={`/hostels/${h.slug}?reviews=${p}#reviews`} className={`grid h-9 w-9 place-items-center rounded-lg text-sm no-underline ${p === reviewPage ? 'bg-brand text-white' : 'bg-surface text-ink-soft'}`}>
+                    {p}
+                  </Link>
+                ))}
+              </nav>
+            )}
           </section>
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
           <Card>
-            <div className="text-sm text-ink-muted">From</div>
-            <div className="text-3xl font-semibold">{rupees(minRent)}<span className="text-base font-normal text-ink-muted"> /month</span></div>
+            {minRent ? (
+              <>
+                <div className="text-sm text-ink-muted">From</div>
+                <div className="text-3xl font-semibold">{rupees(minRent)}<span className="text-base font-normal text-ink-muted"> /month</span></div>
+              </>
+            ) : (
+              <div className="text-sm text-ink-muted">Rooms and rent not listed yet. Call the hostel to ask.</div>
+            )}
             {h.isVerified ? (
               <>
                 <p className="mt-2 text-sm text-ink-soft">
@@ -221,6 +275,11 @@ export default async function HostelPage({ params, searchParams }: Props) {
                 </p>
                 <LinkButton href={`/subscribe/${h.slug}`} size="lg" className="mt-4 w-full">Subscribe</LinkButton>
               </>
+            ) : openVisit ? (
+              <div className="mt-4 rounded-xl bg-brand-soft p-3 text-sm">
+                <div className="font-medium">Visit requested for {dateLabel(openVisit.preferredDate)}</div>
+                <p className="mt-1 text-ink-soft">The hostel will call you to confirm. You can withdraw it from <Link href="/account">your account</Link>.</p>
+              </div>
             ) : (
               <form action={requestVisitAction} className="mt-4 space-y-3">
                 <input type="hidden" name="hostelId" value={h.id} />

@@ -13,6 +13,7 @@ import { SubmitButton } from './SubmitButton';
 import { Back, Badge, Card, Empty, Field, Input, Select, StatusBadge, Textarea } from './ui';
 
 const tiny = 'text-xs text-ink-muted hover:text-brand';
+const REPORT_REASONS = ['Rude or abusive', 'Spam or scam', 'Shares personal data', 'Something else'];
 
 export function IssueList({ issues, emptyText = 'No issues reported. Nice.' }: { issues: IssueView[]; emptyText?: string }) {
   if (!issues.length) return <Empty title={emptyText} />;
@@ -22,7 +23,10 @@ export function IssueList({ issues, emptyText = 'No issues reported. Nice.' }: {
         <li key={i.id}>
           <Link href={`/issues/${i.id}`} className="block rounded-2xl border border-line bg-surface p-4 text-ink no-underline hover:border-brand">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-medium">{i.title}</span>
+              <span className="flex items-center gap-2 font-medium">
+                {i.photoUrl && <img src={i.photoUrl} alt="" className="h-8 w-8 rounded-lg object-cover" />}
+                {i.title}
+              </span>
               <span className="flex items-center gap-2">
                 {i.needsResponse && <Badge tone="red">Waiting on hostel</Badge>}
                 <StatusBadge status={i.status} />
@@ -99,7 +103,18 @@ export function Feed({ hostelId, posts, back, isOwner = false }: { hostelId: str
               <form action={deletePostAction}><Back to={back} /><input type="hidden" name="postId" value={p.id} /><button type="submit" className={tiny}>Delete</button></form>
             )}
             {!p.mine && (
-              <form action={reportContentAction}><Back to={back} /><input type="hidden" name="type" value="post" /><input type="hidden" name="id" value={p.id} /><button type="submit" className={tiny}>Report</button></form>
+              <details>
+                <summary className={`${tiny} cursor-pointer`}>Report</summary>
+                <form action={reportContentAction} className="mt-1 flex items-center gap-2">
+                  <Back to={back} />
+                  <input type="hidden" name="type" value="post" />
+                  <input type="hidden" name="id" value={p.id} />
+                  <Select name="reason" defaultValue={REPORT_REASONS[0]} className="h-8 w-auto text-xs" aria-label="Reason">
+                    {REPORT_REASONS.map((r) => <option key={r}>{r}</option>)}
+                  </Select>
+                  <button type="submit" className={tiny}>Send</button>
+                </form>
+              </details>
             )}
             {isOwner && (
               <>

@@ -7,11 +7,17 @@ import { SearchResults } from '@/components/SearchResults';
 import { Flash } from '@/components/ui';
 import { publicApi } from '@/lib/api';
 
-export const metadata: Metadata = {
+const BASE_METADATA: Metadata = {
   title: 'Find a hostel or PG in Hyderabad',
   description: 'Search hostels and PGs by area, rent, sharing and food. See live beds, real photos and verified resident reviews.',
   alternates: { canonical: '/hostels' },
 };
+
+/** Filtered and paged result lists are near-duplicates of the main list, so only the plain list is indexed. */
+export async function generateMetadata({ searchParams }: { searchParams: Promise<SearchParams> }): Promise<Metadata> {
+  const filtered = Object.entries(await searchParams).some(([k, v]) => v && k !== 'view');
+  return filtered ? { ...BASE_METADATA, robots: { index: false, follow: true } } : BASE_METADATA;
+}
 
 export default async function HostelsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const q = await searchParams;
