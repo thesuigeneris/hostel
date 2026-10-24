@@ -15,6 +15,13 @@
       "when": 1792823710076,
       "tag": "0001_personas",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792826209344,
+      "tag": "0002_handoffs",
+      "breakpoints": true
     }
   ]
 }

@@ -11,7 +11,8 @@ The build follows [the platform design](docs/superpowers/specs/2026-10-12-hostel
 - **Phase 1, foundation (done):** Postgres via Docker, full schema and migration, seed data, shared package (types, zod schemas, pricing, IST time helpers, ids, API client), API split into route modules, hardened phone-OTP login.
 - **Phase 2, API features (done):** listings, rooms, photos and uploads, search (filters, near me, rating), visit requests, partner flow, subscriptions with bed reservation, bills, Razorpay checkout and webhook, weekly menus, meal skips with IST cut-offs, headcount, moves, cancel, payouts, background jobs; plus the addendum: residencies, verified reviews, issue reporting with public transparency stats, community board, owner plans and platform bills, and a rent tracker.
 - **Phase 3, website (done):** Next.js app in `apps/web` for all three personas. Seekers get search with map and filters, area pages, hostel pages with verified reviews and the public issue record, visit requests, subscribe and pay. Residents get their plan, bills, meal skips, moves, issue reporting, the community board, the neighbour list and reviews. Owners get listing setup with a map pin and photo upload, rooms, residents, rent tracker, issues and community moderation, review replies, menus, kitchen headcount, subscribers, visit requests, payouts, and plans with billing. Admins get listing and partner review, fees, subscriptions and bills, payouts, moderation, food partners and a run-jobs button.
-- Phase 4 (mobile) and Phase 5 (hardening) are next. The Expo app still talks to the v0 API shape until Phase 4.
+- **Phase 4, mobile (done):** Expo SDK 58 app on the shared API client. Explore with filters, near me and a map; hostel pages with menus, ratings and verified reviews; phone login; subscribe; My Stay with the plan, bills, meal skips, move and cancel; hostel life with issues, the community board, neighbours and reviews; profile. Bills are paid on the website's checkout page: the app opens it with a one-time sign-in code, so the person never logs in twice.
+- Phase 5 (hardening: end-to-end tests, security review, run guide) is next.
 
 External services run in stub mode until keys are set in `apps/api/.env`: OTP is always `123456` without MSG91, and payments are simulated without Razorpay.
 
@@ -46,7 +47,7 @@ bun run dev:mobile   # Expo
 
 The website reads `API_URL` (default `http://localhost:4000`) and `NEXT_PUBLIC_SITE_URL` (default `http://localhost:3000`); see `apps/web/.env.example`. It keeps the session token in an httpOnly cookie and talks to the API only from the server, so the API needs no CORS entry for it. Log in with a demo phone above; each role lands on its own home (`/account`, `/owner`, `/admin`).
 
-On a physical phone, point the app at your laptop: `EXPO_PUBLIC_API_URL=http://192.168.1.10:4000 bun run dev:mobile`.
+On a physical phone with Expo Go, point the app at your laptop's LAN address for both the API and the website (the website handles bill payment): `EXPO_PUBLIC_API_URL=http://192.168.1.10:4000 EXPO_PUBLIC_WEB_URL=http://192.168.1.10:3000 bun run dev:mobile`. Expo Go must be on SDK 58. Maps use react-native-maps, which needs no key in Expo Go. The web preview (`bun --filter @hostels/mobile web`) is for quick checks only; it shows a link instead of the map.
 
 ## Checks
 
@@ -69,7 +70,7 @@ hostels/
 │   │   ├── migrations/     generated SQL (drizzle-kit)
 │   │   └── test/           bun test against hostels_test
 │   ├── web/                Next.js 15 (App Router): public site, resident area, owner dashboard, admin console
-│   └── mobile/             Expo + React Native (Expo Router)
+│   └── mobile/             Expo SDK 58 + Expo Router: explore, hostel, subscribe, My Stay, hostel life, profile
 ├── packages/shared/        types, zod schemas, pricing, IST time, ids, API client
 ├── docker-compose.yml      Postgres for dev and tests
 └── docs/superpowers/specs/ platform design + personas addendum

@@ -41,6 +41,8 @@ export const updateMeSchema = z
   .partial();
 export type UpdateMeInput = z.input<typeof updateMeSchema>;
 
+export const handoffRedeemSchema = z.object({ code: z.string().trim().min(16).max(128) });
+
 // ---------------------------------------------------------------------------
 // Listings
 

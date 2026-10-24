@@ -20,6 +20,7 @@ import { runMigrations } from './migrate';
 import { DEMO_PHONES, EXTRA_OWNERS, FOOD_PARTNERS, HOSTELS, PHOTOS, RULES, THEMES } from './seed-data';
 
 export const ALL_TABLES = [
+  'login_handoffs',
   'rent_records',
   'owner_invoices',
   'owner_plans',
