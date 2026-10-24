@@ -4,7 +4,16 @@ import { env } from './env';
 export const DEV_OTP = '123456';
 
 export function isMsg91Configured(): boolean {
+  // Demo instances never send SMS, whatever keys are set.
+  if (env.appMode === 'demo') return false;
   return !!(process.env.MSG91_AUTH_KEY && process.env.MSG91_TEMPLATE_ID);
+}
+
+/** How OTP login works here: real SMS, the fixed dev code (development only), or not at all. */
+export function otpMode(): 'live' | 'stub' | 'off' {
+  if (env.appMode === 'demo') return 'off';
+  if (isMsg91Configured()) return 'live';
+  return env.isProduction ? 'off' : 'stub';
 }
 
 /** Stub mode (no MSG91 key) always uses the dev OTP so local logins are predictable. */

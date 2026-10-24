@@ -62,6 +62,20 @@ export const users = pgTable('users', {
   email: text('email'),
   role: roleEnum('role').notNull().default('tenant'),
   createdAt: createdAt(),
+  /** Seeded demo person. Never allowed to sign in on a production standard instance. */
+  isDemo: boolean('is_demo').notNull().default(false),
+  /** Set when an OTP to this phone was verified. Invites and ADMIN_PHONES apply only once set. */
+  phoneVerifiedAt: timestamp('phone_verified_at', { withTimezone: true }),
+  /** argon2id (PHC string) from Bun.password; null for OTP-only accounts. */
+  passwordHash: text('password_hash'),
+});
+
+/** Failed password logins per phone (known or not), so lockouts don't reveal which phones have accounts. */
+export const loginThrottle = pgTable('login_throttle', {
+  phone: text('phone').primaryKey(),
+  failures: integer('failures').notNull().default(0),
+  windowStart: timestamp('window_start', { withTimezone: true }).notNull(),
+  lockedUntil: timestamp('locked_until', { withTimezone: true }),
 });
 
 export const otpCodes = pgTable('otp_codes', {

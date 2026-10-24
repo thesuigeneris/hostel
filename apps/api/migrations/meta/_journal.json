@@ -29,6 +29,13 @@
       "when": 1792837102544,
       "tag": "0003_likes_and_views",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792840259796,
+      "tag": "0004_auth_modes",
+      "breakpoints": true
     }
   ]
 }

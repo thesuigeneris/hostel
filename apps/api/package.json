@@ -11,7 +11,8 @@
     "db:migrate": "bun run src/db/migrate.ts",
     "db:seed": "bun run src/db/seed.ts",
     "db:reset": "bun run src/db/seed.ts --reset",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "admin:grant": "bun run src/scripts/grant-admin.ts"
   },
   "dependencies": {
     "hono": "^4.6.0",

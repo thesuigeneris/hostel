@@ -77,6 +77,19 @@ export type User = {
   email: string | null;
   role: Role;
   createdAt: string;
+  /** True once an OTP to this phone was verified. Invites and admin-by-phone need it. */
+  phoneVerified: boolean;
+  hasPassword: boolean;
+  isDemo: boolean;
+};
+
+/** Which sign-in methods this server offers. `otp: 'stub'` means development, where the code is fixed. */
+export type AuthMethods = {
+  mode: 'standard' | 'demo';
+  otp: 'live' | 'stub' | 'off';
+  password: boolean;
+  signup: boolean;
+  demo: { enabled: boolean; accounts: { phone: string; name: string; role: Role }[] };
 };
 
 export type RoomType = {
@@ -300,6 +313,10 @@ export const ERROR_CODES = [
   'not_a_resident',
   'review_not_allowed',
   'plan_required',
+  'invalid_credentials',
+  'login_locked',
+  'signup_failed',
+  'method_disabled',
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
 

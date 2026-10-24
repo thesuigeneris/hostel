@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { passwordProblem, PASSWORD_MAX_LENGTH } from './passwords';
 import { DIETS, MEAL_PLANS, MEALS } from './pricing';
 import { isValidDate } from './time';
 import {
@@ -22,6 +23,34 @@ export const phoneSchema = z
 export const otpSchema = z.string().trim().regex(/^\d{6}$/, 'OTP is 6 digits');
 
 export const requestOtpSchema = z.object({ phone: phoneSchema });
+
+/** Length only; the full policy (blocklist, phone) runs in `registerSchema` / `changePasswordSchema`. */
+const rawPassword = z.string().max(PASSWORD_MAX_LENGTH, `Use at most ${PASSWORD_MAX_LENGTH} characters.`);
+
+export const registerSchema = z
+  .object({
+    phone: phoneSchema,
+    password: rawPassword,
+    name: z.string().trim().min(1, 'Tell us your name').max(80),
+    role: z.enum(['tenant', 'owner']).optional(),
+  })
+  .superRefine((v, ctx) => {
+    const problem = passwordProblem(v.password, v.phone);
+    if (problem) ctx.addIssue({ code: 'custom', path: ['password'], message: problem });
+  });
+export type RegisterInput = z.input<typeof registerSchema>;
+
+export const loginSchema = z.object({ phone: phoneSchema, password: rawPassword.min(1, 'Enter your password') });
+export type LoginInput = z.input<typeof loginSchema>;
+
+export const demoLoginSchema = z.object({ phone: phoneSchema });
+export type DemoLoginInput = z.input<typeof demoLoginSchema>;
+
+export const changePasswordSchema = z.object({
+  currentPassword: rawPassword.optional(),
+  newPassword: rawPassword,
+});
+export type ChangePasswordInput = z.input<typeof changePasswordSchema>;
 export type RequestOtpInput = z.input<typeof requestOtpSchema>;
 
 export const verifyOtpSchema = z.object({

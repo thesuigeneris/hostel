@@ -120,7 +120,10 @@ export async function verifyCheckout(user: User, invoiceId: string, input: { raz
 
 /** Stub mode only: pays the bill as if Razorpay Checkout succeeded. */
 export async function simulatePayment(user: User, invoiceId: string) {
-  if (isRazorpayConfigured() || env.isProduction) throw new AppError('forbidden', 'Simulated payments are only available in dev mode');
+  // Simulation is for development and for demo instances; a production standard instance only takes real payments.
+  if (isRazorpayConfigured() || (env.isProduction && env.appMode !== 'demo')) {
+    throw new AppError('forbidden', 'Simulated payments are only available in dev mode');
+  }
   const order = await orderFor(user, invoiceId);
   const paymentId = `pay_stub_${crypto.randomUUID().replace(/-/g, '').slice(0, 14)}`;
   return verifyCheckout(user, invoiceId, {

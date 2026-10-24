@@ -14,41 +14,16 @@ import {
   SKIP_CREDITS,
   weekStart,
 } from '@hostels/shared';
-import { sql } from 'drizzle-orm';
+import { getTableName, is, sql } from 'drizzle-orm';
+import { PgTable } from 'drizzle-orm/pg-core';
 import { closeDb, type DB, getDb, schema } from './index';
 import { runMigrations } from './migrate';
 import { DEMO_PHONES, EXTRA_OWNERS, FOOD_PARTNERS, HOSTELS, PHOTOS, RULES, THEMES } from './seed-data';
 
-export const ALL_TABLES = [
-  'login_handoffs',
-  'rent_records',
-  'owner_invoices',
-  'owner_plans',
-  'content_reports',
-  'community_comments',
-  'community_posts',
-  'issue_upvotes',
-  'issue_updates',
-  'issues',
-  'review_flags',
-  'reviews',
-  'residencies',
-  'payouts',
-  'move_requests',
-  'meal_skips',
-  'invoices',
-  'subscriptions',
-  'menu_items',
-  'menu_weeks',
-  'food_partners',
-  'visit_requests',
-  'room_types',
-  'hostel_photos',
-  'hostels',
-  'sessions',
-  'otp_codes',
-  'users',
-];
+/** Every table in the schema, derived from it so a new table can never be missed by a reset. */
+export const ALL_TABLES = (Object.values(schema) as unknown[])
+  .filter((t): t is PgTable => is(t, PgTable))
+  .map((t) => getTableName(t));
 
 export async function truncateAll(db: DB) {
   await db.execute(sql.raw(`truncate table ${ALL_TABLES.map((t) => `"${t}"`).join(', ')} cascade`));
@@ -77,6 +52,19 @@ const REVIEW_TEXTS = [
 
 /** Dev seed: Hyderabad hostels, plans, menus, residents with history, and the demo logins. */
 export async function seed(db: DB, today = istDate()) {
+  await seedData(db, today);
+  // Everyone the seed creates is a demo person: they can sign in on dev and demo instances only (PRP-01).
+  await db.execute(sql`update users set is_demo = true, phone_verified_at = coalesce(phone_verified_at, created_at)`);
+}
+
+/** Refuses to wipe a database that may hold real users. Demo instances reset freely. */
+export function assertResetAllowed(nodeEnv = process.env.NODE_ENV, appMode = process.env.APP_MODE) {
+  if (nodeEnv === 'production' && appMode !== 'demo') {
+    throw new Error('Refusing to reset: NODE_ENV=production on a standard instance. Resets are only for dev, test and APP_MODE=demo.');
+  }
+}
+
+async function seedData(db: DB, today: string) {
   const adminId = newId('usr');
   const ownerId = newId('usr');
   const tenantId = newId('usr');
@@ -405,10 +393,13 @@ if (import.meta.main) {
   if (count > 0 && !reset) {
     console.log('database already has data; run `bun run db:reset` to wipe and reseed');
   } else {
-    if (reset) await truncateAll(db);
+    if (reset) {
+      assertResetAllowed();
+      await truncateAll(db);
+    }
     await seed(db);
     console.log('seeded: 12 hostels (6 verified partners), owner plans, menus, residents, reviews, issues');
-    console.log(`logins (OTP 123456): admin ${DEMO_PHONES.admin}, owner ${DEMO_PHONES.owner}, tenant ${DEMO_PHONES.tenant}`);
+    console.log(`demo logins (dev or APP_MODE=demo; OTP 123456 in dev): admin ${DEMO_PHONES.admin}, owner ${DEMO_PHONES.owner}, tenant ${DEMO_PHONES.tenant}`);
     console.log('more tenants: 9000000100 to 9000000113');
   }
   await closeDb();

@@ -9,6 +9,18 @@ export const env = {
   get isProduction() {
     return process.env.NODE_ENV === 'production';
   },
+  /**
+   * `standard` serves real users. `demo` is a public demo instance: only seeded demo accounts can sign in,
+   * nobody can sign up, no SMS is sent and payments are always simulated.
+   */
+  get appMode(): 'standard' | 'demo' {
+    return process.env.APP_MODE === 'demo' ? 'demo' : 'standard';
+  },
+  /** Demo accounts may sign in on demo instances and in development, never on a production standard instance. */
+  get demoLoginEnabled() {
+    if (this.appMode === 'demo') return true;
+    return !this.isProduction && process.env.DEMO_LOGIN !== 'off';
+  },
   get adminPhones(): string[] {
     return (process.env.ADMIN_PHONES ?? '')
       .split(',')

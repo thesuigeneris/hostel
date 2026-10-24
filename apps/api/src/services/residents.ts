@@ -21,6 +21,8 @@ const toResidency = (r: ResidencyRow) => ({ ...r, createdAt: r.createdAt.toISOSt
 
 /** Owner-added residencies wait for the phone's owner; link them when that phone signs in. */
 export async function linkInvitedResidencies(user: User) {
+  // An invite is addressed to a phone; only someone who proved they hold that phone may claim it.
+  if (!user.phoneVerified) return;
   await getDb()
     .update(schema.residencies)
     .set({ userId: user.id })

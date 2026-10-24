@@ -7,6 +7,8 @@ export type RazorpayOrder = { id: string; amount: number; currency: string; stat
 export const STUB_SIGNATURE_SECRET = 'stub-razorpay-secret';
 
 export function isRazorpayConfigured(): boolean {
+  // Demo instances never move money, whatever keys are set.
+  if (env.appMode === 'demo') return false;
   return !!(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
 }
 
@@ -46,13 +48,14 @@ export function signPayment(orderId: string, paymentId: string): string {
 }
 
 export function verifyPaymentSignature(opts: { orderId: string; paymentId: string; signature: string }): boolean {
-  // Stub signatures are only accepted outside production.
-  if (!isRazorpayConfigured() && env.isProduction) return false;
+  // Stub signatures are only accepted outside production, or on a demo instance (which never takes real money).
+  if (!isRazorpayConfigured() && env.isProduction && env.appMode !== 'demo') return false;
   return safeEqual(signPayment(opts.orderId, opts.paymentId), opts.signature);
 }
 
 export function verifyWebhookSignature(rawBody: string, signature: string): boolean {
   const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
-  if (!secret) return false;
+  // A demo instance must never mark bills paid from real payment events.
+  if (!secret || env.appMode === 'demo') return false;
   return safeEqual(hmacHex(secret, rawBody), signature);
 }
