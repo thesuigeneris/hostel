@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { SubmitButton } from '@/components/SubmitButton';
 import { Card, Flash, PageHeader, Stat } from '@/components/ui';
 import { api } from '@/lib/api';
+import { rupees } from '@/lib/format';
 import { runJobsAction } from './actions';
 
 export default async function AdminHome({ searchParams }: { searchParams: Promise<{ error?: string; ok?: string }> }) {
@@ -19,6 +20,18 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
         <Stat label="Live hostels" value={s.liveHostels} />
         <Stat label="Active subscriptions" value={s.activeSubscriptions} />
         <Stat label="Overdue bills" value={<Link href="/admin/billing">{s.overdueBills}</Link>} />
+        <Stat
+          label="Escalated issues"
+          value={<Link href="/admin/issues">{s.escalatedIssues}</Link>}
+          hint="Unacknowledged 48 hrs or unresolved 7 days"
+        />
+      </div>
+      <h2 className="mb-3 mt-8 text-lg font-semibold">Monthly recurring revenue</h2>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat label="Our revenue" value={rupees(s.revenue.platformFees + s.revenue.ownerPlans)} hint="Platform fees + owner plans" />
+        <Stat label="Platform fees" value={rupees(s.revenue.platformFees)} hint={`On ${rupees(s.revenue.subscriptionGross)} of subscription bills`} />
+        <Stat label="Owner plans" value={rupees(s.revenue.ownerPlans)} hint={`${s.revenue.trialHostels} more in their free month`} />
+        <Stat label="Subscription gross" value={rupees(s.revenue.subscriptionGross)} hint="Rent + food billed to tenants" />
       </div>
       <Card className="mt-8 flex flex-wrap items-center justify-between gap-3">
         <div>

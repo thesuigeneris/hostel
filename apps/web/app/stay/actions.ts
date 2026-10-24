@@ -107,3 +107,7 @@ export async function moderateAction(form: FormData) {
     return client.resident.moderatePost(str(form, 'postId'), patch);
   });
 }
+
+export async function likeAction(form: FormData) {
+  await run(back(form), async () => (await api()).resident.like(str(form, 'postId'), str(form, 'on') === '1'));
+}

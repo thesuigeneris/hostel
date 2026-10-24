@@ -3,6 +3,7 @@ import Link from 'next/link';
 import {
   commentAction,
   deletePostAction,
+  likeAction,
   moderateAction,
   postAction,
   reportContentAction,
@@ -94,7 +95,20 @@ export function Feed({ hostelId, posts, back, isOwner = false }: { hostelId: str
           <p className="mt-2 whitespace-pre-line text-sm">{p.body}</p>
           {p.photoUrl && <img src={p.photoUrl} alt="Attached to the post" className="mt-3 max-h-80 rounded-xl object-cover" />}
 
-          <div className="mt-2 flex flex-wrap gap-3">
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <form action={likeAction}>
+              <Back to={back} />
+              <input type="hidden" name="postId" value={p.id} />
+              <input type="hidden" name="on" value={p.likedByMe ? '0' : '1'} />
+              <button
+                type="submit"
+                aria-pressed={p.likedByMe}
+                aria-label={p.likedByMe ? 'Unlike' : 'Like'}
+                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs ${p.likedByMe ? 'border-brand bg-brand-soft text-brand' : 'border-line text-ink-muted hover:border-brand hover:text-brand'}`}
+              >
+                <span aria-hidden>{p.likedByMe ? '♥' : '♡'}</span> {p.likes}
+              </button>
+            </form>
             {(p.mine || isOwner) && (
               <form action={deletePostAction}><Back to={back} /><input type="hidden" name="postId" value={p.id} /><button type="submit" className={tiny}>Delete</button></form>
             )}

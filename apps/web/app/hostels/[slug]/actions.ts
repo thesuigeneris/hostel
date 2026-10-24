@@ -16,3 +16,8 @@ export async function flagReviewAction(form: FormData) {
     ok: 'Thanks, our team will take a look.',
   });
 }
+
+/** Counts one page view for owner insights. Never fails the page. */
+export async function recordViewAction(slug: string) {
+  await (await api()).hostels.recordView(slug).catch(() => undefined);
+}

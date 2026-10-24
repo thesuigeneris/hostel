@@ -1,4 +1,4 @@
-import { OWNER_PLANS } from '@hostels/shared';
+import { OWNER_PLANS, type OwnerInsights } from '@hostels/shared';
 import Link from 'next/link';
 import { Badge, Card, Empty, LinkButton, PageHeader, Stat, StatusBadge } from '@/components/ui';
 import { api } from '@/lib/api';
@@ -7,7 +7,11 @@ import { rupees } from '@/lib/format';
 export default async function OwnerHome() {
   const client = await api();
   const [hostels, visits, issues] = await Promise.all([client.owner.hostels(), client.owner.visits('new'), client.owner.issues()]);
-  const details = await Promise.all(hostels.map((h) => client.owner.hostel(h.id)));
+  const [details, insights] = await Promise.all([
+    Promise.all(hostels.map((h) => client.owner.hostel(h.id))),
+    Promise.all(hostels.map((h) => client.owner.insights(h.id))),
+  ]);
+  const insightFor = new Map(insights.map((i) => [i.hostelId, i]));
   const openIssues = issues.filter((i) => i.status !== 'resolved' && i.status !== 'closed');
   const waiting = openIssues.filter((i) => i.needsResponse);
   const freeBeds = details.reduce((n, h) => n + h.roomTypes.reduce((m, r) => m + r.bedsAvailable, 0), 0);
@@ -48,6 +52,7 @@ export default async function OwnerHome() {
                   {rupees(h.roomTypes.length ? Math.min(...h.roomTypes.map((r) => r.monthlyRent)) : null)}
                   {h.ratings.rating !== null && ` · ★ ${h.ratings.rating.toFixed(1)} (${h.ratings.reviewCount})`}
                 </div>
+                {h.status === 'live' && insightFor.get(h.id) && <InsightsRow hostelId={h.id} insights={insightFor.get(h.id)!} />}
                 {h.status === 'rejected' && h.rejectionReason && <p className="mt-2 text-sm text-danger">Not approved: {h.rejectionReason}</p>}
                 <div className="mt-4 flex flex-wrap gap-2">
                   <LinkButton href={`/owner/hostels/${h.id}`} size="sm" variant="secondary">Manage</LinkButton>
@@ -62,5 +67,37 @@ export default async function OwnerHome() {
         </>
       )}
     </>
+  );
+}
+
+/** Last 30 days at a glance. Page views need Pro or Partner; Free shows a one-line unlock link. */
+function InsightsRow({ hostelId, insights: i }: { hostelId: string; insights: OwnerInsights }) {
+  const cell = 'px-2 py-2 text-center';
+  const label = 'text-[11px] uppercase tracking-wide text-ink-muted';
+  return (
+    <div className="mt-3 grid grid-cols-2 divide-line overflow-hidden rounded-xl border border-line text-sm sm:grid-cols-4 sm:divide-x">
+      <div className={cell}>
+        <div className="font-semibold">{i.occupancyPct}%</div>
+        <div className={label}>Occupancy</div>
+      </div>
+      <div className={cell}>
+        <div className="font-semibold">{i.activeResidents}</div>
+        <div className={label}>Residents</div>
+      </div>
+      <div className={cell}>
+        <div className="font-semibold">{i.visitRequests30d}</div>
+        <div className={label}>Visits · 30d</div>
+      </div>
+      <div className={cell}>
+        {i.locked ? (
+          <Link href={`/owner/hostels/${hostelId}/plan`} className="inline-block rounded-full bg-food-soft px-2 py-0.5 text-xs font-medium text-food no-underline hover:underline">
+            Unlock with Pro
+          </Link>
+        ) : (
+          <div className="font-semibold">{i.views30d}</div>
+        )}
+        <div className={label}>Page views · 30d</div>
+      </div>
+    </div>
   );
 }

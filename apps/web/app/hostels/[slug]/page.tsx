@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ClientHostelMap } from '@/components/MapLoader';
+import { RecordView } from '@/components/RecordView';
 import { SubmitButton } from '@/components/SubmitButton';
 import { Badge, Card, Field, Flash, Input, LinkButton, Stars, Textarea } from '@/components/ui';
 import { currentUser, publicApi, SITE_URL } from '@/lib/api';
@@ -63,6 +64,7 @@ export default async function HostelPage({ params, searchParams }: Props) {
     <div className="mx-auto max-w-6xl px-4 py-8">
       {/* biome-ignore lint/security/noDangerouslySetInnerHtml: JSON-LD for search engines, built from escaped JSON */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }} />
+      <RecordView slug={h.slug} />
       <Flash error={q.error} ok={q.ok} />
       <div className="grid gap-2 overflow-hidden rounded-2xl sm:grid-cols-3 sm:grid-rows-2">
         {h.photos.slice(0, 3).map((p, i) => (
