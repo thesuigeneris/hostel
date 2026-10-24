@@ -19,8 +19,9 @@ import { notFound } from '../lib/errors';
 import { parseBody, parseQuery } from '../lib/validate';
 import { type AppEnv, requireAuth } from '../middleware/auth';
 import { adminSubscriptions, overdueInvoices } from '../services/billing';
-import { openReports } from '../services/community';
+import { escalatedIssues, openReports } from '../services/community';
 import { listFoodPartners } from '../services/food';
+import { revenueSummary } from '../services/insights';
 import { runJobs } from '../services/jobs';
 import { decidePartner, hostelDetail, reviewListing, setPlatformFee } from '../services/listings';
 import { toHostel } from '../services/mappers';
@@ -43,6 +44,8 @@ export const adminRoutes = new Hono<AppEnv>()
       flaggedReviews: (await flaggedReviews()).length,
       openReports: (await openReports()).length,
       overdueBills: (await overdueInvoices()).length,
+      escalatedIssues: (await escalatedIssues(c.get('user'))).length,
+      revenue: await revenueSummary(),
     });
   })
   .get('/admin/hostels', async (c) => {
@@ -136,6 +139,7 @@ export const adminRoutes = new Hono<AppEnv>()
     return c.json(await moderateReview(c.req.param('id'), true, reason));
   })
   .post('/admin/reviews/:id/unhide', async (c) => c.json(await moderateReview(c.req.param('id'), false)))
+  .get('/admin/issues/escalated', async (c) => c.json(await escalatedIssues(c.get('user'))))
   .get('/admin/reports', async (c) => c.json(await openReports()))
 
   // Runs the background jobs now (handy in dev and for the admin "run jobs" button).

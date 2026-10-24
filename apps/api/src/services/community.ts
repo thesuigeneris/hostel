@@ -236,6 +236,18 @@ export async function feed(user: User, hostelId: string) {
         .where(and(inArray(schema.communityComments.postId, ids), isOwner ? undefined : eq(schema.communityComments.hidden, false)))
         .orderBy(asc(schema.communityComments.createdAt))
     : [];
+  const likes = ids.length
+    ? await db
+        .select({
+          postId: schema.communityPostLikes.postId,
+          n: sql<number>`count(*)::int`,
+          mine: sql<boolean>`bool_or(${schema.communityPostLikes.userId} = ${user.id})`,
+        })
+        .from(schema.communityPostLikes)
+        .where(inArray(schema.communityPostLikes.postId, ids))
+        .groupBy(schema.communityPostLikes.postId)
+    : [];
+  const likesFor = new Map(likes.map((l) => [l.postId, l]));
   const [hostel] = await db.select({ ownerId: schema.hostels.ownerId }).from(schema.hostels).where(eq(schema.hostels.id, hostelId));
   const author = (id: string, name: string) => (id === hostel!.ownerId ? 'Hostel' : shortName(name));
   return posts.map(({ post, authorName }) => ({
@@ -248,6 +260,8 @@ export async function feed(user: User, hostelId: string) {
     createdAt: post.createdAt.toISOString(),
     author: author(post.authorId, authorName),
     mine: post.authorId === user.id,
+    likes: likesFor.get(post.id)?.n ?? 0,
+    likedByMe: likesFor.get(post.id)?.mine ?? false,
     comments: comments
       .filter((c) => c.comment.postId === post.id)
       .map(({ comment, authorName: n }) => ({
@@ -286,6 +300,22 @@ async function loadPost(user: User, postId: string) {
   const member = await requireBoard(user, post.hostelId);
   if (post.hidden && !member.isOwner) throw notFound('Post');
   return { post, ...member };
+}
+
+/** Like or unlike a post. Anyone who can read the board can like; hidden posts can't be liked. */
+export async function setPostLike(user: User, postId: string, on: boolean) {
+  const db = getDb();
+  const [post] = await db.select().from(schema.communityPosts).where(eq(schema.communityPosts.id, postId));
+  if (!post || post.hidden) throw notFound('Post');
+  await requireBoard(user, post.hostelId);
+  const like = schema.communityPostLikes;
+  if (on) await db.insert(like).values({ postId, userId: user.id }).onConflictDoNothing();
+  else await db.delete(like).where(and(eq(like.postId, postId), eq(like.userId, user.id)));
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int`, mine: sql<boolean>`coalesce(bool_or(${like.userId} = ${user.id}), false)` })
+    .from(like)
+    .where(eq(like.postId, postId));
+  return { likes: row?.n ?? 0, likedByMe: row?.mine ?? false };
 }
 
 export async function addComment(user: User, postId: string, body: string) {
@@ -365,3 +395,37 @@ export async function openReports(filter: { hostelIds?: string[] } = {}) {
   return rows.map((r) => ({ ...r.report, createdAt: r.report.createdAt.toISOString(), hostelName: r.hostelName }));
 }
 
+
+export const ESCALATE_UNACKNOWLEDGED_HOURS = 48;
+export const ESCALATE_UNRESOLVED_DAYS = 7;
+
+/**
+ * Issues an admin should chase: still `open` and unacknowledged after 48 hours, or not yet
+ * resolved after 7 days. Oldest first.
+ */
+export async function escalatedIssues(admin: User, now = clock.now()) {
+  const i = schema.issues;
+  const ackBefore = new Date(now.getTime() - ESCALATE_UNACKNOWLEDGED_HOURS * 3_600_000);
+  const unresolvedBefore = new Date(now.getTime() - ESCALATE_UNRESOLVED_DAYS * 86_400_000);
+  const rows = await getDb()
+    .select({ issue: i, hostelName: schema.hostels.name, hostelSlug: schema.hostels.slug })
+    .from(i)
+    .innerJoin(schema.hostels, eq(schema.hostels.id, i.hostelId))
+    .where(
+      sql`(${i.status} = 'open' and ${i.acknowledgedAt} is null and ${i.createdAt} < ${ackBefore.toISOString()}::timestamptz)
+        or (${i.status} in ('open', 'acknowledged', 'in_progress') and ${i.createdAt} < ${unresolvedBefore.toISOString()}::timestamptz)`,
+    )
+    .orderBy(asc(i.createdAt));
+  const views = await decorate(admin, rows.map((r) => r.issue), () => true);
+  return views.map((v, n) => {
+    const { issue, hostelName, hostelSlug } = rows[n]!;
+    const unresolved = issue.createdAt < unresolvedBefore;
+    return {
+      ...v,
+      hostelName,
+      hostelSlug,
+      ageHours: Math.floor((now.getTime() - issue.createdAt.getTime()) / 3_600_000),
+      reason: unresolved ? ('unresolved' as const) : ('unacknowledged' as const),
+    };
+  });
+}

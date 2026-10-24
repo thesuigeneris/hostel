@@ -27,6 +27,8 @@ import type {
   AuthSession,
   CheckoutOrder,
   CommunityPost,
+  EscalatedIssue,
+  OwnerInsights,
   ErrorCode,
   FoodPartner,
   Headcount,
@@ -151,6 +153,7 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
       areas: () => request<Area[]>('/areas'),
       sitemap: () => request<{ hostels: { slug: string; area: string }[]; areas: Area[] }>('/sitemap-data'),
       foodPartners: () => request<FoodPartner[]>('/food-partners'),
+      recordView: (slug: string) => request<{ ok: true }>(`/hostels/${slug}/view`, { method: 'POST' }),
       requestVisit: (hostelId: string, input: VisitRequestInput) => request<VisitRequest>(`/hostels/${hostelId}/visits`, { body: input }),
       subscribe: (hostelId: string, input: SubscribeInput) =>
         request<{ subscription: Subscription; invoice: Invoice }>(`/hostels/${hostelId}/subscribe`, { body: input }),
@@ -166,6 +169,7 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
       feed: (hostelId: string) => request<CommunityPost[]>(`/hostels/${hostelId}/community`),
       post: (hostelId: string, input: PostInput) => request(`/hostels/${hostelId}/community`, { body: input }),
       comment: (postId: string, body: string) => request(`/posts/${postId}/comments`, { body: { body } }),
+      like: (postId: string, on: boolean) => request<{ likes: number; likedByMe: boolean }>(`/posts/${postId}/like`, { method: on ? 'PUT' : 'DELETE' }),
       deletePost: (postId: string) => request<{ ok: true }>(`/posts/${postId}`, { method: 'DELETE' }),
       deleteComment: (id: string) => request<{ ok: true }>(`/comments/${id}`, { method: 'DELETE' }),
       moderatePost: (postId: string, patch: { hidden?: boolean; pinned?: boolean }) =>
@@ -204,6 +208,7 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
       subscribers: (id: string) => request<Subscriber[]>(`/owner/hostels/${id}/subscribers`),
       payouts: () => request<OwnerPayouts>('/owner/payouts'),
       plan: (id: string) => request<OwnerPlanInfo>(`/owner/hostels/${id}/plan`),
+      insights: (id: string) => request<OwnerInsights>(`/owner/hostels/${id}/insights`),
       changePlan: (id: string, plan: OwnerPlanTier) => request<OwnerPlanInfo>(`/owner/hostels/${id}/plan`, { body: { plan } }),
       residents: (id: string) => request<Residency[]>(`/owner/hostels/${id}/residents`),
       addResident: (id: string, input: ResidentInput) => request<Residency>(`/owner/hostels/${id}/residents`, { body: input }),
@@ -218,6 +223,7 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
     },
     admin: {
       stats: () => request<AdminStats>('/admin/stats'),
+      escalatedIssues: () => request<EscalatedIssue[]>('/admin/issues/escalated'),
       hostels: (filter: { status?: string; partnerStatus?: string } = {}) => request<Hostel[]>('/admin/hostels', { query: filter }),
       hostel: (id: string) => request<HostelDetail>(`/admin/hostels/${id}`),
       approve: (id: string) => request<Hostel>(`/admin/hostels/${id}/approve`, { method: 'POST' }),

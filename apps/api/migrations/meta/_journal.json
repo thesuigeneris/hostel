@@ -22,6 +22,13 @@
       "when": 1792826209344,
       "tag": "0002_handoffs",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792837102544,
+      "tag": "0003_likes_and_views",
+      "breakpoints": true
     }
   ]
 }

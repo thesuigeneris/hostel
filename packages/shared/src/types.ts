@@ -395,6 +395,8 @@ export type CommunityPost = {
   createdAt: string;
   author: string;
   mine: boolean;
+  likes: number;
+  likedByMe: boolean;
   comments: { id: string; body: string; hidden: boolean; createdAt: string; author: string; mine: boolean }[];
 };
 
@@ -519,4 +521,33 @@ export type AdminStats = {
   flaggedReviews: number;
   openReports: number;
   overdueBills: number;
+  escalatedIssues: number;
+  /** Monthly recurring revenue in rupees, from what is in force today. */
+  revenue: {
+    /** Rent + food of active subscriptions (the gross we bill tenants each month). */
+    subscriptionGross: number;
+    /** Our platform fee on that gross, at each hostel's fee %. */
+    platformFees: number;
+    /** Owner software plans that are paying (not in trial, not suspended). */
+    ownerPlans: number;
+    /** Pro and Partner hostels still in their free trial. */
+    trialHostels: number;
+  };
+};
+
+/** Issues that need an admin nudge: unacknowledged for 48 hours, or unresolved for 7 days. */
+export type EscalatedIssue = IssueView & { hostelName: string; hostelSlug: string; ageHours: number; reason: 'unacknowledged' | 'unresolved' };
+
+/** Per-hostel numbers for the owner. View counts need the Pro or Partner plan; `locked` is true on Free. */
+export type OwnerInsights = {
+  hostelId: string;
+  locked: boolean;
+  views30d: number | null;
+  viewsByDay: { day: ISODate; count: number }[] | null;
+  visitRequests30d: number;
+  occupancyPct: number;
+  activeResidents: number;
+  openIssues: number;
+  rating: number | null;
+  reviewCount: number;
 };

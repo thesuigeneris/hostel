@@ -624,3 +624,31 @@ export const rentRecords = pgTable(
   },
   (t) => [unique('rent_records_residency_month').on(t.residencyId, t.month)],
 );
+
+/** One row per resident per liked post. */
+export const communityPostLikes = pgTable(
+  'community_post_likes',
+  {
+    postId: text('post_id')
+      .notNull()
+      .references(() => communityPosts.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.postId, t.userId] })],
+);
+
+/** Daily page-view counter per hostel, for owner insights. */
+export const hostelViews = pgTable(
+  'hostel_views',
+  {
+    hostelId: text('hostel_id')
+      .notNull()
+      .references(() => hostels.id, { onDelete: 'cascade' }),
+    day: day('day').notNull(),
+    count: integer('count').notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.hostelId, t.day] })],
+);

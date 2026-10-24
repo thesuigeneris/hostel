@@ -11,6 +11,7 @@ import { parseQuery } from '../lib/validate';
 import type { AppEnv } from '../middleware/auth';
 import { listFoodPartners, publicMenu } from '../services/food';
 import { listAreas, liveSlugs, publicHostelBySlug } from '../services/listings';
+import { recordView } from '../services/insights';
 import { hostelReviews } from '../services/residents';
 import { searchHostels } from '../services/search';
 
@@ -45,6 +46,10 @@ export const publicRoutes = new Hono<AppEnv>()
   .get('/sitemap-data', async (c) => c.json({ hostels: await liveSlugs(), areas: await listAreas() }))
   .get('/food-partners', async (c) => c.json(await listFoodPartners(true)))
   .get('/hostels/:slug', async (c) => c.json(await publicHostelBySlug(c.req.param('slug'))))
+  .post('/hostels/:slug/view', async (c) => {
+    await recordView(c.req.param('slug'));
+    return c.json({ ok: true as const });
+  })
   .get('/hostels/:slug/reviews', async (c) => {
     const { page } = parseQuery(c, z.object({ page: z.coerce.number().int().min(1).max(100).default(1) }));
     const h = await liveHostel(c.req.param('slug'));

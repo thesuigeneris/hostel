@@ -25,6 +25,7 @@ import { parseBody, parseQuery } from '../lib/validate';
 import { type AppEnv, requireAuth } from '../middleware/auth';
 import { hostelIdsOwnedBy, ownedHostel } from '../services/access';
 import { openReports, ownerIssues } from '../services/community';
+import { ownerInsights } from '../services/insights';
 import { copyLastWeek, headcount, ownerMenu, saveMenu, subscribers } from '../services/food';
 import {
   addPhoto,
@@ -142,6 +143,7 @@ export const ownerRoutes = new Hono<AppEnv>()
 
   // Issues, reviews and reports across the owner's hostels.
   .get('/owner/issues', async (c) => c.json(await ownerIssues(c.get('user'))))
+  .get('/owner/hostels/:id/insights', async (c) => c.json(await ownerInsights(c.get('user'), c.req.param('id'))))
   .get('/owner/reports', async (c) => c.json(await openReports({ hostelIds: await hostelIdsOwnedBy(c.get('user').id) })))
   .get('/owner/hostels/:id/reviews', async (c) => {
     const h = await ownedHostel(c.get('user'), c.req.param('id'));

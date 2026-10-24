@@ -16,6 +16,7 @@ import {
   moderatePost,
   reportContent,
   reportIssue,
+  setPostLike,
   toggleUpvote,
   updateIssue,
 } from '../services/community';
@@ -51,6 +52,8 @@ export const residentRoutes = new Hono<AppEnv>()
     await requireMember(c.get('user'), c.req.param('id'));
     return c.json(await residentDirectory(c.req.param('id')));
   })
+  .put('/posts/:id/like', async (c) => c.json(await setPostLike(c.get('user'), c.req.param('id'), true)))
+  .delete('/posts/:id/like', async (c) => c.json(await setPostLike(c.get('user'), c.req.param('id'), false)))
   .post('/posts/:id/comments', async (c) => {
     const { body } = await parseBody(c, commentInputSchema);
     return c.json(await addComment(c.get('user'), c.req.param('id'), body), 201);
