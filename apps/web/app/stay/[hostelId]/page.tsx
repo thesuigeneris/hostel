@@ -1,4 +1,4 @@
-import { ApiError, type IssueView } from '@hostels/shared';
+import { ApiError, type IssueView, POST_KINDS } from '@hostels/shared';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
@@ -6,12 +6,12 @@ import { Feed, IssueForm, IssueList } from '@/components/Community';
 import { SubmitButton } from '@/components/SubmitButton';
 import { Back, Card, cx, Empty, Field, Flash, PageHeader, Select, Textarea } from '@/components/ui';
 import { api, requireUser } from '@/lib/api';
-import { dateLabel, SHARING_LABEL } from '@/lib/format';
+import { dateLabel, SHARING_LABEL, titleCase } from '@/lib/format';
 import { directoryAction, reviewAction } from '../actions';
 
 export const metadata: Metadata = { title: 'My hostel', robots: { index: false } };
 
-type Props = { params: Promise<{ hostelId: string }>; searchParams: Promise<{ tab?: string; show?: string; error?: string; ok?: string }> };
+type Props = { params: Promise<{ hostelId: string }>; searchParams: Promise<{ tab?: string; show?: string; kind?: string; error?: string; ok?: string }> };
 
 const ISSUE_FILTERS = [
   { id: 'active', label: 'Not fixed yet', match: (i: IssueView) => i.status !== 'resolved' && i.status !== 'closed' },
@@ -55,7 +55,20 @@ export default async function StayHostelPage({ params, searchParams }: Props) {
     if (!active) body = <Empty title="The community board is for current residents" />;
     else {
       const posts = await client.resident.feed(hostelId).catch((e) => (e instanceof ApiError && e.code === 'plan_required' ? null : Promise.reject(e)));
-      body = posts ? <Feed hostelId={hostelId} posts={posts} back={path} /> : <Empty title="This hostel hasn't turned on the community board yet">You can still report issues.</Empty>;
+      const kind = POST_KINDS.find((k) => k === q.kind);
+      const shown = posts && kind ? posts.filter((p) => p.kind === kind) : posts;
+      body = shown ? (
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-1 text-sm">
+            {[undefined, ...POST_KINDS].map((k) => (
+              <Link key={k ?? 'all'} href={`/stay/${hostelId}?tab=community${k ? `&kind=${k}` : ''}`} className={cx('rounded-lg px-3 py-1 no-underline', k === kind ? 'bg-brand text-white' : 'text-ink-soft hover:bg-brand-soft')}>
+                {k ? titleCase(k) : 'All'}
+              </Link>
+            ))}
+          </div>
+          <Feed hostelId={hostelId} posts={shown} back={kind ? `${path}&kind=${kind}` : path} />
+        </div>
+      ) : <Empty title="This hostel hasn't turned on the community board yet">You can still report issues.</Empty>;
     }
   } else if (tab === 'issues') {
     const issues = active ? await client.resident.issues(hostelId) : [];
