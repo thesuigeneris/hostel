@@ -38,7 +38,7 @@ export default async function IssuePage({ params, searchParams }: Props) {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
-      <PageHeader title={issue.title} subtitle={<>{titleCase(issue.category)} · reported by {issue.reporter?.name ?? 'a resident'} on {dateLabel(issue.createdAt)}</>} actions={<StatusBadge status={issue.status} />} />
+      <PageHeader title={issue.title} subtitle={<>{titleCase(issue.category)} · reported by {issue.reporter?.name ?? 'a resident'} on {dateLabel(issue.createdAt)}</>} actions={<StatusBadge kind="issue" status={issue.status} />} />
       <Flash error={q.error} ok={q.ok} />
       <Card>
         {issue.description && <p className="whitespace-pre-line text-sm">{issue.description}</p>}
@@ -64,7 +64,7 @@ export default async function IssuePage({ params, searchParams }: Props) {
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{u.author}</span>
               {u.byOwner && <Badge tone="green">Hostel</Badge>}
-              {u.toStatus && <span className="text-ink-muted">moved it to <StatusBadge status={u.toStatus} /></span>}
+              {u.toStatus && <span className="text-ink-muted">moved it to <StatusBadge kind="issue" status={u.toStatus} /></span>}
               <span className="text-xs text-ink-muted">{timeAgo(u.createdAt)}</span>
             </div>
             {u.message && <p className="mt-1 whitespace-pre-line">{u.message}</p>}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cx } from './ui';
 
 /**
@@ -9,6 +9,12 @@ import { cx } from './ui';
  */
 export function Photo({ src, alt, className, eager }: { src: string | null; alt: string; className?: string; eager?: boolean }) {
   const [failed, setFailed] = useState(false);
+  const img = useRef<HTMLImageElement>(null);
+  // An image that failed before hydration fired its error event before React was listening.
+  useEffect(() => {
+    const el = img.current;
+    if (el?.complete && el.naturalWidth === 0) setFailed(true);
+  }, []);
   if (!src || failed) {
     return (
       <div role={alt ? 'img' : undefined} aria-label={alt || undefined} className={cx('grid place-items-center bg-brand-soft', className)}>
@@ -20,6 +26,6 @@ export function Photo({ src, alt, className, eager }: { src: string | null; alt:
   }
   return (
     // Plain <img>: photos come from owners' uploads on any host, and next/image would need every host allow-listed.
-    <img src={src} alt={alt} loading={eager ? 'eager' : 'lazy'} decoding="async" onError={() => setFailed(true)} className={className} />
+    <img ref={img} src={src} alt={alt} loading={eager ? 'eager' : 'lazy'} decoding="async" onError={() => setFailed(true)} className={className} />
   );
 }

@@ -11,6 +11,13 @@ export const metadata: Metadata = { title: 'My plan', robots: { index: false } }
 
 type Props = { searchParams: Promise<{ error?: string; ok?: string }> };
 
+/** What happens next with a visit request, in the visitor's words. */
+const VISIT_NEXT: Record<string, string> = {
+  new: 'Sent. The hostel will call you to confirm a time.',
+  contacted: 'The hostel has been in touch about this visit.',
+  closed: 'This request is closed. Request again from the hostel page if you still want to visit.',
+};
+
 export default async function AccountPage({ searchParams }: Props) {
   const q = await searchParams;
   const user = await requireUser('/account');
@@ -55,7 +62,7 @@ export default async function AccountPage({ searchParams }: Props) {
                       <Link href={`/hostels/${mine.hostel.slug}`} className="text-lg font-semibold">{mine.hostel.name}</Link>
                       <div className="text-sm text-ink-soft">{mine.hostel.area} · {SHARING_LABEL[mine.roomType.sharing]} · {planLabel(sub.mealPlan)}{sub.mealPlan !== 'none' && ` (${sub.diet})`}</div>
                     </div>
-                    <StatusBadge status={sub.status} />
+                    <StatusBadge kind="subscription" status={sub.status} />
                   </div>
                   <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
                     <div><div className="text-ink-muted">Member since</div><div className="font-medium">{dateLabel(sub.startDate)}</div></div>
@@ -143,7 +150,7 @@ export default async function AccountPage({ searchParams }: Props) {
                     <Td>{rupees(i.foodAmount)}</Td>
                     <Td>{i.creditAmount ? `−${rupees(i.creditAmount)}` : '—'}</Td>
                     <Td className="font-medium">{rupees(i.totalAmount)}</Td>
-                    <Td><StatusBadge status={i.isOverdue ? 'overdue' : i.status} /></Td>
+                    <Td><StatusBadge kind="invoice" status={i.isOverdue ? 'overdue' : i.status} /></Td>
                     <Td>{i.status === 'due' && <Link href={`/pay/${i.id}`}>Pay</Link>}</Td>
                   </tr>
                 ))}
@@ -156,12 +163,13 @@ export default async function AccountPage({ searchParams }: Props) {
             {visits.length ? (
               <div className="space-y-2">
                 {visits.map((v) => (
-                  <Card key={v.id} className="flex items-center justify-between p-4">
+                  <Card key={v.id} className="flex items-start justify-between gap-3 p-4">
                     <div>
                       <Link href={`/hostels/${v.hostel.slug}`} className="font-medium">{v.hostel.name}</Link>
                       <div className="text-sm text-ink-soft">{dateLabel(v.preferredDate)}{v.message && ` · ${v.message}`}</div>
+                      <div className="mt-1 text-xs text-ink-muted">{VISIT_NEXT[v.status]}</div>
                     </div>
-                    <StatusBadge status={v.status} />
+                    <StatusBadge kind="visit" status={v.status} />
                   </Card>
                 ))}
               </div>

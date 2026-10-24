@@ -35,7 +35,7 @@ export default async function AdminListings({ searchParams }: Props) {
                   <div className="text-sm text-ink-soft">{h.area} · {GENDER_LABEL[h.genderType]} · +91 {h.contactPhone} · created {dateLabel(h.createdAt)}</div>
                   <div className="text-sm text-ink-soft">{h.address}</div>
                 </div>
-                <StatusBadge status={h.status} />
+                <StatusBadge kind="hostel" status={h.status} />
               </div>
               <div className="mt-3 flex gap-2 overflow-x-auto">
                 {h.photos.map((p) => <img key={p.id} src={p.url} alt={h.name} className="h-24 w-32 flex-none rounded-lg object-cover" />)}

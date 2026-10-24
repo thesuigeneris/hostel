@@ -57,7 +57,7 @@ export default async function RentPage({ params, searchParams }: Props) {
                   <Input name="note" defaultValue={r.note} maxLength={300} className="h-8" aria-label="Note" />
                 </form>
               </Td>
-              <Td><StatusBadge status={r.status === 'unpaid' ? 'due' : r.status} /></Td>
+              <Td><StatusBadge kind="invoice" status={r.status === 'unpaid' ? 'due' : r.status} /></Td>
               <Td><SubmitButton form={`rent-${r.residencyId}`} size="sm" variant="secondary">Save</SubmitButton></Td>
             </tr>
           ))}

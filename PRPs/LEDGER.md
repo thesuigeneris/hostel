@@ -57,8 +57,10 @@ Gates run at `d774465`:
 | UI-3D | Lazy 3D hero with fallbacks | `components/hero/*` | `design.spec.ts` › 3D renders / reduced motion one frame / no WebGL static / three only on `/` | verified (batch 1), including › lost context falls back to the illustration (`WEBGL_lose_context`) |
 | UI-MOTION | Reduced-motion policy, no global animation cost | `components/motion.tsx`, `MotionProvider.tsx`, `globals.css` | reduced-motion test; bundle 106 → 108 kB on `/` | verified (batch 1) |
 | UI-RESPONSIVE | No overflow at 360–1440 | layout fixes on `/account`, `/hostels/[slug]` | `design.spec.ts` overflow ×5 widths; `baseline.mjs` 45/45 | verified for the swept routes; remaining workspace routes in batch 4 |
-| UI-SEARCH | Filter drawer, chips, pagination, no-results recovery | | | planned (batch 2) |
-| UI-PROPERTY | Gallery, price breakdown, availability freshness, axe fixes | | | planned (batch 2) |
+| UI-SEARCH | Filter drawer, chips, pagination, no-results recovery | `SearchFilters`, `FilterDrawer` (native modal dialog), `SearchResults`, `SearchViewToggle`, `Pagination` | `e2e/search.spec.ts` › phone filter sheet, › desktop inline + clear all, › no results, › pagination, › map text list | verified (batch 2) |
+| UI-PROPERTY | Gallery, price breakdown, availability freshness, axe fixes | `PhotoGallery`, `app/hostels/[slug]/page.tsx`; API `room_types.beds_updated_at` (migration 0005) | `listings.test.ts` › bed count freshness (mutation-checked); `search.spec.ts` › property page, › gallery, › sticky bar, › axe on property/area/map | verified (batch 2) |
+| UI-STATUS | Plain-language status labels per record type | `StatusBadge kind` in all 20 call sites; visit next-step text on `/account` | typecheck; existing e2e flows | implemented, visual check of every workspace pending (batch 4) |
+| UI-CACHE | Public pages reflect approvals and edits immediately (found during execution) | `publicApi` tag + `revalidateTag` in `run()` | `personas.spec.ts` › 2, `golden-path.spec.ts` (failed on stale cache before the fix) | verified (batch 2) |
 | UI-OWNERS | `/for-owners` and onboarding stepper | | | planned (batch 3) |
 | UI-WORKSPACES | Owner, resident, admin workspaces | | | planned (batch 4) |
 

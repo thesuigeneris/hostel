@@ -48,7 +48,7 @@ export default async function StayPage({ searchParams }: Props) {
                 <div className="text-lg font-semibold">{s.hostel.name}</div>
                 <div className="text-sm text-ink-soft">{s.hostel.area} · since {dateLabel(s.startDate)}</div>
               </div>
-              <StatusBadge status={s.status} />
+              <StatusBadge kind="residency" status={s.status} />
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <LinkButton href={`/stay/${s.hostel.id}`} size="sm">Open</LinkButton>

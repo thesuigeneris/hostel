@@ -26,7 +26,7 @@ export default async function EscalatedIssues() {
                   <span className="font-medium">{i.title}</span>
                   <span className="flex items-center gap-2">
                     <Badge tone="red">{i.reason === 'unacknowledged' ? 'No response' : 'Not fixed'} · {age(i.ageHours)}</Badge>
-                    <StatusBadge status={i.status} />
+                    <StatusBadge kind="issue" status={i.status} />
                   </span>
                 </div>
                 <div className="mt-1 text-xs text-ink-muted">

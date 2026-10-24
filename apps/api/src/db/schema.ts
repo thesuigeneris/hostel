@@ -172,6 +172,8 @@ export const roomTypes = pgTable(
     advanceAmount: integer('advance_amount').notNull().default(0),
     totalBeds: integer('total_beds').notNull(),
     bedsAvailable: integer('beds_available').notNull(),
+    /** When the bed counts last changed: an owner edit, or a bed taken or freed by a subscription. Null for rows from before this was recorded. */
+    bedsUpdatedAt: timestamp('beds_updated_at', { withTimezone: true }),
   },
   (t) => [
     index('room_types_hostel_idx').on(t.hostelId),

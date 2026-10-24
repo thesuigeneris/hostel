@@ -9,10 +9,14 @@ import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from 're
 const pin = (verified: boolean) =>
   L.divIcon({
     className: '',
-    html: `<div style="width:18px;height:18px;border-radius:9999px;border:3px solid white;box-shadow:0 1px 4px rgba(0,0,0,.35);background:${verified ? '#1F5C46' : '#E08A2E'}"></div>`,
-    iconSize: [18, 18],
-    iconAnchor: [9, 9],
+    // A 28px target (WCAG 2.2 target size) around an 18px dot.
+    html: `<div style="width:28px;height:28px;display:grid;place-items:center"><div style="width:18px;height:18px;border-radius:9999px;border:3px solid white;box-shadow:0 1px 4px rgba(0,0,0,.35);background:${verified ? '#1F5C46' : '#E08A2E'}"></div></div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
   });
+
+// OpenStreetMap's licence asks for a link to its copyright page.
+const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 export type MapPoint = { id: string; lat: number; lng: number; label: string; href?: string; verified?: boolean; sub?: string };
 
@@ -29,9 +33,9 @@ export function HostelMap({ points, height = 420, zoom = 13 }: { points: MapPoin
   return (
     <div style={{ height }} className="overflow-hidden rounded-2xl border border-line">
       <MapContainer center={center} zoom={zoom} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }}>
-        <TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <TileLayer attribution={OSM_ATTRIBUTION} url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
         {points.map((p) => (
-          <Marker key={p.id} position={[p.lat, p.lng]} icon={pin(p.verified ?? false)}>
+          <Marker key={p.id} position={[p.lat, p.lng]} icon={pin(p.verified ?? false)} title={p.label} alt={p.label}>
             <Popup>
               {p.href ? <a href={p.href}>{p.label}</a> : p.label}
               {p.sub && <div>{p.sub}</div>}
@@ -55,10 +59,11 @@ export function PinPicker({ lat, lng, onChange }: { lat: number; lng: number; on
   return (
     <div className="h-72 overflow-hidden rounded-2xl border border-line">
       <MapContainer center={[lat, lng]} zoom={15} style={{ height: '100%', width: '100%' }}>
-        <TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <TileLayer attribution={OSM_ATTRIBUTION} url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
         <Marker
           position={[lat, lng]}
           icon={icon}
+          title="Hostel location: drag to move"
           draggable
           eventHandlers={{ dragend: (e) => { const p = (e.target as L.Marker).getLatLng(); onChange(p.lat, p.lng); } }}
         />

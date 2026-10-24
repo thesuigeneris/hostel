@@ -23,7 +23,7 @@ export default async function AdminFood({ searchParams }: { searchParams: Promis
           <tr key={p.id}>
             <Td className="font-medium">{p.name}</Td>
             <Td>{p.cuisine}</Td>
-            <Td><StatusBadge status={p.active ? 'active' : 'ended'} /></Td>
+            <Td><StatusBadge kind="food" status={p.active ? 'active' : 'ended'} /></Td>
             <Td>
               <form action={toggleFoodPartnerAction}>
                 <input type="hidden" name="id" value={p.id} /><input type="hidden" name="active" value={p.active ? '0' : '1'} />

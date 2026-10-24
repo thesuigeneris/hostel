@@ -22,5 +22,5 @@ export function toHostel(r: Row<typeof schema.hostels>): Hostel {
 }
 
 export function toRoomType(r: Row<typeof schema.roomTypes>): RoomType {
-  return { ...r };
+  return { ...r, bedsUpdatedAt: r.bedsUpdatedAt?.toISOString() ?? null };
 }

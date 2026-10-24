@@ -50,7 +50,7 @@ export default async function KitchenPage({ params, searchParams }: Props) {
                 <Td>{SHARING_LABEL[s.sharing]}</Td>
                 <Td>{planLabel(s.subscription.mealPlan)}{s.subscription.mealPlan !== 'none' && ` · ${s.subscription.diet}`}</Td>
                 <Td>{dateLabel(s.subscription.startDate)}</Td>
-                <Td><StatusBadge status={s.subscription.cancelAt ? 'cancelled' : s.subscription.status} /></Td>
+                <Td><StatusBadge kind="subscription" status={s.subscription.cancelAt ? 'cancelled' : s.subscription.status} /></Td>
               </tr>
             ))}
           </Table>

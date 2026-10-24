@@ -36,6 +36,13 @@
       "when": 1792840259796,
       "tag": "0004_auth_modes",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792843580308,
+      "tag": "0005_beds_updated_at",
+      "breakpoints": true
     }
   ]
 }

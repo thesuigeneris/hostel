@@ -1,7 +1,8 @@
 import 'server-only';
 import { ApiError } from '@hostels/shared';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { PUBLIC_DATA_TAG } from './api';
 
 /** A same-site path to come back to; anything else falls back to the home page. */
 export function safePath(value: FormDataEntryValue | string | null | undefined, fallback = '/'): string {
@@ -34,6 +35,8 @@ export async function run<T>(back: string, fn: () => Promise<T>, opts: { ok?: st
     throw e;
   }
   revalidatePath(back.split('?')[0]!);
+  // Approvals, edits, subscriptions and reviews all change what public pages show.
+  revalidateTag(PUBLIC_DATA_TAG);
   if (opts.to) redirect(typeof opts.to === 'function' ? opts.to(result) : opts.to);
   redirect(opts.ok ? withParam(back, 'ok', opts.ok) : back);
 }

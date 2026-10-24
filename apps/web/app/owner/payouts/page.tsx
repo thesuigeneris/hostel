@@ -24,7 +24,7 @@ export default async function PayoutsPage() {
             <tr key={p.id}>
               <Td>{monthLabel(p.periodMonth)}</Td><Td>{p.hostelName}</Td><Td>{rupees(p.grossAmount)}</Td><Td>−{rupees(p.platformFee)}</Td>
               <Td className="font-medium">{rupees(p.netAmount)}</Td>
-              <Td><StatusBadge status={p.status} />{p.paidAt && <div className="text-xs text-ink-muted">{dateLabel(p.paidAt)}</div>}</Td>
+              <Td><StatusBadge kind="payout" status={p.status} />{p.paidAt && <div className="text-xs text-ink-muted">{dateLabel(p.paidAt)}</div>}</Td>
             </tr>
           ))}
         </Table>

@@ -102,8 +102,8 @@ test('owner to admin to tenant to resident', async ({ browser }) => {
   await test.step('a tenant subscribes and pays', async () => {
     const tenant = await login(browser, tenantPhone);
     await tenant.goto(`/hostels?q=${encodeURIComponent(hostelName)}`);
-    await tenant.getByRole('link', { name: new RegExp(hostelName) }).first().click();
-    await expect(tenant.getByText('✓ Verified partner · No advance')).toBeVisible();
+    await tenant.getByRole('link', { name: hostelName, exact: true }).click();
+    await expect(tenant.getByText('Verified partner · no advance')).toBeVisible();
     slug = new URL(tenant.url()).pathname.split('/').pop()!;
     // The photo the owner uploaded is served by the API and loads on the website.
     await expect.poll(() => tenant.locator('main img').first().evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);

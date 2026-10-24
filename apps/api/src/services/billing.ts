@@ -38,7 +38,7 @@ export function toInvoice(r: InvoiceRow): Invoice {
 export async function reserveBed(tx: Tx, roomTypeId: string): Promise<boolean> {
   const rows = await tx
     .update(schema.roomTypes)
-    .set({ bedsAvailable: sql`${schema.roomTypes.bedsAvailable} - 1` })
+    .set({ bedsAvailable: sql`${schema.roomTypes.bedsAvailable} - 1`, bedsUpdatedAt: clock.now() })
     .where(and(eq(schema.roomTypes.id, roomTypeId), gt(schema.roomTypes.bedsAvailable, 0)))
     .returning({ id: schema.roomTypes.id });
   return rows.length === 1;
@@ -47,7 +47,7 @@ export async function reserveBed(tx: Tx, roomTypeId: string): Promise<boolean> {
 export async function releaseBed(tx: Tx, roomTypeId: string) {
   await tx
     .update(schema.roomTypes)
-    .set({ bedsAvailable: sql`least(${schema.roomTypes.totalBeds}, ${schema.roomTypes.bedsAvailable} + 1)` })
+    .set({ bedsAvailable: sql`least(${schema.roomTypes.totalBeds}, ${schema.roomTypes.bedsAvailable} + 1)`, bedsUpdatedAt: clock.now() })
     .where(eq(schema.roomTypes.id, roomTypeId));
 }
 

@@ -53,7 +53,7 @@ export default async function ResidentsPage({ params, searchParams }: Props) {
             <Td>{room(r.roomTypeId) ? SHARING_LABEL[room(r.roomTypeId)!.sharing] : '—'}</Td>
             <Td>{rupees(r.monthlyRent)}</Td>
             <Td>{dateLabel(r.startDate)}</Td>
-            <Td><span className="flex flex-wrap gap-1"><StatusBadge status={r.status} />{r.source === 'subscription' && <Badge tone="green">Subscriber</Badge>}</span></Td>
+            <Td><span className="flex flex-wrap gap-1"><StatusBadge kind="residency" status={r.status} />{r.source === 'subscription' && <Badge tone="green">Subscriber</Badge>}</span></Td>
             <Td>
               {r.source === 'owner' && (
                 <form action={endResidentAction} className="flex items-center gap-2">
@@ -73,7 +73,7 @@ export default async function ResidentsPage({ params, searchParams }: Props) {
         <details>
           <summary className="cursor-pointer text-sm text-ink-soft">Past residents ({past.length})</summary>
           <ul className="mt-2 space-y-1 text-sm">
-            {past.map((r) => <li key={r.id}>{r.name || `+91 ${r.phone}`} · {dateLabel(r.startDate)} – {dateLabel(r.endDate)} · <StatusBadge status={r.status} /></li>)}
+            {past.map((r) => <li key={r.id}>{r.name || `+91 ${r.phone}`} · {dateLabel(r.startDate)} – {dateLabel(r.endDate)} · <StatusBadge kind="residency" status={r.status} /></li>)}
           </ul>
         </details>
       )}

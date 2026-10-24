@@ -39,7 +39,7 @@ export default async function OwnerHome() {
                     <Link href={`/owner/hostels/${h.id}`} className="text-lg font-semibold">{h.name}</Link>
                     <div className="text-sm text-ink-soft">{h.area}</div>
                   </div>
-                  <StatusBadge status={h.status} />
+                  <StatusBadge kind="hostel" status={h.status} />
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Badge tone={h.plan.effective === 'free' ? 'gray' : 'green'}>{OWNER_PLANS[h.plan.effective].label} plan</Badge>

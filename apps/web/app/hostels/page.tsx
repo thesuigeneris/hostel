@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { Suspense } from 'react';
 import { NearMeButton } from '@/components/NearMe';
-import { type SearchParams, SearchFilters } from '@/components/SearchFilters';
+import { AppliedFilters, appliedFilters, type SearchParams, SearchFilters, searchHref } from '@/components/SearchFilters';
 import { SearchResults } from '@/components/SearchResults';
+import { SearchViewToggle } from '@/components/SearchViewToggle';
 import { Flash } from '@/components/ui';
 import { publicApi } from '@/lib/api';
 
@@ -19,31 +19,35 @@ export default async function HostelsPage({ searchParams }: { searchParams: Prom
   let error: string | undefined;
   const result = await publicApi(30)
     .hostels.search(filters)
-    .catch((e: Error) => {
-      error = e.message;
-      return { items: [], total: 0, page: 1, limit: 20 };
+    .catch(() => {
+      error = 'We could not run this search. Check the filters, or clear them and try again.';
+      return { items: [], total: 0, page: Number(q.page) || 1, limit: 20 };
     });
-  const toggle = (view: string) => {
-    const p = new URLSearchParams(Object.entries({ ...q, view }).filter((e): e is [string, string] => !!e[1]));
-    return `/hostels?${p.toString()}`;
-  };
+  const base = '/hostels';
+  const where = q.area ? ` in ${q.area}` : ' in Hyderabad';
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">{result.total} hostels{q.area ? ` in ${q.area}` : ' in Hyderabad'}</h1>
-        <div className="flex gap-2">
+    <div className="mx-auto max-w-content px-4 py-8">
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="font-display text-3xl font-semibold tracking-tight">
+            {error ? `Hostels${where}` : `${result.total} ${result.total === 1 ? 'hostel' : 'hostels'}${where}`}
+          </h1>
+          <p className="mt-1 text-sm text-ink-soft">Rent and free beds are as reported by each hostel. Verified partners take no advance.</p>
+        </div>
+        <div className="flex items-start gap-2">
           <Suspense>
             <NearMeButton />
           </Suspense>
-          <Link href={toggle('list')} className={`h-9 rounded-xl px-3 text-sm leading-9 no-underline ${q.view !== 'map' ? 'bg-brand text-white' : 'bg-surface text-ink-soft'}`}>List</Link>
-          <Link href={toggle('map')} className={`h-9 rounded-xl px-3 text-sm leading-9 no-underline ${q.view === 'map' ? 'bg-brand text-white' : 'bg-surface text-ink-soft'}`}>Map</Link>
+          <SearchViewToggle q={q} base={base} />
         </div>
       </div>
-      <SearchFilters q={q} />
-      <div className="mt-6">
+      <SearchFilters q={q} action={base} />
+      <AppliedFilters items={appliedFilters(q, base)} clearHref={searchHref(base, { view: q.view })} />
+      <section aria-labelledby="results-heading" className="mt-6">
+        <h2 id="results-heading" className="sr-only">Results</h2>
         <Flash error={error} />
-        <SearchResults result={result} q={q} base="/hostels" />
-      </div>
+        {!error && <SearchResults result={result} q={q} base={base} />}
+      </section>
     </div>
   );
 }

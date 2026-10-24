@@ -32,7 +32,7 @@ export default async function PayPage({ params, searchParams }: Props) {
           <span className="text-sm text-ink-muted">
             {dateLabel(page.invoice.periodStart)} – {dateLabel(page.invoice.periodEnd)}
           </span>
-          <StatusBadge status={page.invoice.isOverdue ? 'overdue' : page.status} />
+          <StatusBadge kind="invoice" status={page.invoice.isOverdue ? 'overdue' : page.status} />
         </div>
         {tenantBill && (
           <dl className="mt-4 space-y-2 text-sm">

@@ -25,7 +25,7 @@ export default async function OwnerHostelLayout({ children, params }: { children
       <div className="mb-4 text-sm"><Link href="/owner">← All hostels</Link></div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">{h.name}</h1>
-        <StatusBadge status={h.status} />
+        <StatusBadge kind="hostel" status={h.status} />
         <Badge tone={eff === 'free' ? 'gray' : 'green'}>{OWNER_PLANS[eff].label}</Badge>
         {h.plan.suspended && <Badge tone="red">Paused: bill overdue</Badge>}
         {h.status === 'live' && <Link href={`/hostels/${h.slug}`} className="text-sm">View public page</Link>}

@@ -100,6 +100,8 @@ export type RoomType = {
   advanceAmount: number;
   totalBeds: number;
   bedsAvailable: number;
+  /** ISO time the bed counts last changed (owner edit, or a subscription taking or freeing a bed); null if not recorded yet. */
+  bedsUpdatedAt: string | null;
 };
 
 export type HostelPhoto = { id: string; hostelId: string; url: string; sortOrder: number };

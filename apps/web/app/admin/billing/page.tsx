@@ -33,7 +33,7 @@ export default async function AdminBilling() {
               <Td>{s.hostelName}</Td>
               <Td>{planLabel(s.subscription.mealPlan)}</Td>
               <Td>{dateLabel(s.subscription.startDate)}{s.subscription.cancelAt && <div className="text-xs text-ink-muted">ends {dateLabel(s.subscription.cancelAt)}</div>}</Td>
-              <Td><StatusBadge status={s.subscription.status} /></Td>
+              <Td><StatusBadge kind="subscription" status={s.subscription.status} /></Td>
             </tr>
           ))}
         </Table>
@@ -41,7 +41,7 @@ export default async function AdminBilling() {
       <h2 className="mb-3 text-lg font-semibold">Scheduled moves ({moves.filter((m) => m.status === 'scheduled').length})</h2>
       <div className="mb-8">
         <Table head={['Move date', 'Status', 'Created']}>
-          {moves.map((m) => <tr key={m.id}><Td>{dateLabel(m.moveDate)}</Td><Td><StatusBadge status={m.status} /></Td><Td>{dateLabel(m.createdAt)}</Td></tr>)}
+          {moves.map((m) => <tr key={m.id}><Td>{dateLabel(m.moveDate)}</Td><Td><StatusBadge kind="move" status={m.status} /></Td><Td>{dateLabel(m.createdAt)}</Td></tr>)}
         </Table>
       </div>
       <h2 className="mb-3 text-lg font-semibold">Owner plan bills</h2>
@@ -49,7 +49,7 @@ export default async function AdminBilling() {
         {ownerBills.map((b) => (
           <tr key={b.id}>
             <Td>{b.hostelName}</Td><Td>{OWNER_PLANS[b.plan].label}</Td><Td>{dateLabel(b.periodStart)} – {dateLabel(b.periodEnd)}</Td><Td>{rupees(b.amount)}</Td>
-            <Td><StatusBadge status={b.isOverdue ? 'overdue' : b.status} /></Td>
+            <Td><StatusBadge kind="invoice" status={b.isOverdue ? 'overdue' : b.status} /></Td>
           </tr>
         ))}
       </Table>

@@ -26,7 +26,7 @@ export function IssueList({ issues, emptyText = 'No issues reported. Nice.' }: {
               <span className="font-medium">{i.title}</span>
               <span className="flex items-center gap-2">
                 {i.needsResponse && <Badge tone="red">Waiting on hostel</Badge>}
-                <StatusBadge status={i.status} />
+                <StatusBadge kind="issue" status={i.status} />
               </span>
             </div>
             <div className="mt-1 text-xs text-ink-muted">

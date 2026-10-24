@@ -161,3 +161,23 @@ npm packages only (MIT, OFL, MPL). ₹0.
   - the Leaflet marker has no accessible name;
   - the Leaflet attribution link is distinguished by colour only.
 - Listing photos are hot-linked placeholders, and external hosts are blocked in the sandbox, so screenshots show the fallback. This belongs to PRP-06.
+
+### Batch 2: search, listing, property page (done)
+
+- **Search.** One GET form. Search text and area are always visible. The other filters sit inline on large screens and open as a bottom sheet on phones: a native `<dialog>`, so focus is trapped, Escape works and the page behind is inert. With JavaScript off, the fields render inline. Removable chips, "Clear all", a windowed pagination, and recovery for "no results", "past the last page" and "rent from > rent up to". "Distance" is only offered when a location is set.
+- **Cards and map.** Each card is one link named after the hostel. Map pins have accessible names and 28 px targets. The OSM attribution links to the copyright page. The map view lists every result as a text link below the map.
+- **Property page.**
+  - Gallery: swipe on phones, a grid on larger screens, and a keyboard lightbox that returns focus. Failed photos fall back to a placeholder, including images that fail before hydration (a real bug, caught by the test).
+  - Rooms: rent, advance, and bed freshness ("Updated 3 d ago").
+  - An example monthly bill, computed with `computeBill`.
+  - "What Verified partner means here", covering both what is checked and what is not covered.
+  - A sticky phone action bar that stops above the footer.
+- **API (additive).** `RoomType.bedsUpdatedAt` (nullable; null for rows from before it was recorded). Set by owner bed edits, `reserveBed` and `releaseBed`, and the demo seed. Migration `0005_beds_updated_at`.
+- **Found and fixed.**
+  - Public data was cached for 30 s even after an admin approved or verified a listing. `run()` now clears a `public-data` cache tag after every successful mutation.
+  - Filter chips, the view toggle and pagination are plain links. Next's client router dropped a click that raced its own prefetch, as seen in a trace.
+- **Validation.**
+  - `bunx playwright test` (fresh DB): 30/30.
+  - API tests: 99/99, with a mutation check on `reserveBed`.
+  - Typecheck 4/4, lint clean.
+  - Axe on property, area, map and empty pages. Pin-only target-size findings are exempt under WCAG 2.5.8's equivalent-control rule: the text list.

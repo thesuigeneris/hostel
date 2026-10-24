@@ -14,9 +14,12 @@ export async function api() {
   return createApiClient(API_URL, () => jar.get(SESSION_COOKIE)?.value, (input, init) => fetch(input, { ...init, cache: 'no-store' }));
 }
 
+/** Cache tag on every public read; `run` clears it after any change, so listings never lag an approval or edit. */
+export const PUBLIC_DATA_TAG = 'public-data';
+
 /** Public data with short caching, for pages that don't depend on who is looking. */
 export function publicApi(revalidate = 60) {
-  return createApiClient(API_URL, () => null, (input, init) => fetch(input, { ...init, next: { revalidate } }));
+  return createApiClient(API_URL, () => null, (input, init) => fetch(input, { ...init, next: { revalidate, tags: [PUBLIC_DATA_TAG] } }));
 }
 
 export const currentUser = cache(async (): Promise<User | null> => {

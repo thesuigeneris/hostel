@@ -153,6 +153,8 @@ async function seedData(db: DB, today: string) {
       advanceAmount: h.partner ? 0 : r.advance,
       totalBeds: r.beds,
       bedsAvailable: r.free,
+      // The demo's bed counts are written on the seed day, so that is when they were last updated.
+      bedsUpdatedAt: istInstant(today, 0),
     }));
     await db.insert(schema.roomTypes).values(rooms);
     created.push({ id: hostelId, partner: h.partner, foodAvailable: h.foodAvailable, rooms });

@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, test } from 'bun:test';
-import { admin, liveHostel, newOwner, newTenant } from './fixtures';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { setClock } from '../src/lib/clock';
+import { activeSubscriber, admin, liveHostel, newOwner, newTenant } from './fixtures';
 import { call, resetDb } from './helpers';
 
 let ownerToken: string;
@@ -209,5 +210,32 @@ describe('visit requests', () => {
     expect((await call('/me/visits', { token })).body[0].status).toBe('contacted');
     const stranger = await newOwner();
     expect((await call(`/owner/visits/${v.body.id}`, { token: stranger, method: 'PATCH', body: { status: 'closed' } })).status).toBe(404);
+  });
+});
+
+describe('bed count freshness', () => {
+  afterEach(() => setClock(null));
+
+  test('records when beds change: owner edits of bed counts and subscriptions, not other edits', async () => {
+    const { token: tenantToken } = await newTenant();
+    setClock('2026-11-02T04:30:00Z');
+    const { hostel, rooms } = await liveHostel(ownerToken, adminToken, { partner: true });
+    const roomId = rooms[0].id as string;
+    expect(rooms[0].bedsUpdatedAt).toBe('2026-11-02T04:30:00.000Z');
+
+    // A rent change is not a bed change.
+    setClock('2026-11-03T04:30:00Z');
+    const rent = await call(`/owner/rooms/${roomId}`, { token: ownerToken, method: 'PATCH', body: { monthlyRent: 11000 } });
+    expect(rent.body.bedsUpdatedAt).toBe('2026-11-02T04:30:00.000Z');
+
+    setClock('2026-11-04T04:30:00Z');
+    const beds = await call(`/owner/rooms/${roomId}`, { token: ownerToken, method: 'PATCH', body: { bedsAvailable: 4 } });
+    expect(beds.body.bedsUpdatedAt).toBe('2026-11-04T04:30:00.000Z');
+
+    // Taking a bed through a subscription updates it too, and the public page shows it.
+    setClock('2026-11-05T04:30:00Z');
+    await activeSubscriber(tenantToken, hostel.id, roomId);
+    const pub = await call(`/hostels/${hostel.slug}`);
+    expect(pub.body.roomTypes[0]).toMatchObject({ bedsAvailable: 3, bedsUpdatedAt: '2026-11-05T04:30:00.000Z' });
   });
 });

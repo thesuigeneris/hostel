@@ -86,9 +86,9 @@ test('1. owner lists a hostel; admin approves it and verifies the partner', asyn
 test('2. seeker finds the hostel, subscribes with no advance and pays', async ({ browser }) => {
   const visitor = await (await browser.newContext()).newPage();
   await visitor.goto(`/hostels?q=${encodeURIComponent(HOSTEL)}`);
-  await visitor.getByRole('link', { name: new RegExp(HOSTEL) }).first().click();
+  await visitor.getByRole('link', { name: HOSTEL, exact: true }).click();
   await expect(visitor).toHaveURL(new RegExp(`/hostels/${hostelSlug}`));
-  await expect(visitor.getByText('✓ Verified partner · No advance')).toBeVisible();
+  await expect(visitor.getByText('Verified partner · no advance')).toBeVisible();
   await visitor.getByRole('link', { name: 'Subscribe' }).click();
   // Signed-out visitors are sent to log in and come back to the subscribe page.
   await expect(visitor).toHaveURL(/\/login/);
@@ -176,7 +176,8 @@ test('4. resident reports an issue; owner acknowledges and resolves; resident co
   const visitor = await (await browser.newContext()).newPage();
   await visitor.goto(`/hostels/${home.slug}`);
   await expect(visitor.getByText(/Issue record, last \d+ days/)).toBeVisible();
-  await expect(visitor.getByText('issues reported').locator('xpath=preceding-sibling::div[1]')).toHaveText(String(before + 1));
+  // The figure is the <dd> paired with the "issues reported" <dt>.
+  await expect(visitor.locator('dt', { hasText: 'issues reported' }).locator('xpath=following-sibling::dd[1]')).toHaveText(String(before + 1));
   await expect(visitor.getByText(title)).toHaveCount(0);
   await visitor.context().close();
 });

@@ -113,7 +113,7 @@ export async function addRoomType(user: User, hostelId: string, input: z.output<
   const h = await ownedHostel(user, hostelId);
   const [row] = await getDb()
     .insert(schema.roomTypes)
-    .values({ ...input, id: newId('rmt'), hostelId: h.id, advanceAmount: h.partnerStatus === 'verified' ? 0 : input.advanceAmount })
+    .values({ ...input, id: newId('rmt'), hostelId: h.id, advanceAmount: h.partnerStatus === 'verified' ? 0 : input.advanceAmount, bedsUpdatedAt: clock.now() })
     .returning();
   return toRoomType(row!);
 }
@@ -133,6 +133,7 @@ export async function updateRoomType(user: User, roomTypeId: string, patch: Room
     throw new AppError('validation', 'Beds free cannot exceed total beds', 400, [{ path: 'bedsAvailable', message: 'Too many' }]);
   }
   if (hostel.partnerStatus === 'verified') next.advanceAmount = 0;
+  const bedsChanged = next.totalBeds !== room.totalBeds || next.bedsAvailable !== room.bedsAvailable;
   const [row] = await getDb()
     .update(schema.roomTypes)
     .set({
@@ -141,6 +142,7 @@ export async function updateRoomType(user: User, roomTypeId: string, patch: Room
       advanceAmount: next.advanceAmount,
       totalBeds: next.totalBeds,
       bedsAvailable: next.bedsAvailable,
+      ...(bedsChanged ? { bedsUpdatedAt: clock.now() } : {}),
     })
     .where(eq(schema.roomTypes.id, room.id))
     .returning();

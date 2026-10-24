@@ -51,14 +51,31 @@ export function Badge({ tone = 'gray', children, className }: { tone?: keyof typ
   return <span className={cx('inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium', BADGES[tone], className)}>{children}</span>;
 }
 
+/** Plain-language labels per record type, since the same word means different things ("pending" payout vs subscription). */
+const STATUS_LABELS = {
+  hostel: { draft: 'Draft', pending: 'In review', live: 'Live', rejected: 'Rejected' },
+  partner: { none: 'Not a partner', applied: 'Applied', verified: 'Verified', rejected: 'Not approved' },
+  visit: { new: 'Requested', contacted: 'Hostel contacted', closed: 'Closed' },
+  subscription: { pending: 'Awaiting payment', active: 'Active', cancelled: 'Cancelled', ended: 'Ended', expired: 'Expired, not paid' },
+  invoice: { due: 'Due', paid: 'Paid', void: 'Void', overdue: 'Overdue', unpaid: 'Due' },
+  move: { scheduled: 'Scheduled', completed: 'Done', cancelled: 'Cancelled' },
+  payout: { pending: 'Pending', paid: 'Paid' },
+  residency: { invited: 'Invited', active: 'Living here', ended: 'Moved out', declined: 'Declined' },
+  issue: { open: 'Open', acknowledged: 'Acknowledged', in_progress: 'In progress', resolved: 'Resolved', closed: 'Closed' },
+  food: { active: 'Active', ended: 'Inactive' },
+} satisfies Record<string, Record<string, string>>;
+export type StatusKind = keyof typeof STATUS_LABELS;
+
 /** Status shown as text plus colour, never colour alone. */
-export function StatusBadge({ status }: { status: string }) {
+export function StatusBadge({ status, kind }: { status: string; kind?: StatusKind }) {
   const tone: Record<string, keyof typeof BADGES> = {
-    live: 'green', verified: 'green', active: 'green', paid: 'green', resolved: 'green', closed: 'gray', contacted: 'green',
-    pending: 'food', applied: 'food', due: 'food', invited: 'food', acknowledged: 'food', in_progress: 'food', scheduled: 'food', new: 'food',
-    rejected: 'red', void: 'gray', expired: 'gray', cancelled: 'gray', ended: 'gray', declined: 'gray', draft: 'gray', open: 'red', overdue: 'red',
+    live: 'green', verified: 'green', active: 'green', paid: 'green', resolved: 'green', closed: 'gray', contacted: 'green', completed: 'green',
+    pending: 'food', applied: 'food', due: 'food', unpaid: 'food', invited: 'food', acknowledged: 'food', in_progress: 'food', scheduled: 'food', new: 'food',
+    rejected: 'red', void: 'gray', expired: 'gray', cancelled: 'gray', ended: 'gray', declined: 'gray', draft: 'gray', open: 'red', overdue: 'red', none: 'gray',
   };
-  return <Badge tone={tone[status] ?? 'gray'}>{status.replace(/_/g, ' ')}</Badge>;
+  const labels: Record<string, string> | undefined = kind ? STATUS_LABELS[kind] : undefined;
+  const label = labels?.[status] ?? status.replace(/_/g, ' ');
+  return <Badge tone={tone[status] ?? 'gray'}>{label}</Badge>;
 }
 
 /** "Verified partner" with what it actually means, so the badge never over-promises. */
@@ -189,7 +206,7 @@ export function Td({ className, ...rest }: ComponentProps<'td'>) {
   return <td className={cx('px-4 py-3 align-top', className)} {...rest} />;
 }
 
-/** Page links with a window around the current page, so 40 pages don't render 40 buttons. */
+/** Page links with a window around the current page, so 40 pages don't render 40 buttons. Plain links: a page change is a full load. */
 export function Pagination({ page, pages, href }: { page: number; pages: number; href: (page: number) => string }) {
   if (pages <= 1) return null;
   const nums = new Set([1, pages, page - 1, page, page + 1].filter((p) => p >= 1 && p <= pages));
@@ -197,16 +214,16 @@ export function Pagination({ page, pages, href }: { page: number; pages: number;
   const item = cx('grid h-11 min-w-11 place-items-center rounded-xl px-3 text-sm no-underline', focusRing);
   return (
     <nav aria-label="Pages" className="mt-8 flex flex-wrap items-center justify-center gap-2">
-      {page > 1 && <Link href={href(page - 1)} className={cx(item, 'bg-surface text-ink-soft hover:text-brand')} rel="prev">Previous</Link>}
+      {page > 1 && <a href={href(page - 1)} className={cx(item, 'bg-surface text-ink-soft hover:text-brand')} rel="prev">Previous</a>}
       {list.map((p, i) => (
         <span key={p} className="contents">
           {i > 0 && p - list[i - 1]! > 1 && <span aria-hidden className="px-1 text-ink-muted">…</span>}
-          <Link href={href(p)} aria-current={p === page ? 'page' : undefined} className={cx(item, p === page ? 'bg-brand text-brand-on' : 'bg-surface text-ink-soft hover:text-brand')}>
+          <a href={href(p)} aria-current={p === page ? 'page' : undefined} className={cx(item, p === page ? 'bg-brand text-brand-on' : 'bg-surface text-ink-soft hover:text-brand')}>
             {p}
-          </Link>
+          </a>
         </span>
       ))}
-      {page < pages && <Link href={href(page + 1)} className={cx(item, 'bg-surface text-ink-soft hover:text-brand')} rel="next">Next</Link>}
+      {page < pages && <a href={href(page + 1)} className={cx(item, 'bg-surface text-ink-soft hover:text-brand')} rel="next">Next</a>}
     </nav>
   );
 }

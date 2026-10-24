@@ -36,7 +36,7 @@ export default async function VisitsPage({ searchParams }: Props) {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <StatusBadge status={v.status} />
+                <StatusBadge kind="visit" status={v.status} />
                 {VISIT_STATUSES.filter((s) => s !== v.status && s !== 'new').map((s) => (
                   <form key={s} action={setVisitAction}>
                     <input type="hidden" name="visitId" value={v.id} />

@@ -34,7 +34,7 @@ export default async function AdminPayouts({ searchParams }: { searchParams: Pro
           {payouts.map((p) => (
             <tr key={p.id}>
               <Td className="font-medium">{p.hostelName}</Td><Td>{rupees(p.grossAmount)}</Td><Td>{rupees(p.platformFee)}</Td><Td className="font-medium">{rupees(p.netAmount)}</Td>
-              <Td><StatusBadge status={p.status} />{p.paidAt && <div className="text-xs text-ink-muted">{dateLabel(p.paidAt)}</div>}</Td>
+              <Td><StatusBadge kind="payout" status={p.status} />{p.paidAt && <div className="text-xs text-ink-muted">{dateLabel(p.paidAt)}</div>}</Td>
               <Td>
                 {p.status === 'pending' && (
                   <form action={markPayoutPaidAction}><Back to={path} /><input type="hidden" name="id" value={p.id} /><SubmitButton size="sm" variant="secondary" confirm="Mark this payout as transferred?">Mark paid</SubmitButton></form>

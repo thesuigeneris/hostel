@@ -82,7 +82,7 @@ export default async function PlanPage({ params, searchParams }: Props) {
                 <Td>{OWNER_PLANS[b.plan].label}</Td>
                 <Td>{rupees(b.amount)}</Td>
                 <Td>{dateLabel(b.dueDate)}</Td>
-                <Td><StatusBadge status={b.isOverdue ? 'overdue' : b.status} /></Td>
+                <Td><StatusBadge kind="invoice" status={b.isOverdue ? 'overdue' : b.status} /></Td>
                 <Td>{b.status === 'due' && <Link href={`/pay/${b.id}`}>Pay</Link>}</Td>
               </tr>
             ))}
