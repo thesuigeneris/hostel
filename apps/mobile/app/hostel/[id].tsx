@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import type { Hostel } from '@hostels/shared';
+import type { Hostel } from '../../lib/legacy-types';
 import { api } from '../../lib/api';
 import { theme } from '../../lib/theme';
 
