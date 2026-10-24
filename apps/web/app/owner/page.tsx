@@ -87,7 +87,7 @@ export default async function OwnerOverview() {
                 <Link href={`/owner/visits?hostelId=${hostel.id}`} className="hover:bg-bg">
                   <Metric label="New visits" value={newVisits > 0 ? <Badge tone="brand">{newVisits}</Badge> : 0} />
                 </Link>
-                <ProGate plan={hostel.ownerPlan} hostelId={hostel.id} feature="Insights">
+                <ProGate plan={hostel.ownerPlan} hostelId={hostel.id} feature="Insights" compact>
                   <Metric label="Views (30d)" value={views30d} />
                 </ProGate>
               </div>

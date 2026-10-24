@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import type { ReactNode } from 'react';
 import type { HostelStatus, IssueSeverity, IssueStatus, OwnerPlan, PartnerStatus } from '@hostels/shared';
 import { OWNER_PLAN_PRICING } from '@hostels/shared';
@@ -35,9 +36,27 @@ export function SeverityBadge({ severity }: { severity: IssueSeverity }) {
   return <Badge tone={tone}>{ISSUE_SEVERITY_LABEL[severity]}</Badge>;
 }
 
-/** Shows children normally on Pro; on Free shows them blurred behind an upgrade card. */
-export function ProGate({ plan, hostelId, feature, children }: { plan: OwnerPlan; hostelId: string; feature: string; children: ReactNode }) {
+/**
+ * Shows children normally on Pro; on Free shows them blurred behind an upgrade card.
+ * `compact` fits small cells (a stat tile): blurred value plus a one-line unlock link.
+ */
+export function ProGate({ plan, hostelId, feature, compact, children }: { plan: OwnerPlan; hostelId: string; feature: string; compact?: boolean; children: ReactNode }) {
   if (plan === 'pro') return <>{children}</>;
+  if (compact)
+    return (
+      <div className="relative">
+        <div className="pointer-events-none select-none blur-sm" aria-hidden>
+          {children}
+        </div>
+        <Link
+          href={`/owner/hostels/${hostelId}/status`}
+          className="absolute inset-x-0 bottom-2 mx-auto w-fit rounded-full bg-food-soft px-2.5 py-0.5 text-xs font-medium text-food hover:underline"
+          aria-label={`${feature} is part of Hostels Pro. Upgrade to unlock`}
+        >
+          Unlock with Pro
+        </Link>
+      </div>
+    );
   return (
     <div className="relative min-h-40">
       <div className="pointer-events-none select-none blur-sm" aria-hidden>
