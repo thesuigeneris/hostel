@@ -325,7 +325,7 @@ async function seedResidents(db: DB, today: string, ctx: { tenantId: string; own
     { reporter: ctx.tenantId, residencyId: demo.residencyId, category: 'wifi' as const, title: 'WiFi drops on the 3rd floor every evening', status: 'in_progress' as const, ageDays: 3 },
     { reporter: current[0]!.id, residencyId: null, category: 'water' as const, title: 'No hot water in bathroom 2B', status: 'resolved' as const, ageDays: 6 },
     { reporter: current[1]!.id, residencyId: null, category: 'cleanliness' as const, title: 'Common area not cleaned on Sunday', status: 'closed' as const, ageDays: 12 },
-    { reporter: current[2]!.id, residencyId: null, category: 'maintenance' as const, title: 'Fan regulator broken in room 204', status: 'open' as const, ageDays: 2 },
+    { reporter: current[2]!.id, residencyId: null, category: 'maintenance' as const, title: 'Fan regulator broken in room 204', status: 'open' as const, ageDays: 3 },
   ];
   const residencyOf = async (userId: string) =>
     (await db.select().from(schema.residencies).where(sql`${schema.residencies.userId} = ${userId} and ${schema.residencies.status} = 'active'`))[0]!.id;
