@@ -11,7 +11,7 @@ function toPayout(r: typeof schema.payouts.$inferSelect): Payout {
 }
 
 /** Bounds of a calendar month in IST, as instants. */
-function monthBounds(month: string) {
+export function monthBounds(month: string) {
   const first = `${month}-01`;
   return { from: istInstant(first, 0), to: istInstant(addMonths(first, 1), 0) };
 }

@@ -1,4 +1,4 @@
-import type { OwnerPlanTier, User } from '@hostels/shared';
+import type { AdminOwnerInvoice, AdminOwnerPlan, InvoiceStatus, OwnerPlanTier, User } from '@hostels/shared';
 import {
   addDays,
   addMonths,
@@ -12,10 +12,10 @@ import {
   OWNER_TRIAL_MONTHS,
   periodContaining,
 } from '@hostels/shared';
-import { and, desc, eq, inArray, lte, ne } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, lte, ne, or } from 'drizzle-orm';
 import { getDb, schema, type Tx } from '../db';
 import { clock } from '../lib/clock';
-import { AppError } from '../lib/errors';
+import { AppError, notFound } from '../lib/errors';
 import { ownedHostel } from './access';
 import { applyForPartner } from './listings';
 
@@ -184,4 +184,83 @@ export async function refreshSuspensions(today = clock.today()) {
     }
   }
   return changed;
+}
+
+// --- admin oversight ---------------------------------------------------------
+
+const ownerSearch = (q?: string) =>
+  q ? or(ilike(schema.hostels.name, `%${q}%`), ilike(schema.hostels.area, `%${q}%`), ilike(schema.users.name, `%${q}%`), ilike(schema.users.phone, `%${q}%`)) : undefined;
+
+/** Every hostel's plan with what it owes, for the admin billing page. */
+export async function adminOwnerPlans(filter: { plan?: OwnerPlanTier; suspended?: boolean; q?: string } = {}): Promise<AdminOwnerPlan[]> {
+  const db = getDb();
+  const rows = await db
+    .select({ plan: schema.ownerPlans, hostel: schema.hostels, owner: schema.users })
+    .from(schema.ownerPlans)
+    .innerJoin(schema.hostels, eq(schema.hostels.id, schema.ownerPlans.hostelId))
+    .innerJoin(schema.users, eq(schema.users.id, schema.hostels.ownerId))
+    .where(
+      and(
+        filter.plan ? eq(schema.ownerPlans.plan, filter.plan) : undefined,
+        filter.suspended !== undefined ? eq(schema.ownerPlans.suspended, filter.suspended) : undefined,
+        ownerSearch(filter.q),
+      ),
+    )
+    .orderBy(desc(schema.ownerPlans.suspended), asc(schema.hostels.name));
+  const due = await db.select().from(schema.ownerInvoices).where(eq(schema.ownerInvoices.status, 'due'));
+  const today = clock.today();
+  const now = clock.now();
+  return rows.map(({ plan, hostel, owner }) => {
+    const bills = due.filter((b) => b.ownerPlanId === plan.id);
+    return {
+      id: plan.id,
+      hostelId: hostel.id,
+      hostelName: hostel.name,
+      area: hostel.area,
+      owner: { id: owner.id, name: owner.name, phone: owner.phone },
+      plan: plan.plan,
+      pendingPlan: plan.pendingPlan,
+      pendingPlanOn: plan.pendingPlanOn,
+      startDate: plan.startDate,
+      trialEndsOn: plan.trialEndsOn,
+      inTrial: !!plan.trialEndsOn && today < plan.trialEndsOn,
+      suspended: plan.suspended,
+      partnerStatus: hostel.partnerStatus,
+      amountDue: bills.reduce((n, b) => n + b.amount, 0),
+      overdueBills: bills.filter((b) => isOverdue(b, now)).length,
+    };
+  });
+}
+
+export async function adminOwnerInvoices(filter: { status?: InvoiceStatus; overdue?: boolean; q?: string } = {}): Promise<AdminOwnerInvoice[]> {
+  const rows = await getDb()
+    .select({ invoice: schema.ownerInvoices, hostelName: schema.hostels.name, ownerName: schema.users.name, ownerPhone: schema.users.phone })
+    .from(schema.ownerInvoices)
+    .innerJoin(schema.hostels, eq(schema.hostels.id, schema.ownerInvoices.hostelId))
+    .innerJoin(schema.users, eq(schema.users.id, schema.ownerInvoices.ownerId))
+    .where(
+      and(
+        filter.overdue ? eq(schema.ownerInvoices.status, 'due') : filter.status ? eq(schema.ownerInvoices.status, filter.status) : undefined,
+        ownerSearch(filter.q),
+      ),
+    )
+    .orderBy(desc(schema.ownerInvoices.periodStart));
+  const list = rows.map((r) => ({ ...toOwnerInvoice(r.invoice), hostelName: r.hostelName, ownerName: r.ownerName, ownerPhone: r.ownerPhone }));
+  return filter.overdue ? list.filter((b) => b.isOverdue) : list;
+}
+
+/** Waives an unpaid owner bill (a dispute, or a goodwill month). Lifts a pause it caused. */
+export async function voidOwnerInvoice(id: string) {
+  const db = getDb();
+  const [row] = await db.select().from(schema.ownerInvoices).where(eq(schema.ownerInvoices.id, id));
+  if (!row) throw notFound('Bill');
+  if (row.status !== 'due') throw new AppError('invalid_state', row.status === 'paid' ? 'This bill is already paid' : 'This bill is already void');
+  const [updated] = await db
+    .update(schema.ownerInvoices)
+    .set({ status: 'void' })
+    .where(and(eq(schema.ownerInvoices.id, id), eq(schema.ownerInvoices.status, 'due')))
+    .returning();
+  if (!updated) throw new AppError('invalid_state', 'This bill changed while you were looking; refresh and try again');
+  await refreshSuspensions();
+  return toOwnerInvoice(updated);
 }

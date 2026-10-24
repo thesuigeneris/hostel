@@ -22,6 +22,7 @@ import { isUniqueViolation } from '../lib/db-errors';
 import { AppError, notFound } from '../lib/errors';
 import { isBookable, ownedHostel, planFor } from './access';
 import { toHostel, toRoomType } from './mappers';
+import { closeApplication, openApplication } from './partners';
 import { switchPlan } from './plans';
 
 export function slugify(value: string): string {
@@ -205,23 +206,30 @@ export async function applyForPartner(user: User, hostelId: string) {
   if (h.status !== 'live') throw new AppError('invalid_state', 'The listing must be live before applying');
   if (h.partnerStatus === 'verified') throw new AppError('invalid_state', 'This hostel is already a verified partner');
   if (h.partnerStatus === 'applied') throw new AppError('invalid_state', 'Your application is already in review');
-  const db = getDb();
-  await db.update(schema.ownerPlans).set({ pendingPlan: 'partner', pendingPlanOn: null }).where(eq(schema.ownerPlans.hostelId, h.id));
-  const [row] = await db
-    .update(schema.hostels)
-    .set({ partnerStatus: 'applied', rejectionReason: null })
-    .where(eq(schema.hostels.id, h.id))
-    .returning();
+  const [row] = await getDb().transaction(async (tx) => {
+    await tx.update(schema.ownerPlans).set({ pendingPlan: 'partner', pendingPlanOn: null }).where(eq(schema.ownerPlans.hostelId, h.id));
+    await openApplication(tx, h.id);
+    return tx
+      .update(schema.hostels)
+      .set({ partnerStatus: 'applied', rejectionReason: null })
+      .where(eq(schema.hostels.id, h.id))
+      .returning();
+  });
   return toHostel(row!);
 }
 
 /** Verifying a partner switches the owner plan to Partner, with the first month free if no trial was used. */
-export async function decidePartner(hostelId: string, decision: { verify: true; platformFeePct: number } | { verify: false; reason: string }) {
+export async function decidePartner(
+  hostelId: string,
+  decision: { verify: true; platformFeePct: number; checklist?: string[]; note?: string } | { verify: false; reason: string },
+  actorId: string | null = null,
+) {
   const db = getDb();
   const [h] = await db.select().from(schema.hostels).where(eq(schema.hostels.id, hostelId));
   if (!h) throw notFound('Hostel');
   if (h.partnerStatus !== 'applied') throw new AppError('invalid_state', 'This hostel has no partner application in review');
   return db.transaction(async (tx) => {
+    await closeApplication(tx, h, decision, actorId);
     if (!decision.verify) {
       await tx.update(schema.ownerPlans).set({ pendingPlan: null, pendingPlanOn: null }).where(eq(schema.ownerPlans.hostelId, hostelId));
       const [row] = await tx

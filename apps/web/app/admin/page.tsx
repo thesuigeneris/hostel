@@ -18,7 +18,9 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
         <Stat label="Reported posts" value={<Link href="/admin/moderation">{s.openReports}</Link>} />
         <Stat label="Live hostels" value={s.liveHostels} />
         <Stat label="Active subscriptions" value={s.activeSubscriptions} />
-        <Stat label="Overdue bills" value={<Link href="/admin/billing">{s.overdueBills}</Link>} />
+        <Stat label="Overdue tenant bills" value={<Link href="/admin/billing">{s.overdueBills}</Link>} />
+        <Stat label="Overdue owner bills" value={<Link href="/admin/billing?bills=overdue">{s.overdueOwnerBills}</Link>} />
+        <Stat label="Paused hostels" value={<Link href="/admin/billing?paused=1">{s.suspendedHostels}</Link>} hint="Plan bill 15+ days overdue" />
       </div>
       <Card className="mt-8 flex flex-wrap items-center justify-between gap-3">
         <div>

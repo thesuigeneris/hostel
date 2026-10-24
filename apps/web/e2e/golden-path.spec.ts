@@ -94,6 +94,7 @@ test('owner to admin to tenant to resident', async ({ browser }) => {
   await test.step('admin verifies the partner after the visit', async () => {
     await admin.goto('/admin/partners');
     const app = admin.locator('div.rounded-2xl', { hasText: hostelName }).last();
+    for (const box of await app.getByRole('checkbox').all()) await box.check();
     await app.getByRole('button', { name: 'Verify' }).click();
     await expect(admin.getByText('Partner verified')).toBeVisible();
     await admin.context().close();
