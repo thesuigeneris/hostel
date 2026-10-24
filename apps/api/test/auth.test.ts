@@ -126,6 +126,23 @@ describe('roles', () => {
     expect((await call('/me', { token })).body.role).toBe('admin');
   });
 
+  test('removing a phone from ADMIN_PHONES takes admin away from old and new sessions', async () => {
+    const old = await login('9000000001');
+    const saved = process.env.ADMIN_PHONES;
+    process.env.ADMIN_PHONES = '';
+    try {
+      expect((await call('/admin/hostels', { token: old })).status).toBe(403);
+      expect((await call('/me', { token: old })).body.role).toBe('owner');
+      const fresh = await login('9000000001');
+      expect((await call('/admin/hostels', { token: fresh })).status).toBe(403);
+      expect((await call('/me', { token: fresh })).body.role).toBe('owner');
+    } finally {
+      process.env.ADMIN_PHONES = saved;
+    }
+    const back = await login('9000000001');
+    expect((await call('/me', { token: back })).body.role).toBe('admin');
+  });
+
   test('an existing owner is not downgraded by logging in as tenant', async () => {
     await login('9876543210', 'owner');
     const token = await login('9876543210', 'tenant');

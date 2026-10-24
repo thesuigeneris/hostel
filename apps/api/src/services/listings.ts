@@ -14,7 +14,7 @@ import {
   TRANSPARENCY_MIN_ISSUES,
   TRANSPARENCY_WINDOW_DAYS,
 } from '@hostels/shared';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, or, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 import { getDb, schema } from '../db';
 import { clock } from '../lib/clock';
@@ -155,7 +155,12 @@ export async function deleteRoomType(user: User, roomTypeId: string) {
     .from(schema.subscriptions)
     .where(eq(schema.subscriptions.roomTypeId, room.id))
     .limit(1);
-  if (used) throw new AppError('invalid_state', 'This room type has subscriptions; set beds free to 0 instead');
+  const [moving] = await db
+    .select({ id: schema.moveRequests.id })
+    .from(schema.moveRequests)
+    .where(or(eq(schema.moveRequests.fromRoomTypeId, room.id), eq(schema.moveRequests.toRoomTypeId, room.id)))
+    .limit(1);
+  if (used || moving) throw new AppError('invalid_state', 'This room type has subscriptions; set beds free to 0 instead');
   await db.delete(schema.roomTypes).where(eq(schema.roomTypes.id, room.id));
 }
 
