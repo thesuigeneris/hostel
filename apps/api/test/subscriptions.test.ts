@@ -84,9 +84,9 @@ describe('subscribe', () => {
 });
 
 describe('cancel', () => {
-  test('needs a signed-in tenant with a plan', async () => {
+  test('needs a signed-in user with a plan', async () => {
     expect((await call('/me/subscription/cancel', { method: 'POST' })).status).toBe(401);
-    expect((await cancel(ownerToken)).status).toBe(403);
+    expect((await cancel(ownerToken)).status).toBe(404);
     const { token } = await newTenant();
     expect((await cancel(token)).status).toBe(404);
   });
@@ -142,6 +142,30 @@ describe('cancel', () => {
     expect(again.body.subscription.id).not.toBe(first.body.subscription.id);
     expect(again.body.subscription).toMatchObject({ status: 'pending', mealPlan: 'none' });
     expect(await roomBeds(ownerToken, hostel.id, room.id)).toBe(4);
+  });
+
+  test('cancelling after paying next month early keeps the plan to the end of that month', async () => {
+    const { token } = await newTenant();
+    await activeSubscriber(token, hostel.id, room.id);
+    setClock('2026-12-05T06:00:00Z');
+    await runJobs(); // generates the 10 December bill
+    const next = (await call('/me/invoices', { token })).body[0];
+    expect(next).toMatchObject({ periodStart: '2026-12-10', periodEnd: '2027-01-09', status: 'due' });
+    expect((await call(`/payments/${next.id}/simulate`, { token, method: 'POST' })).body.status).toBe('paid');
+
+    setClock('2026-12-06T06:00:00Z');
+    expect((await cancel(token)).body).toMatchObject({ status: 'active', cancelAt: '2027-01-09' });
+    const bills = (await call('/me/invoices', { token })).body;
+    expect(bills.map((b: { status: string }) => b.status)).toEqual(['paid', 'paid']);
+
+    setClock('2026-12-10T06:00:00Z');
+    expect((await runJobs()).endedSubscriptions).toBe(0);
+    setClock('2027-01-05T06:00:00Z');
+    expect((await runJobs()).tenantInvoices).toBe(0);
+    expect(await roomBeds(ownerToken, hostel.id, room.id)).toBe(4);
+    setClock('2027-01-10T06:00:00Z');
+    expect((await runJobs()).endedSubscriptions).toBe(1);
+    expect(await roomBeds(ownerToken, hostel.id, room.id)).toBe(5);
   });
 
   test('a cancelled active plan keeps its bed and blocks a new plan until it ends', async () => {
