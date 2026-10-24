@@ -2,7 +2,7 @@ import { DEFAULT_PLATFORM_FEE_PCT, OWNER_PLANS, OWNER_PLAN_TIERS } from '@hostel
 import Link from 'next/link';
 import { changePlanAction } from '@/app/owner/actions';
 import { SubmitButton } from '@/components/SubmitButton';
-import { Badge, Card, Flash, StatusBadge, Table, Td } from '@/components/ui';
+import { Badge, Card, Flash, LinkButton, StatusBadge, Table, Td } from '@/components/ui';
 import { api } from '@/lib/api';
 import { dateLabel, rupees } from '@/lib/format';
 import { ownerHostel } from '@/lib/owner';
@@ -31,7 +31,7 @@ export default async function PlanPage({ params, searchParams }: Props) {
             <div className="font-medium">{due.isOverdue ? 'Your plan bill is overdue' : 'Plan bill ready'}</div>
             <div className="text-sm text-ink-soft">{rupees(due.amount)} for {dateLabel(due.periodStart)} – {dateLabel(due.periodEnd)}, due {dateLabel(due.dueDate)}</div>
           </div>
-          <Link href={`/pay/${due.id}`} className="rounded-xl bg-food px-4 py-2 text-sm font-medium text-white no-underline">Pay now</Link>
+          <LinkButton href={`/pay/${due.id}`} variant="food">Pay now</LinkButton>
         </Card>
       )}
       {info.plan?.pendingPlan && (

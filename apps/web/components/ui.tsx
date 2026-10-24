@@ -142,7 +142,7 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
-        <h1 className="text-balance text-2xl font-semibold tracking-tight text-ink sm:text-3xl">{title}</h1>
+        <h1 className="text-balance font-display text-2xl font-semibold tracking-tight text-ink sm:text-3xl">{title}</h1>
         {subtitle && <p className="mt-1 text-ink-soft [overflow-wrap:anywhere]">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}

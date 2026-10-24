@@ -71,12 +71,12 @@ export function Feed({ hostelId, posts, back, isOwner = false }: { hostelId: str
         <form action={postAction} className="space-y-3">
           <Back to={back} />
           <input type="hidden" name="hostelId" value={hostelId} />
-          <Textarea name="body" required maxLength={1000} placeholder={isOwner ? 'Post an announcement for residents' : 'Ask your neighbours, share something, plan a movie night…'} />
+          <Textarea name="body" aria-label="Message" required maxLength={1000} placeholder={isOwner ? 'Post an announcement for residents' : 'Ask your neighbours, share something, plan a movie night…'} />
           <div className="flex flex-wrap items-center gap-3">
-            <Select name="kind" defaultValue={isOwner ? 'announcement' : 'general'} className="w-auto">
+            <Select name="kind" aria-label="Post type" defaultValue={isOwner ? 'announcement' : 'general'} className="w-auto">
               {kinds.map((k) => <option key={k} value={k}>{titleCase(k)}</option>)}
             </Select>
-            <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" className="text-sm" />
+            <input type="file" name="photo" aria-label="Attach a photo (optional)" accept="image/jpeg,image/png,image/webp" className="text-sm" />
             <SubmitButton size="sm" className="ml-auto" pendingText="Posting…">Post</SubmitButton>
           </div>
         </form>

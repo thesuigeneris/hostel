@@ -191,3 +191,11 @@ npm packages only (MIT, OFL, MPL). ₹0.
   - Copy corrected against the code: the platform fee applies to all paid resident bills, rent and food (`generatePayouts`). The listing review is described as a read-through with a reason on rejection, since no checklist exists in code. Partner verification is the in-person visit described on the admin partners page.
 - **Onboarding.** `ListingProgress` shows steps 1–4 (details, rooms, photos, review) on the new-listing page and on every owner tab until the listing is live, computed from the listing itself.
 - **Found.** Overriding a button variant's colours through `className` loses to Tailwind's stylesheet order. The `/for-owners` hero and the lightbox Close button now use explicit classes; axe caught it.
+
+### Batch 4: workspaces (done)
+
+- **Sweep.** `e2e/workspaces.spec.ts` signs in as the demo resident, owner and admin and visits 26 routes, including all 9 owner tabs. Each route is checked with axe (WCAG 2.2 AA, serious or critical) and for horizontal overflow at 360, 390, 768, 1024 and 1440.
+- **First run.** No overflow anywhere. Seven unlabeled controls: the community post form, photo upload, the weekly-menu grid selects and inputs, and the admin fee and reason fields. All are now labelled.
+- **Second full run.** It found a white-on-amber "Pay now" link (2.67:1) on the owner plan page, which only appears once a plan bill exists. It now uses the `food` button variant (dark text, 5.93:1).
+- **Roles.** Each role sees only its own navigation. Typing `/owner` or `/admin` as the wrong role is redirected by the server, not just hidden in the UI.
+- **Not swept.** States the demo seed doesn't create, such as a rejected listing, an overdue resident or an empty owner account. Those pages share the same primitives.

@@ -57,7 +57,7 @@ export default async function OwnerHostelPage({ params, searchParams }: Props) {
         </div>
         <form action={uploadPhotoAction} className="mt-4 flex flex-wrap items-center gap-3">
           <input type="hidden" name="hostelId" value={id} />
-          <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" required className="text-sm" />
+          <input type="file" name="photo" aria-label="Photo to upload (JPEG, PNG or WebP)" accept="image/jpeg,image/png,image/webp" required className="text-sm" />
           <SubmitButton size="sm" variant="secondary" pendingText="Uploading…">Upload photo</SubmitButton>
         </form>
       </Card>

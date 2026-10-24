@@ -64,10 +64,10 @@ export default async function MenuPage({ params, searchParams }: Props) {
                       return (
                         <td key={m} className="space-y-1 px-2 py-2 align-top">
                           <input type="hidden" name="slot" value={slot} />
-                          <Input name={`veg:${slot}`} defaultValue={it?.vegDish} placeholder="Veg dish" className="h-8" />
-                          <Input name={`nonveg:${slot}`} defaultValue={it?.nonVegDish ?? ''} placeholder="Non-veg (optional)" className="h-8" />
+                          <Input name={`veg:${slot}`} aria-label={`Veg dish, ${weekday(d)} ${m}`} defaultValue={it?.vegDish} placeholder="Veg dish" className="h-8" />
+                          <Input name={`nonveg:${slot}`} aria-label={`Non-veg dish (optional), ${weekday(d)} ${m}`} defaultValue={it?.nonVegDish ?? ''} placeholder="Non-veg (optional)" className="h-8" />
                           {partners.length > 0 && (
-                            <Select name={`partner:${slot}`} defaultValue={it?.foodPartnerId ?? ''} className="h-8 text-xs">
+                            <Select name={`partner:${slot}`} aria-label={`Who cooks ${weekday(d)} ${m}`} defaultValue={it?.foodPartnerId ?? ''} className="h-8 text-xs">
                               <option value="">Own kitchen</option>
                               {partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                             </Select>

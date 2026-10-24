@@ -36,7 +36,7 @@ export default async function AdminPartners({ searchParams }: { searchParams: Pr
                 </form>
                 <form action={rejectPartnerAction} className="flex flex-1 gap-2">
                   <Back to={path} /><input type="hidden" name="hostelId" value={h.id} />
-                  <Input name="reason" required minLength={3} placeholder="Reason (the owner sees this)" />
+                  <Input name="reason" aria-label="Reason for not approving (the owner sees this)" required minLength={3} placeholder="Reason (the owner sees this)" />
                   <SubmitButton variant="danger">Decline</SubmitButton>
                 </form>
               </div>
@@ -54,7 +54,7 @@ export default async function AdminPartners({ searchParams }: { searchParams: Pr
               <Td colSpan={2}>
                 <form action={setFeeAction} className="flex items-center gap-2">
                   <Back to={path} /><input type="hidden" name="hostelId" value={h.id} />
-                  <Input type="number" name="platformFeePct" min={0} max={50} step="0.5" defaultValue={h.platformFeePct} className="h-8 w-20" />
+                  <Input type="number" name="platformFeePct" min={0} max={50} step="0.5" defaultValue={h.platformFeePct} className="h-8 w-20" aria-label={`Platform fee percent for ${h.name}`} />
                   <span className="text-xs text-ink-muted">% · on {rupees(10000)} rent = {rupees(Math.round(h.platformFeePct * 100))}</span>
                   <SubmitButton size="sm" variant="secondary">Save</SubmitButton>
                 </form>
