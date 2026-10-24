@@ -523,4 +523,6 @@ export type AdminStats = {
   flaggedReviews: number;
   openReports: number;
   overdueBills: number;
+  overdueOwnerBills: number;
+  suspendedHostels: number;
 };

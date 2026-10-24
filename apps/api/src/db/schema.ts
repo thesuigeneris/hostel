@@ -624,3 +624,44 @@ export const rentRecords = pgTable(
   },
   (t) => [unique('rent_records_residency_month').on(t.residencyId, t.month)],
 );
+
+// ---------------------------------------------------------------------------
+// Partner applications and the admin audit log.
+
+/** One row per partner application: the in-person inspection checklist and the decision. */
+export const partnerApplications = pgTable(
+  'partner_applications',
+  {
+    id: text('id').primaryKey(),
+    hostelId: text('hostel_id')
+      .notNull()
+      .references(() => hostels.id, { onDelete: 'cascade' }),
+    status: partnerStatusEnum('status').notNull().default('applied'),
+    /** Ids of the PARTNER_STANDARDS the inspector ticked. */
+    checklist: jsonb('checklist').$type<string[]>().notNull().default([]),
+    note: text('note').notNull().default(''),
+    reason: text('reason'),
+    decidedBy: text('decided_by').references(() => users.id, { onDelete: 'set null' }),
+    appliedAt: timestamp('applied_at', { withTimezone: true }).notNull().defaultNow(),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('partner_applications_hostel_idx').on(t.hostelId, t.appliedAt),
+    uniqueIndex('partner_applications_one_open').on(t.hostelId).where(sql`${t.status} = 'applied'`),
+  ],
+);
+
+/** What admins did, newest first in the console. */
+export const auditEvents = pgTable(
+  'audit_events',
+  {
+    id: text('id').primaryKey(),
+    actorId: text('actor_id').references(() => users.id, { onDelete: 'set null' }),
+    action: text('action').notNull(),
+    targetType: text('target_type').notNull(),
+    targetId: text('target_id').notNull(),
+    summary: text('summary').notNull().default(''),
+    createdAt: createdAt(),
+  },
+  (t) => [index('audit_events_created_idx').on(t.createdAt), index('audit_events_target_idx').on(t.targetType, t.targetId)],
+);

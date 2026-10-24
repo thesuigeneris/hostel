@@ -64,6 +64,18 @@ import type {
   VisitRequest,
   VisitStatus,
 } from './types';
+import type {
+  AdminOwnerInvoice,
+  AdminOwnerPlan,
+  AdminPartnerApplication,
+  AuditAction,
+  AuditEvent,
+  BrandKit,
+  OwnerInsights,
+  OwnerPartnerInfo,
+  PartnerApplication,
+  PartnerStandardId,
+} from './owner-admin';
 import type { Meal } from './pricing';
 import type { OwnerPlanTier } from './types';
 
@@ -216,14 +228,22 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
       reports: () => request<{ id: string; targetType: string; targetId: string; reason: string; hostelName: string; createdAt: string }[]>('/owner/reports'),
       reviews: (id: string) => request<Review[]>(`/owner/hostels/${id}/reviews`),
       reply: (reviewId: string, reply: string) => request<Review>(`/owner/reviews/${reviewId}/reply`, { body: { reply } }),
+      insights: (id: string, month?: string) => request<OwnerInsights>(`/owner/hostels/${id}/insights`, { query: { month } }),
+      partnerInfo: (id: string) => request<OwnerPartnerInfo>(`/owner/hostels/${id}/partner`),
+      brandKit: (id: string) => request<BrandKit>(`/owner/hostels/${id}/brand-kit`),
     },
     admin: {
       stats: () => request<AdminStats>('/admin/stats'),
-      hostels: (filter: { status?: string; partnerStatus?: string } = {}) => request<Hostel[]>('/admin/hostels', { query: filter }),
+      hostels: (filter: { status?: string; partnerStatus?: string; q?: string } = {}) => request<Hostel[]>('/admin/hostels', { query: filter }),
       hostel: (id: string) => request<HostelDetail>(`/admin/hostels/${id}`),
       approve: (id: string) => request<Hostel>(`/admin/hostels/${id}/approve`, { method: 'POST' }),
       reject: (id: string, reason: string) => request<Hostel>(`/admin/hostels/${id}/reject`, { body: { reason } }),
-      verifyPartner: (id: string, platformFeePct: number) => request<Hostel>(`/admin/hostels/${id}/partner/verify`, { body: { platformFeePct } }),
+      verifyPartner: (id: string, platformFeePct: number, inspection?: { checklist: PartnerStandardId[]; note?: string }) =>
+        request<Hostel>(`/admin/hostels/${id}/partner/verify`, { body: { platformFeePct, ...inspection } }),
+      partnerApplications: (status?: 'applied' | 'verified' | 'rejected') =>
+        request<AdminPartnerApplication[]>('/admin/partner-applications', { query: { status } }),
+      saveChecklist: (id: string, checklist: PartnerStandardId[], note = '') =>
+        request<PartnerApplication>(`/admin/hostels/${id}/partner/checklist`, { method: 'PUT', body: { checklist, note } }),
       rejectPartner: (id: string, reason: string) => request<Hostel>(`/admin/hostels/${id}/partner/reject`, { body: { reason } }),
       setFee: (id: string, platformFeePct: number) => request<Hostel>(`/admin/hostels/${id}/fee`, { method: 'PATCH', body: { platformFeePct } }),
       foodPartners: () => request<FoodPartner[]>('/admin/food-partners'),
@@ -235,7 +255,11 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
         request<{ subscription: Subscription; user: { id: string; name: string; phone: string }; hostelName: string }[]>('/admin/subscriptions', { query: { status } }),
       moves: () => request<MoveRequest[]>('/admin/moves'),
       overdue: () => request<{ invoice: Invoice; userName: string; phone: string; hostelName: string }[]>('/admin/invoices/overdue'),
-      ownerInvoices: () => request<(OwnerInvoice & { hostelName: string })[]>('/admin/owner-invoices'),
+      ownerInvoices: (filter: { status?: string; overdue?: boolean; q?: string } = {}) =>
+        request<AdminOwnerInvoice[]>('/admin/owner-invoices', { query: filter }),
+      ownerPlans: (filter: { plan?: OwnerPlanTier; suspended?: boolean; q?: string } = {}) =>
+        request<AdminOwnerPlan[]>('/admin/owner-plans', { query: filter }),
+      voidOwnerInvoice: (id: string, reason: string) => request<OwnerInvoice>(`/admin/owner-invoices/${id}/void`, { body: { reason } }),
       payouts: (month?: string) => request<PayoutView[]>('/admin/payouts', { query: { month } }),
       generatePayouts: (month: string) => request<PayoutView[]>('/admin/payouts/generate', { body: { month } }),
       markPayoutPaid: (id: string) => request('/admin/payouts/' + id + '/paid', { method: 'POST' }),
@@ -245,6 +269,8 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
       unhideReview: (id: string) => request(`/admin/reviews/${id}/unhide`, { method: 'POST' }),
       reports: () => request<{ id: string; targetType: string; targetId: string; reason: string; hostelName: string; hostelId: string; createdAt: string }[]>('/admin/reports'),
       runJobs: () => request<Record<string, number>>('/admin/jobs/run', { method: 'POST' }),
+      audit: (filter: { action?: AuditAction; targetId?: string; q?: string; before?: string; limit?: number } = {}) =>
+        request<AuditEvent[]>('/admin/audit', { query: filter }),
     },
   };
 }

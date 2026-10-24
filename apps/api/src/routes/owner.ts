@@ -26,6 +26,7 @@ import { type AppEnv, requireAuth } from '../middleware/auth';
 import { hostelIdsOwnedBy, ownedHostel } from '../services/access';
 import { openReports, ownerIssues } from '../services/community';
 import { copyLastWeek, headcount, ownerMenu, saveMenu, subscribers } from '../services/food';
+import { hostelInsights } from '../services/insights';
 import {
   addPhoto,
   addRoomType,
@@ -40,6 +41,7 @@ import {
   updateRoomType,
 } from '../services/listings';
 import { toHostel } from '../services/mappers';
+import { brandKit, ownerPartnerInfo } from '../services/partners';
 import { ownerPayouts } from '../services/payouts';
 import { changePlan, getPlan } from '../services/plans';
 import { addResident, endResident, hostelReviews, recordRent, rentSheet, replyToReview, roster } from '../services/residents';
@@ -64,6 +66,12 @@ export const ownerRoutes = new Hono<AppEnv>()
   )
   .post('/owner/hostels/:id/submit', async (c) => c.json(await submitHostel(c.get('user'), c.req.param('id'))))
   .post('/owner/hostels/:id/partner', async (c) => c.json(await applyForPartner(c.get('user'), c.req.param('id'))))
+  .get('/owner/hostels/:id/partner', async (c) => c.json(await ownerPartnerInfo(c.get('user'), c.req.param('id'))))
+  .get('/owner/hostels/:id/brand-kit', async (c) => c.json(await brandKit(c.get('user'), c.req.param('id'))))
+  .get('/owner/hostels/:id/insights', async (c) => {
+    const { month } = parseQuery(c, z.object({ month: monthSchema.optional() }));
+    return c.json(await hostelInsights(c.get('user'), c.req.param('id'), month ?? clock.today().slice(0, 7)));
+  })
 
   // Rooms and photos.
   .post('/owner/hostels/:id/rooms', async (c) =>

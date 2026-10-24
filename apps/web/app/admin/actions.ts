@@ -1,9 +1,11 @@
 'use server';
 
+import type { PartnerStandardId } from '@hostels/shared';
 import { num, run, safePath, str } from '@/lib/actions';
 import { api } from '@/lib/api';
 
 const back = (form: FormData, fallback = '/admin') => safePath(str(form, '_back'), fallback);
+const checklist = (form: FormData) => form.getAll('checklist').map(String) as PartnerStandardId[];
 
 export async function approveAction(form: FormData) {
   await run(back(form), async () => (await api()).admin.approve(str(form, 'hostelId')), { ok: 'Listing is live' });
@@ -12,7 +14,17 @@ export async function rejectAction(form: FormData) {
   await run(back(form), async () => (await api()).admin.reject(str(form, 'hostelId'), str(form, 'reason')), { ok: 'Listing sent back to the owner' });
 }
 export async function verifyPartnerAction(form: FormData) {
-  await run(back(form), async () => (await api()).admin.verifyPartner(str(form, 'hostelId'), num(form, 'platformFeePct')), { ok: 'Partner verified' });
+  await run(
+    back(form),
+    async () => (await api()).admin.verifyPartner(str(form, 'hostelId'), num(form, 'platformFeePct'), { checklist: checklist(form), note: str(form, 'note') }),
+    { ok: 'Partner verified' },
+  );
+}
+export async function saveChecklistAction(form: FormData) {
+  await run(back(form), async () => (await api()).admin.saveChecklist(str(form, 'hostelId'), checklist(form), str(form, 'note')), { ok: 'Inspection progress saved' });
+}
+export async function voidOwnerBillAction(form: FormData) {
+  await run(back(form, '/admin/billing'), async () => (await api()).admin.voidOwnerInvoice(str(form, 'id'), str(form, 'reason')), { ok: 'Bill waived' });
 }
 export async function rejectPartnerAction(form: FormData) {
   await run(back(form), async () => (await api()).admin.rejectPartner(str(form, 'hostelId'), str(form, 'reason')), { ok: 'Application declined' });
