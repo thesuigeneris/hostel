@@ -171,3 +171,23 @@ describe('sessions', () => {
     expect(sneaky.body.role).toBe('tenant');
   });
 });
+
+describe('app-to-website handoff', () => {
+  test('a code signs in once, then stops working', async () => {
+    await resetDb();
+    const token = await login('9876543210');
+    const anon = await call('/auth/handoff', { method: 'POST' });
+    expect(anon.status).toBe(401);
+    const h = await call('/auth/handoff', { token, method: 'POST' });
+    expect(h.status).toBe(201);
+    expect(h.body.expiresInSeconds).toBe(120);
+    const first = await call('/auth/handoff/redeem', { body: { code: h.body.code } });
+    expect(first.status).toBe(200);
+    expect(first.body.user.phone).toBe('9876543210');
+    expect(first.body.token).not.toBe(token);
+    expect((await call('/me', { token: first.body.token })).status).toBe(200);
+    const again = await call('/auth/handoff/redeem', { body: { code: h.body.code } });
+    expect(again.status).toBe(401);
+    expect((await call('/auth/handoff/redeem', { body: { code: 'x'.repeat(32) } })).status).toBe(401);
+  });
+});

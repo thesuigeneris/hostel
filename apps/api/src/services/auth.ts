@@ -1,6 +1,6 @@
 import type { AuthSession, OtpSent, Role, User } from '@hostels/shared';
 import { newId } from '@hostels/shared';
-import { and, eq, gt, lt, sql } from 'drizzle-orm';
+import { and, eq, gt, isNull, lt, sql } from 'drizzle-orm';
 import { getDb, schema } from '../db';
 import { hmacHex, randomToken, safeEqual, sha256Hex } from '../lib/crypto';
 import { env } from '../lib/env';
@@ -13,6 +13,7 @@ export const OTP_TTL_SECONDS = 5 * 60;
 export const OTP_MAX_ATTEMPTS = 5;
 export const OTP_MAX_SENDS_PER_HOUR = 5;
 export const SESSION_TTL_DAYS = 30;
+export const HANDOFF_TTL_SECONDS = 120;
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -139,4 +140,24 @@ export async function getSessionUser(token: string, now = new Date()): Promise<U
 
 export async function deleteSession(token: string) {
   await getDb().delete(schema.sessions).where(eq(schema.sessions.tokenHash, sha256Hex(token)));
+}
+
+/** A short-lived, single-use code the app passes to the website so the person lands there signed in. */
+export async function createHandoff(userId: string, now = new Date()) {
+  const code = randomToken(24);
+  await getDb()
+    .insert(schema.loginHandoffs)
+    .values({ codeHash: sha256Hex(code), userId, expiresAt: new Date(now.getTime() + HANDOFF_TTL_SECONDS * 1000) });
+  return { code, expiresInSeconds: HANDOFF_TTL_SECONDS };
+}
+
+export async function redeemHandoff(code: string, now = new Date()): Promise<AuthSession> {
+  const h = schema.loginHandoffs;
+  const [row] = await getDb()
+    .update(h)
+    .set({ usedAt: now })
+    .where(and(eq(h.codeHash, sha256Hex(code)), isNull(h.usedAt), gt(h.expiresAt, now)))
+    .returning({ userId: h.userId });
+  if (!row) throw new AppError('unauthorized', 'This link has expired. Open it again from the app.', 401);
+  return createSession(row.userId, now);
 }

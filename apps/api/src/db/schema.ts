@@ -88,6 +88,17 @@ export const sessions = pgTable(
   (t) => [index('sessions_user_idx').on(t.userId)],
 );
 
+/** One-time codes that let the app open a signed-in page on the website (paying a bill). */
+export const loginHandoffs = pgTable('login_handoffs', {
+  codeHash: text('code_hash').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  createdAt: createdAt(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  usedAt: timestamp('used_at', { withTimezone: true }),
+});
+
 export const hostels = pgTable(
   'hostels',
   {

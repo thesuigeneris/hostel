@@ -55,6 +55,7 @@ import type {
   Residency,
   RentSheet,
   Review,
+  SharingType,
   RoomType,
   SearchResult,
   Subscriber,
@@ -119,6 +120,8 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
       requestOtp: (input: RequestOtpInput) => request<OtpSent>('/auth/otp', { body: input }),
       verifyOtp: (input: VerifyOtpInput) => request<AuthSession>('/auth/verify', { body: input }),
       logout: () => request<{ ok: true }>('/auth/logout', { method: 'POST' }),
+      handoff: () => request<{ code: string; expiresInSeconds: number }>('/auth/handoff', { method: 'POST' }),
+      redeemHandoff: (code: string) => request<AuthSession>('/auth/handoff/redeem', { body: { code } }),
     },
     me: {
       get: () => request<User>('/me'),
@@ -170,7 +173,7 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
       moderateComment: (id: string, hidden: boolean) => request(`/comments/${id}`, { method: 'PATCH', body: { hidden } }),
       report: (type: 'post' | 'comment', id: string, reason: string) =>
         request<{ ok: true }>(`/${type === 'post' ? 'posts' : 'comments'}/${id}/report`, { body: { reason } }),
-      directory: (hostelId: string) => request<{ name: string; sharing: string | null; since: string }[]>(`/hostels/${hostelId}/directory`),
+      directory: (hostelId: string) => request<{ name: string; sharing: SharingType | null; since: string }[]>(`/hostels/${hostelId}/directory`),
     },
     payments: {
       page: (invoiceId: string) => request<PaymentPage>(`/payments/${invoiceId}`),

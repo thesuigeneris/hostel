@@ -1,10 +1,10 @@
-import { requestOtpSchema, updateMeSchema, verifyOtpSchema } from '@hostels/shared';
+import { handoffRedeemSchema, requestOtpSchema, updateMeSchema, verifyOtpSchema } from '@hostels/shared';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { getDb, schema } from '../db';
 import { parseBody } from '../lib/validate';
 import { type AppEnv, requireAuth } from '../middleware/auth';
-import { deleteSession, requestOtp, verifyOtp } from '../services/auth';
+import { createHandoff, deleteSession, redeemHandoff, requestOtp, verifyOtp } from '../services/auth';
 import { toUser } from '../services/mappers';
 
 export const authRoutes = new Hono<AppEnv>()
@@ -19,6 +19,11 @@ export const authRoutes = new Hono<AppEnv>()
   .post('/auth/logout', requireAuth(), async (c) => {
     await deleteSession(c.get('token'));
     return c.json({ ok: true as const });
+  })
+  .post('/auth/handoff', requireAuth(), async (c) => c.json(await createHandoff(c.get('user').id), 201))
+  .post('/auth/handoff/redeem', async (c) => {
+    const { code } = await parseBody(c, handoffRedeemSchema);
+    return c.json(await redeemHandoff(code));
   })
   .get('/me', requireAuth(), (c) => c.json(c.get('user')))
   .patch('/me', requireAuth(), async (c) => {

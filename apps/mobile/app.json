@@ -2,14 +2,24 @@
   "expo": {
     "name": "Hostels",
     "slug": "hostels",
-    "version": "0.0.1",
+    "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "hostels",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false,
-    "ios": { "supportsTablet": false, "bundleIdentifier": "com.hostels.app" },
-    "android": { "package": "com.hostels.app" },
-    "plugins": ["expo-router"],
+    "backgroundColor": "#FAF7F2",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.hostels.app",
+      "infoPlist": { "NSLocationWhenInUseUsageDescription": "Hostels uses your location to show hostels near you." }
+    },
+    "android": { "package": "com.hostels.app", "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"] },
+    "web": { "bundler": "metro", "output": "single" },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-web-browser",
+      ["expo-location", { "locationWhenInUsePermission": "Hostels uses your location to show hostels near you." }]
+    ],
     "experiments": { "typedRoutes": false }
   }
 }
