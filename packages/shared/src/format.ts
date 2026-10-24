@@ -34,3 +34,13 @@ export const SHARING_LABEL: Record<SharingType, string> = {
 };
 export const GENDER_LABEL: Record<GenderType, string> = { boys: 'Boys', girls: 'Girls', coliving: 'Co-living' };
 export const titleCase = (s: string) => s.replace(/[_-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+/**
+ * How a reviewer's stay was confirmed. Stays paid through Hostels are the strongest signal; residents an owner added
+ * themselves are real people who accepted the invite, but the owner chose to add them, so readers are told.
+ */
+export function reviewSource(verifiedVia: 'subscription' | 'owner' | null): { label: string; strong: boolean } {
+  if (verifiedVia === 'subscription') return { label: '✓ Verified stay · paid through Hostels', strong: true };
+  if (verifiedVia === 'owner') return { label: 'Resident · added by the hostel', strong: false };
+  return { label: 'Resident', strong: false };
+}

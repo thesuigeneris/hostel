@@ -5,6 +5,7 @@ import { SubmitButton } from '@/components/SubmitButton';
 import { Badge, Card, Flash, StatusBadge, Table, Td } from '@/components/ui';
 import { api } from '@/lib/api';
 import { dateLabel, rupees } from '@/lib/format';
+import { ownerHostel } from '@/lib/owner';
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; ok?: string }> };
 
@@ -17,7 +18,7 @@ const BLURB = {
 export default async function PlanPage({ params, searchParams }: Props) {
   const { id } = await params;
   const q = await searchParams;
-  const info = await (await api()).owner.plan(id);
+  const [info, hostel] = await Promise.all([(await api()).owner.plan(id), ownerHostel(id)]);
   const current = info.plan?.plan ?? 'free';
   const due = info.bills.find((b) => b.status === 'due');
 
@@ -54,6 +55,8 @@ export default async function PlanPage({ params, searchParams }: Props) {
               <p className="mt-2 text-sm text-ink-soft">{BLURB[t]}</p>
               {applied ? (
                 <p className="mt-4 text-sm text-food">Application in review. We&apos;ll call you to schedule a visit.</p>
+              ) : t === 'partner' && !isCurrent && hostel.status !== 'live' ? (
+                <p className="mt-4 text-sm text-ink-soft">You can apply once your listing is live.</p>
               ) : (!isCurrent || info.plan?.pendingPlan) && (
                 <form action={changePlanAction} className="mt-4">
                   <input type="hidden" name="hostelId" value={id} />

@@ -50,6 +50,8 @@ const isoDate = z.string().refine(isValidDate, 'Use a YYYY-MM-DD date');
 const rupees = z.coerce.number().int().min(0).max(1_000_000);
 const shortText = (max: number) => z.string().trim().max(max);
 const stringList = z.array(z.string().trim().min(1).max(80)).max(30);
+/** Photo links must be plain web URLs; `javascript:` and `data:` links are refused. */
+const webUrl = z.string().trim().max(500).url().refine((v) => /^https?:\/\//i.test(v), 'Use an http or https link');
 
 export const hostelInputSchema = z.object({
   name: z.string().trim().min(3).max(80),
@@ -84,7 +86,7 @@ export type RoomTypeInput = z.input<typeof roomTypeInputSchema>;
 export const roomTypeUpdateSchema = z.object(roomFields).partial();
 export type RoomTypeUpdateInput = z.input<typeof roomTypeUpdateSchema>;
 
-export const photoInputSchema = z.object({ url: z.string().trim().url().max(500) });
+export const photoInputSchema = z.object({ url: webUrl });
 export const photoOrderSchema = z.object({ photoIds: z.array(z.string()).min(1).max(30) });
 
 const boolParam = z
@@ -124,7 +126,7 @@ export const verifyPartnerSchema = z.object({ platformFeePct: z.coerce.number().
 export const foodPartnerInputSchema = z.object({
   name: z.string().trim().min(2).max(80),
   cuisine: shortText(80).default(''),
-  logoUrl: z.string().trim().url().max(500).nullable().optional(),
+  logoUrl: webUrl.nullable().optional(),
   active: z.boolean().default(true),
 });
 export const foodPartnerUpdateSchema = foodPartnerInputSchema.partial();
@@ -191,7 +193,7 @@ export const issueInputSchema = z.object({
   category: z.enum(ISSUE_CATEGORIES),
   title: z.string().trim().min(4).max(120),
   description: shortText(2000).default(''),
-  photoUrl: z.string().trim().max(500).nullable().optional(),
+  photoUrl: webUrl.nullable().optional(),
 });
 export type IssueInput = z.input<typeof issueInputSchema>;
 export const issueUpdateSchema = z
@@ -202,7 +204,7 @@ export type IssueUpdateInput = z.input<typeof issueUpdateSchema>;
 export const postInputSchema = z.object({
   kind: z.enum(POST_KINDS).default('general'),
   body: z.string().trim().min(1).max(1000),
-  photoUrl: z.string().trim().max(500).nullable().optional(),
+  photoUrl: webUrl.nullable().optional(),
 });
 export type PostInput = z.input<typeof postInputSchema>;
 export const commentInputSchema = z.object({ body: z.string().trim().min(1).max(500) });

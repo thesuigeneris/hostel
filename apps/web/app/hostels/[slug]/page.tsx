@@ -6,7 +6,7 @@ import { ClientHostelMap } from '@/components/MapLoader';
 import { SubmitButton } from '@/components/SubmitButton';
 import { Badge, Card, Field, Flash, Input, LinkButton, Stars, Textarea } from '@/components/ui';
 import { currentUser, publicApi, SITE_URL } from '@/lib/api';
-import { dateLabel, GENDER_LABEL, monthLabel, phoneLink, rupees, SHARING_LABEL, weekday, whatsappLink } from '@/lib/format';
+import { dateLabel, GENDER_LABEL, monthLabel, phoneLink, reviewSource, rupees, SHARING_LABEL, weekday, whatsappLink } from '@/lib/format';
 import { flagReviewAction, requestVisitAction } from './actions';
 
 type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ error?: string; ok?: string }> };
@@ -189,7 +189,7 @@ export default async function HostelPage({ params, searchParams }: Props) {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{r.author}</span>
-                      <Badge tone="green">✓ Verified resident</Badge>
+                      <Badge tone={reviewSource(r.verifiedVia).strong ? 'green' : 'gray'}>{reviewSource(r.verifiedVia).label}</Badge>
                       {r.stay && <span className="text-xs text-ink-muted">Lived here {monthLabel(r.stay.from)} – {r.stay.to ? monthLabel(r.stay.to) : 'now'}</span>}
                     </div>
                     <Stars value={r.rating} />

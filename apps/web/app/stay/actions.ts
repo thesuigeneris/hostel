@@ -1,6 +1,7 @@
 'use server';
 
 import type { IssueCategory, IssueStatus, PostKind } from '@hostels/shared';
+import { revalidatePath } from 'next/cache';
 import { run, safePath, str } from '@/lib/actions';
 import { api } from '@/lib/api';
 import { uploadPhoto } from '@/lib/upload';
@@ -26,14 +27,20 @@ export async function directoryAction(form: FormData) {
 
 export async function reviewAction(form: FormData) {
   const food = str(form, 'food');
-  await run(back(form), async () => (await api()).hostels.review(str(form, 'hostelId'), {
-    rating: rating(form, 'rating'),
-    cleanliness: rating(form, 'cleanliness'),
-    safety: rating(form, 'safety'),
-    responsiveness: rating(form, 'responsiveness'),
-    food: food ? Number(food) : null,
-    body: str(form, 'body'),
-  }), { ok: 'Thanks! Your review is live.' });
+  const slug = str(form, 'slug');
+  await run(back(form), async () => {
+    const review = await (await api()).hostels.review(str(form, 'hostelId'), {
+      rating: rating(form, 'rating'),
+      cleanliness: rating(form, 'cleanliness'),
+      safety: rating(form, 'safety'),
+      responsiveness: rating(form, 'responsiveness'),
+      food: food ? Number(food) : null,
+      body: str(form, 'body'),
+    });
+    // The public page caches reviews briefly; show the new one right away.
+    if (slug) revalidatePath(`/hostels/${slug}`);
+    return review;
+  }, { ok: 'Thanks! Your review is live.' });
 }
 
 export async function reportIssueAction(form: FormData) {
