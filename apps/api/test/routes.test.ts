@@ -24,9 +24,9 @@ describe('health', () => {
 
 describe('seed', () => {
   test('12 live hostels, 6 verified partners, seeded roles', async () => {
-    const res = await call('/hostels');
-    expect(res.body).toHaveLength(12);
-    expect(res.body.filter((h: { partnerStatus: string }) => h.partnerStatus === 'verified')).toHaveLength(6);
+    const res = await call('/hostels?limit=50');
+    expect(res.body.total).toBe(12);
+    expect(res.body.items.filter((h: { isVerified: boolean }) => h.isVerified)).toHaveLength(6);
     expect((await call('/me', { token: tokens.admin })).body.role).toBe('admin');
     expect((await call('/me', { token: tokens.owner })).body.role).toBe('owner');
     expect((await call('/me', { token: tokens.tenant })).body.role).toBe('tenant');
@@ -63,7 +63,7 @@ describe('role guards', () => {
     expect((await call('/me/subscription', { token: tokens.owner })).status).toBe(403);
     const sub = await call('/me/subscription', { token: tokens.tenant });
     expect(sub.status).toBe(200);
-    expect(sub.body).toBeNull();
+    expect(sub.body.subscription.status).toBe('active');
   });
 });
 

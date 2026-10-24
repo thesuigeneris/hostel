@@ -9,6 +9,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -19,11 +20,18 @@ import {
   GENDER_TYPES,
   HOSTEL_STATUSES,
   INVOICE_STATUSES,
+  ISSUE_CATEGORIES,
+  ISSUE_STATUSES,
   MEAL_PLANS,
   MEALS,
   MOVE_STATUSES,
+  OWNER_PLAN_TIERS,
   PARTNER_STATUSES,
   PAYOUT_STATUSES,
+  POST_KINDS,
+  RENT_METHODS,
+  RESIDENCY_SOURCES,
+  RESIDENCY_STATUSES,
   ROLES,
   SHARING_TYPES,
   SUBSCRIPTION_STATUSES,
@@ -332,4 +340,276 @@ export const payouts = pgTable(
     createdAt: createdAt(),
   },
   (t) => [unique('payouts_hostel_month').on(t.hostelId, t.periodMonth)],
+);
+
+// ---------------------------------------------------------------------------
+// Personas addendum: residencies, reviews, issues, community, owner plans.
+
+export const residencySourceEnum = pgEnum('residency_source', RESIDENCY_SOURCES);
+export const residencyStatusEnum = pgEnum('residency_status', RESIDENCY_STATUSES);
+export const issueCategoryEnum = pgEnum('issue_category', ISSUE_CATEGORIES);
+export const issueStatusEnum = pgEnum('issue_status', ISSUE_STATUSES);
+export const postKindEnum = pgEnum('post_kind', POST_KINDS);
+export const ownerPlanTierEnum = pgEnum('owner_plan_tier', OWNER_PLAN_TIERS);
+export const rentMethodEnum = pgEnum('rent_method', RENT_METHODS);
+export const reportTargetEnum = pgEnum('report_target', ['post', 'comment']);
+
+export const residencies = pgTable(
+  'residencies',
+  {
+    id: text('id').primaryKey(),
+    /** Null until an owner-invited phone signs in. */
+    userId: text('user_id').references(() => users.id),
+    phone: text('phone').notNull(),
+    name: text('name').notNull().default(''),
+    hostelId: text('hostel_id')
+      .notNull()
+      .references(() => hostels.id, { onDelete: 'cascade' }),
+    roomTypeId: text('room_type_id').references(() => roomTypes.id, { onDelete: 'set null' }),
+    source: residencySourceEnum('source').notNull(),
+    subscriptionId: text('subscription_id').references(() => subscriptions.id),
+    monthlyRent: integer('monthly_rent'),
+    startDate: day('start_date').notNull(),
+    endDate: day('end_date'),
+    status: residencyStatusEnum('status').notNull(),
+    directoryOptIn: boolean('directory_opt_in').notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('residencies_hostel_idx').on(t.hostelId, t.status),
+    index('residencies_user_idx').on(t.userId),
+    index('residencies_phone_idx').on(t.phone),
+  ],
+);
+
+export const reviews = pgTable(
+  'reviews',
+  {
+    id: text('id').primaryKey(),
+    hostelId: text('hostel_id')
+      .notNull()
+      .references(() => hostels.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    residencyId: text('residency_id')
+      .notNull()
+      .references(() => residencies.id),
+    rating: integer('rating').notNull(),
+    cleanliness: integer('cleanliness').notNull(),
+    food: integer('food'),
+    safety: integer('safety').notNull(),
+    responsiveness: integer('responsiveness').notNull(),
+    body: text('body').notNull(),
+    ownerReply: text('owner_reply'),
+    ownerRepliedAt: timestamp('owner_replied_at', { withTimezone: true }),
+    hidden: boolean('hidden').notNull().default(false),
+    hiddenReason: text('hidden_reason'),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('reviews_hostel_user').on(t.hostelId, t.userId),
+    check(
+      'reviews_ratings_range',
+      sql`${t.rating} between 1 and 5 and ${t.cleanliness} between 1 and 5 and ${t.safety} between 1 and 5 and ${t.responsiveness} between 1 and 5 and (${t.food} is null or ${t.food} between 1 and 5)`,
+    ),
+  ],
+);
+
+export const reviewFlags = pgTable(
+  'review_flags',
+  {
+    id: text('id').primaryKey(),
+    reviewId: text('review_id')
+      .notNull()
+      .references(() => reviews.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    reason: text('reason').notNull(),
+    resolved: boolean('resolved').notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [unique('review_flags_review_user').on(t.reviewId, t.userId)],
+);
+
+export const issues = pgTable(
+  'issues',
+  {
+    id: text('id').primaryKey(),
+    hostelId: text('hostel_id')
+      .notNull()
+      .references(() => hostels.id, { onDelete: 'cascade' }),
+    reporterId: text('reporter_id')
+      .notNull()
+      .references(() => users.id),
+    residencyId: text('residency_id')
+      .notNull()
+      .references(() => residencies.id),
+    category: issueCategoryEnum('category').notNull(),
+    title: text('title').notNull(),
+    description: text('description').notNull().default(''),
+    photoUrl: text('photo_url'),
+    status: issueStatusEnum('status').notNull().default('open'),
+    createdAt: createdAt(),
+    acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true }),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+  },
+  (t) => [index('issues_hostel_idx').on(t.hostelId, t.createdAt)],
+);
+
+export const issueUpdates = pgTable(
+  'issue_updates',
+  {
+    id: text('id').primaryKey(),
+    issueId: text('issue_id')
+      .notNull()
+      .references(() => issues.id, { onDelete: 'cascade' }),
+    authorId: text('author_id')
+      .notNull()
+      .references(() => users.id),
+    message: text('message').notNull().default(''),
+    fromStatus: issueStatusEnum('from_status'),
+    toStatus: issueStatusEnum('to_status'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('issue_updates_issue_idx').on(t.issueId)],
+);
+
+export const issueUpvotes = pgTable(
+  'issue_upvotes',
+  {
+    issueId: text('issue_id')
+      .notNull()
+      .references(() => issues.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+  },
+  (t) => [primaryKey({ columns: [t.issueId, t.userId] })],
+);
+
+export const communityPosts = pgTable(
+  'community_posts',
+  {
+    id: text('id').primaryKey(),
+    hostelId: text('hostel_id')
+      .notNull()
+      .references(() => hostels.id, { onDelete: 'cascade' }),
+    authorId: text('author_id')
+      .notNull()
+      .references(() => users.id),
+    kind: postKindEnum('kind').notNull().default('general'),
+    body: text('body').notNull(),
+    photoUrl: text('photo_url'),
+    pinned: boolean('pinned').notNull().default(false),
+    hidden: boolean('hidden').notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [index('community_posts_hostel_idx').on(t.hostelId, t.createdAt)],
+);
+
+export const communityComments = pgTable(
+  'community_comments',
+  {
+    id: text('id').primaryKey(),
+    postId: text('post_id')
+      .notNull()
+      .references(() => communityPosts.id, { onDelete: 'cascade' }),
+    authorId: text('author_id')
+      .notNull()
+      .references(() => users.id),
+    body: text('body').notNull(),
+    hidden: boolean('hidden').notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [index('community_comments_post_idx').on(t.postId)],
+);
+
+export const contentReports = pgTable(
+  'content_reports',
+  {
+    id: text('id').primaryKey(),
+    targetType: reportTargetEnum('target_type').notNull(),
+    targetId: text('target_id').notNull(),
+    hostelId: text('hostel_id')
+      .notNull()
+      .references(() => hostels.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    reason: text('reason').notNull(),
+    resolved: boolean('resolved').notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [unique('content_reports_target_user').on(t.targetType, t.targetId, t.userId)],
+);
+
+export const ownerPlans = pgTable('owner_plans', {
+  id: text('id').primaryKey(),
+  hostelId: text('hostel_id')
+    .notNull()
+    .unique()
+    .references(() => hostels.id, { onDelete: 'cascade' }),
+  plan: ownerPlanTierEnum('plan').notNull().default('free'),
+  /** Plan requested but not yet in force (a partner application, or a downgrade at month end). */
+  pendingPlan: ownerPlanTierEnum('pending_plan'),
+  /** When a downgrade takes effect (null for a partner application, which waits on admin). */
+  pendingPlanOn: day('pending_plan_on'),
+  startDate: day('start_date').notNull(),
+  trialEndsOn: day('trial_ends_on'),
+  /** Set when unpaid owner bills drop the hostel to the Free feature set. */
+  suspended: boolean('suspended').notNull().default(false),
+  createdAt: createdAt(),
+});
+
+export const ownerInvoices = pgTable(
+  'owner_invoices',
+  {
+    id: text('id').primaryKey(),
+    ownerPlanId: text('owner_plan_id')
+      .notNull()
+      .references(() => ownerPlans.id, { onDelete: 'cascade' }),
+    hostelId: text('hostel_id')
+      .notNull()
+      .references(() => hostels.id, { onDelete: 'cascade' }),
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => users.id),
+    plan: ownerPlanTierEnum('plan').notNull(),
+    periodStart: day('period_start').notNull(),
+    periodEnd: day('period_end').notNull(),
+    amount: integer('amount').notNull(),
+    status: invoiceStatusEnum('status').notNull().default('due'),
+    dueDate: day('due_date').notNull(),
+    razorpayOrderId: text('razorpay_order_id').unique(),
+    razorpayPaymentId: text('razorpay_payment_id'),
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('owner_invoices_plan_period')
+      .on(t.ownerPlanId, t.periodStart)
+      .where(sql`${t.status} <> 'void'`),
+  ],
+);
+
+export const rentRecords = pgTable(
+  'rent_records',
+  {
+    id: text('id').primaryKey(),
+    residencyId: text('residency_id')
+      .notNull()
+      .references(() => residencies.id, { onDelete: 'cascade' }),
+    month: text('month').notNull(),
+    amountDue: integer('amount_due').notNull(),
+    amountPaid: integer('amount_paid').notNull().default(0),
+    paidOn: day('paid_on'),
+    method: rentMethodEnum('method'),
+    note: text('note').notNull().default(''),
+    createdAt: createdAt(),
+  },
+  (t) => [unique('rent_records_residency_month').on(t.residencyId, t.month)],
 );

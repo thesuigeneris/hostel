@@ -31,6 +31,36 @@ export type MoveStatus = (typeof MOVE_STATUSES)[number];
 export const PAYOUT_STATUSES = ['pending', 'paid'] as const;
 export type PayoutStatus = (typeof PAYOUT_STATUSES)[number];
 
+export const RESIDENCY_SOURCES = ['subscription', 'owner'] as const;
+export type ResidencySource = (typeof RESIDENCY_SOURCES)[number];
+
+export const RESIDENCY_STATUSES = ['invited', 'active', 'ended', 'declined'] as const;
+export type ResidencyStatus = (typeof RESIDENCY_STATUSES)[number];
+
+export const ISSUE_CATEGORIES = [
+  'maintenance',
+  'cleanliness',
+  'food',
+  'safety',
+  'wifi',
+  'water',
+  'electricity',
+  'other',
+] as const;
+export type IssueCategory = (typeof ISSUE_CATEGORIES)[number];
+
+export const ISSUE_STATUSES = ['open', 'acknowledged', 'in_progress', 'resolved', 'closed'] as const;
+export type IssueStatus = (typeof ISSUE_STATUSES)[number];
+
+export const POST_KINDS = ['general', 'food', 'event', 'lost_found', 'buy_sell', 'announcement'] as const;
+export type PostKind = (typeof POST_KINDS)[number];
+
+export const OWNER_PLAN_TIERS = ['free', 'pro', 'partner'] as const;
+export type OwnerPlanTier = (typeof OWNER_PLAN_TIERS)[number];
+
+export const RENT_METHODS = ['cash', 'upi', 'bank', 'other'] as const;
+export type RentMethod = (typeof RENT_METHODS)[number];
+
 export const AREAS = [
   'Gachibowli',
   'Madhapur',
@@ -76,8 +106,29 @@ export type HostelSummary = {
   minRent: number | null;
   bedsAvailable: number;
   sharingTypes: SharingType[];
+  rating: number | null;
+  reviewCount: number;
   /** Kilometres from the search point, when searching near a location. */
   distanceKm?: number;
+};
+
+export type SearchResult = { items: HostelSummary[]; total: number; page: number; limit: number };
+
+export type TransparencyStats = {
+  windowDays: number;
+  reported: number;
+  resolvedPct: number;
+  medianHoursToFirstResponse: number | null;
+  medianHoursToResolve: number | null;
+};
+
+export type RatingBreakdown = {
+  rating: number | null;
+  reviewCount: number;
+  cleanliness: number | null;
+  food: number | null;
+  safety: number | null;
+  responsiveness: number | null;
 };
 
 export type Hostel = {
@@ -108,6 +159,9 @@ export type HostelDetail = Hostel & {
   isVerified: boolean;
   photos: HostelPhoto[];
   roomTypes: RoomType[];
+  ratings: RatingBreakdown;
+  /** Null until the hostel has enough issues in the window to be meaningful. */
+  transparency: TransparencyStats | null;
 };
 
 export type VisitRequest = {
@@ -243,6 +297,9 @@ export const ERROR_CODES = [
   'signature_invalid',
   'move_not_allowed',
   'invalid_state',
+  'not_a_resident',
+  'review_not_allowed',
+  'plan_required',
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
