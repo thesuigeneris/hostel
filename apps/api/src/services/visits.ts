@@ -35,6 +35,21 @@ export async function myVisits(user: User) {
   return rows.map((r) => ({ ...toVisit(r.visit), hostel: r.hostel }));
 }
 
+/** A seeker withdraws a visit request the hostel has not acted on yet. */
+export async function cancelVisit(user: User, visitId: string) {
+  const db = getDb();
+  const [v] = await db.select().from(schema.visitRequests).where(eq(schema.visitRequests.id, visitId));
+  if (!v || v.userId !== user.id) throw notFound('Visit request');
+  // Conditional on status, so a hostel reply landing at the same moment wins and the seeker is told.
+  const [row] = await db
+    .update(schema.visitRequests)
+    .set({ status: 'closed' })
+    .where(and(eq(schema.visitRequests.id, v.id), eq(schema.visitRequests.status, 'new')))
+    .returning();
+  if (!row) throw new AppError('invalid_state', 'The hostel has already responded to this request');
+  return toVisit(row);
+}
+
 export async function ownerVisits(user: User, status?: VisitStatus) {
   const ids = await hostelIdsOwnedBy(user.id);
   if (!ids.length) return [];

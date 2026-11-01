@@ -36,7 +36,7 @@ export async function searchHostels(q: Search): Promise<SearchResult> {
   if (roomFiltered) where.push(sql`rm.room_count > 0`);
 
   const order = {
-    recommended: sql`(h.partner_status = 'verified') desc, (rm.beds_free > 0) desc, rv.rating desc nulls last, h.name`,
+    recommended: sql`(h.partner_status = 'verified' and not coalesce(p.suspended, false)) desc, (rm.beds_free > 0) desc, rv.rating desc nulls last, h.name`,
     rent_asc: sql`rm.min_rent asc nulls last, h.name`,
     rent_desc: sql`rm.min_rent desc nulls last, h.name`,
     distance: near ? sql`${distance} asc` : sql`h.name`,

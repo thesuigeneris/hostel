@@ -369,9 +369,13 @@ export type Residency = {
 };
 
 export type MyResidency = Residency & {
-  hostel: { id: string; name: string; slug: string; area: string };
+  hostel: { id: string; name: string; slug: string; area: string; foodAvailable: boolean };
   canReview: boolean;
+  /** Why this stay cannot be reviewed yet (or any more), when `canReview` is false. */
+  reviewBlockedReason: string | null;
   hasReview: boolean;
+  /** The resident's own review of this hostel, if they wrote one. */
+  review: (Review & { hiddenReason: string | null }) | null;
 };
 
 export type IssueView = {
@@ -541,6 +545,8 @@ export type AdminStats = {
   flaggedReviews: number;
   openReports: number;
   overdueBills: number;
+  overdueOwnerBills: number;
+  suspendedHostels: number;
   escalatedIssues: number;
   /** Monthly recurring revenue in rupees, from what is in force today. */
   revenue: {
@@ -558,9 +564,15 @@ export type AdminStats = {
 /** Issues that need an admin nudge: unacknowledged for 48 hours, or unresolved for 7 days. */
 export type EscalatedIssue = IssueView & { hostelName: string; hostelSlug: string; ageHours: number; reason: 'unacknowledged' | 'unresolved' };
 
-/** Per-hostel numbers for the owner. View counts need the Pro or Partner plan; `locked` is true on Free. */
+/**
+ * Per-hostel numbers for the owner. The summary and issue health are free. View counts, room occupancy and the
+ * month's money need Pro or Partner: `locked` is true (and those fields null) on Free or a paused plan.
+ */
 export type OwnerInsights = {
   hostelId: string;
+  /** The month the money figures cover, `YYYY-MM`. */
+  month: string;
+  plan: PlanState;
   locked: boolean;
   views30d: number | null;
   viewsByDay: { day: ISODate; count: number }[] | null;
@@ -570,4 +582,34 @@ export type OwnerInsights = {
   openIssues: number;
   rating: number | null;
   reviewCount: number;
+  occupancy: {
+    totalBeds: number;
+    freeBeds: number;
+    occupiedBeds: number;
+    occupancyPct: number | null;
+    activeResidents: number;
+    activeSubscribers: number;
+    rooms: { roomTypeId: string; sharing: SharingType; totalBeds: number; bedsAvailable: number; monthlyRent: number }[];
+  } | null;
+  /** Subscription money is what tenants paid online this month; rent is the owner's own ledger. */
+  revenue: {
+    subscriptionGross: number;
+    platformFeePct: number;
+    platformFee: number;
+    subscriptionNet: number;
+    rentDue: number;
+    rentCollected: number;
+    planBillDue: number;
+  } | null;
+  issues: {
+    open: number;
+    needsResponse: number;
+    openByAge: { under1Day: number; days1to3: number; days3to7: number; over7Days: number };
+    byCategory: Partial<Record<IssueCategory, number>>;
+    reportedLast90Days: number;
+    medianHoursToFirstResponse: number | null;
+    medianHoursToResolve: number | null;
+  };
+  reviews: { rating: number | null; count: number; awaitingReply: number };
+  visits: { new: number; contacted: number };
 };

@@ -22,7 +22,9 @@ export type IdPrefix =
   | 'rpt'
   | 'opl'
   | 'oin'
-  | 'rnt';
+  | 'rnt'
+  | 'pap'
+  | 'aud';
 
 const ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyz';
 

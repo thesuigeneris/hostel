@@ -23,7 +23,7 @@ import {
   setDirectoryOptIn,
   upsertReview,
 } from '../services/residents';
-import { myVisits, requestVisit } from '../services/visits';
+import { cancelVisit, myVisits, requestVisit } from '../services/visits';
 
 const signedIn = requireAuth();
 
@@ -33,6 +33,7 @@ export const tenantRoutes = new Hono<AppEnv>()
     c.json(await requestVisit(c.get('user'), c.req.param('id'), await parseBody(c, visitRequestSchema)), 201),
   )
   .get('/me/visits', signedIn, async (c) => c.json(await myVisits(c.get('user'))))
+  .delete('/me/visits/:id', signedIn, async (c) => c.json(await cancelVisit(c.get('user'), c.req.param('id'))))
 
   // Subscription and bills: any signed-in user (owners and admins can live in someone else's hostel).
   // The service refuses a plan at a hostel the caller owns.
