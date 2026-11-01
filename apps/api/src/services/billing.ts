@@ -142,6 +142,11 @@ export async function subscribe(user: User, hostelId: string, input: z.output<ty
     return await db.transaction(async (tx) => {
       const [hostel] = await tx.select().from(schema.hostels).where(eq(schema.hostels.id, hostelId));
       if (!hostel || hostel.status !== 'live') throw notFound('Hostel');
+      // Anyone signed in may take a plan (owners and admins live in hostels too), but never at their own hostel:
+      // they would be billing themselves, and their rent records and reviews would count as a resident's.
+      if (hostel.ownerId === user.id) {
+        throw new AppError('cannot_subscribe_own_hostel', 'You own this hostel, so you can’t take a plan here.', 409);
+      }
       if (!isBookable(hostel, await planFor(hostel.id, tx))) {
         throw new AppError('not_verified', 'Only verified partner hostels take subscriptions');
       }
@@ -311,7 +316,15 @@ export async function cancelSubscription(user: User) {
       return toSubscription(cancelled);
     }
     if (sub.cancelAt) return toSubscription(sub);
-    const cancelAt = periodContaining(sub.startDate, clock.today()).end;
+    // A bill paid early for the next period keeps the plan running to the end of that period.
+    const [lastPaid] = await tx
+      .select({ periodEnd: schema.invoices.periodEnd })
+      .from(schema.invoices)
+      .where(and(eq(schema.invoices.subscriptionId, sub.id), eq(schema.invoices.status, 'paid')))
+      .orderBy(desc(schema.invoices.periodEnd))
+      .limit(1);
+    const currentEnd = periodContaining(sub.startDate, clock.today()).end;
+    const cancelAt = lastPaid && lastPaid.periodEnd > currentEnd ? lastPaid.periodEnd : currentEnd;
     const [updated] = await tx
       .update(schema.subscriptions)
       .set({ cancelAt })

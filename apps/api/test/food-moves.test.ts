@@ -109,6 +109,16 @@ describe('meal skips and headcount', () => {
 });
 
 describe('moves', () => {
+  test('a room a tenant is moving into cannot be deleted', async () => {
+    const dest = await liveHostel(ownerToken, adminToken, { partner: true, area: 'Madhapur' });
+    const t = await newTenant();
+    await activeSubscriber(t.token, hostel.id, room.id, 'full');
+    setClock('2026-12-05T06:00:00Z');
+    expect((await call('/me/moves', { token: t.token, body: { toRoomTypeId: dest.rooms[0].id, moveDate: '2026-12-15' } })).status).toBe(201);
+    const del = await call(`/owner/rooms/${dest.rooms[0].id}`, { token: ownerToken, method: 'DELETE' });
+    expect(del.body.error).toBe('invalid_state');
+  });
+
   test('schedule reserves a bed, re-bills unpaid periods at the new rent, completes on the date', async () => {
     const dest = await liveHostel(ownerToken, adminToken, {
       partner: true,

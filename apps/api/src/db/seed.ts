@@ -69,7 +69,7 @@ async function seedData(db: DB, today: string) {
   const ownerId = newId('usr');
   const tenantId = newId('usr');
   await db.insert(schema.users).values([
-    { id: adminId, phone: DEMO_PHONES.admin, name: 'Demo Admin', role: 'admin' },
+    { id: adminId, phone: DEMO_PHONES.admin, name: 'Demo Admin', role: 'admin', adminGrantedAt: new Date() },
     { id: ownerId, phone: DEMO_PHONES.owner, name: 'Demo Owner', role: 'owner', email: 'owner@example.com' },
     { id: tenantId, phone: DEMO_PHONES.tenant, name: 'Demo Tenant', role: 'tenant' },
   ]);

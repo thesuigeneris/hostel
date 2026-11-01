@@ -92,14 +92,34 @@ export async function verifyOtp(
 }
 
 /**
- * Admin comes only from ADMIN_PHONES, and only for a phone verified by OTP (a password sign-up proves nothing about
- * the phone). A tenant may upgrade to owner; roles are never downgraded here.
+ * Admin comes from ADMIN_PHONES, and only for a phone verified by OTP (a password sign-up proves nothing about
+ * the phone), or from a server-side grant (`grantAdmin`). A tenant may upgrade to owner; owners are never
+ * downgraded here.
  */
-function resolveRole(phone: string, current: Role | null, phoneVerified: boolean, requested?: 'tenant' | 'owner'): Role {
+function resolveRole(
+  phone: string,
+  current: Role | null,
+  phoneVerified: boolean,
+  requested?: 'tenant' | 'owner',
+  adminGranted = false,
+): Role {
   if (phoneVerified && env.adminPhones.includes(phone)) return 'admin';
-  if (current === 'admin' || current === 'owner') return current;
+  if (current === 'admin') return adminGranted ? 'admin' : 'owner';
+  if (current === 'owner') return current;
   if (current === 'tenant') return requested === 'owner' ? 'owner' : 'tenant';
   return requested ?? 'tenant';
+}
+
+type UserRow = typeof schema.users.$inferSelect;
+
+/**
+ * The role a live session acts with. An admin that came from ADMIN_PHONES loses admin as soon as the phone leaves
+ * the list, on sessions already open too. They drop to owner, since they may have created hostels.
+ */
+function withLiveRole(row: UserRow): User {
+  const user = toUser(row);
+  if (user.role !== 'admin' || row.adminGrantedAt) return user;
+  return row.phoneVerifiedAt && env.adminPhones.includes(row.phone) ? user : { ...user, role: 'owner' };
 }
 
 async function findOrCreateUser(
@@ -112,7 +132,7 @@ async function findOrCreateUser(
   const u = schema.users;
   const [existing] = await db.select().from(u).where(eq(u.phone, phone)).limit(1);
   if (existing) {
-    const role = resolveRole(phone, existing.role, true, requested);
+    const role = resolveRole(phone, existing.role, true, requested, !!existing.adminGrantedAt);
     if (role === existing.role && existing.phoneVerifiedAt) return toUser(existing);
     const [updated] = await db
       .update(u)
@@ -149,7 +169,7 @@ export async function createSession(userId: string, now = new Date()): Promise<A
   const token = randomToken(32);
   const expiresAt = new Date(now.getTime() + SESSION_TTL_DAYS * 24 * HOUR_MS);
   await db.insert(schema.sessions).values({ tokenHash: sha256Hex(token), userId, expiresAt });
-  return { user: toUser(user), token, expiresAt: expiresAt.toISOString() };
+  return { user: withLiveRole(user), token, expiresAt: expiresAt.toISOString() };
 }
 
 export async function getSessionUser(token: string, now = new Date()): Promise<User | null> {
@@ -162,7 +182,7 @@ export async function getSessionUser(token: string, now = new Date()): Promise<U
     .where(and(eq(s.tokenHash, sha256Hex(token)), gt(s.expiresAt, now)))
     .limit(1);
   // Sessions issued before a mode change stop working too.
-  return row && loginAllowed(row.user) ? toUser(row.user) : null;
+  return row && loginAllowed(row.user) ? withLiveRole(row.user) : null;
 }
 
 export async function deleteSession(token: string) {
@@ -326,7 +346,11 @@ export async function authMethods(): Promise<AuthMethods> {
 
 /** Server-side admin bootstrap (no HTTP route): works without SMS, for an account that already exists. */
 export async function grantAdmin(phone: string) {
-  const [row] = await getDb().update(schema.users).set({ role: 'admin' }).where(eq(schema.users.phone, phone)).returning();
+  const [row] = await getDb()
+    .update(schema.users)
+    .set({ role: 'admin', adminGrantedAt: clock.now() })
+    .where(eq(schema.users.phone, phone))
+    .returning();
   if (!row) throw new AppError('not_found', `No account with phone ${phone}. Ask them to sign up first.`, 404);
   return toUser(row);
 }

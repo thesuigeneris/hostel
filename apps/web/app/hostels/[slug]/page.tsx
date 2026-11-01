@@ -56,6 +56,8 @@ export default async function HostelPage({ params, searchParams }: Props) {
   const examplePlan = h.foodAvailable ? 'full' : 'none';
   const example = cheapestFree ? computeBill({ rent: cheapestFree.monthlyRent, mealPlan: examplePlan, skipCredits: 0 }) : null;
   const today = istDate();
+  // Owners can take a plan anywhere except at their own hostel; the API refuses it too.
+  const isOwn = !!user && user.id === h.ownerId;
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'LodgingBusiness',
@@ -325,7 +327,14 @@ export default async function HostelPage({ params, searchParams }: Props) {
                     : 'This hostel does not offer food plans.'}{' '}
                   Move or cancel anytime.
                 </p>
-                <LinkButton href={`/subscribe/${h.slug}`} size="lg" className="mt-4 w-full">Subscribe</LinkButton>
+                {isOwn ? (
+                  <div className="mt-4 rounded-xl bg-bg p-3 text-sm">
+                    <p className="text-ink-soft">You own this hostel, so you can&apos;t take a plan here.</p>
+                    <LinkButton href={`/owner/hostels/${h.id}`} variant="secondary" className="mt-3 w-full">Manage this hostel</LinkButton>
+                  </div>
+                ) : (
+                  <LinkButton href={`/subscribe/${h.slug}`} size="lg" className="mt-4 w-full">Subscribe</LinkButton>
+                )}
               </>
             ) : (
               <form id="visit" action={requestVisitAction} className="mt-4 space-y-3 border-t border-line pt-4">
@@ -344,7 +353,8 @@ export default async function HostelPage({ params, searchParams }: Props) {
             </div>
           </Card>
           <p className="px-1 text-xs text-ink-muted">
-            Listed {dateLabel(h.createdAt)}. <Link href="/for-owners">Own this hostel?</Link>
+            Listed {dateLabel(h.createdAt)}.{' '}
+            {!isOwn && <Link href="/for-owners">Own this hostel?</Link>}
           </p>
         </aside>
       </div>
@@ -357,7 +367,9 @@ export default async function HostelPage({ params, searchParams }: Props) {
             <div className="truncate text-xs text-ink-muted">{h.isVerified ? 'No advance · one monthly bill' : bedsFree > 0 ? `${bedsFree} beds free` : 'Full right now'}</div>
           </div>
           <a href={phoneLink(h.contactPhone)} className={buttonClass('secondary', 'md')}>Call</a>
-          {h.isVerified ? (
+          {isOwn ? (
+            <Link href={`/owner/hostels/${h.id}`} className={buttonClass('primary', 'md')}>Manage</Link>
+          ) : h.isVerified ? (
             <Link href={`/subscribe/${h.slug}`} className={buttonClass('primary', 'md')}>Subscribe</Link>
           ) : (
             <a href="#visit" className={buttonClass('primary', 'md')}>Request visit</a>

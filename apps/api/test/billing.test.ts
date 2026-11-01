@@ -4,7 +4,7 @@ import { signPayment } from '../src/lib/razorpay';
 import { hmacHex } from '../src/lib/crypto';
 import { runJobs } from '../src/services/jobs';
 import { activeSubscriber, admin, liveHostel, newOwner, newTenant, roomBeds } from './fixtures';
-import { call, resetDb } from './helpers';
+import { call, login, resetDb } from './helpers';
 
 let ownerToken: string;
 let adminToken: string;
@@ -50,13 +50,13 @@ describe('subscribe', () => {
     expect(await roomBeds(ownerToken, hostel.id, room.id)).toBe(4);
   });
 
-  test('free listings, owners and food plans at no-food hostels are refused', async () => {
+  test('free listings, the hostel\'s own owner and food plans at no-food hostels are refused', async () => {
     const free = await liveHostel(ownerToken, adminToken);
     const { token } = await newTenant();
     const r1 = await call(`/hostels/${free.hostel.id}/subscribe`, { token, body: { roomTypeId: free.rooms[0].id, mealPlan: 'full' } });
     expect(r1.body.error).toBe('not_verified');
     const r2 = await call(`/hostels/${hostel.id}/subscribe`, { token: ownerToken, body: { roomTypeId: room.id, mealPlan: 'full' } });
-    expect(r2.status).toBe(403);
+    expect(r2).toMatchObject({ status: 409, body: { error: 'cannot_subscribe_own_hostel' } });
     const noFood = await liveHostel(ownerToken, adminToken, { partner: true, foodAvailable: false });
     const r3 = await call(`/hostels/${noFood.hostel.id}/subscribe`, { token, body: { roomTypeId: noFood.rooms[0].id, mealPlan: 'full' } });
     expect(r3.status).toBe(400);
@@ -224,6 +224,33 @@ describe('cancel', () => {
     expect(await roomBeds(ownerToken, hostel.id, room.id)).toBe(5);
     expect((await call('/me/subscription/cancel', { token, method: 'POST' })).status).toBe(404);
     expect(await roomBeds(ownerToken, hostel.id, room.id)).toBe(5);
+  });
+
+  test('cancelling after paying the next bill early keeps the plan to the end of that period', async () => {
+    const { token } = await newTenant();
+    await activeSubscriber(token, hostel.id, room.id);
+    setClock('2026-12-06T06:00:00Z');
+    await runJobs(); // generates the 10 December bill
+    const next = (await call('/me/invoices', { token })).body[0];
+    expect(next.periodStart).toBe('2026-12-10');
+    expect((await call(`/payments/${next.id}/simulate`, { token, method: 'POST' })).body.status).toBe('paid');
+    const res = await call('/me/subscription/cancel', { token, method: 'POST' });
+    expect(res.body).toMatchObject({ status: 'active', cancelAt: '2027-01-09' });
+    setClock('2026-12-11T06:00:00Z');
+    expect((await runJobs()).endedSubscriptions).toBe(0);
+    expect((await call('/me/subscription', { token })).body.subscription.status).toBe('active');
+  });
+
+  test('a subscriber who later signs in as an owner still manages their plan', async () => {
+    const { token, phone } = await newTenant();
+    await activeSubscriber(token, hostel.id, room.id);
+    const owner = await login(phone, 'owner');
+    expect((await call('/me', { token: owner })).body.role).toBe('owner');
+    expect((await call('/me/subscription', { token: owner })).body.subscription.status).toBe('active');
+    expect((await call('/me/invoices', { token: owner })).body).toHaveLength(1);
+    expect((await call('/me/menu', { token: owner })).status).toBe(200);
+    expect((await call('/me/moves', { token: owner })).status).toBe(200);
+    expect((await call('/me/subscription/cancel', { token: owner, method: 'POST' })).body.cancelAt).toBe('2026-12-09');
   });
 
   test('active plans end with the paid period; cancelling twice frees one bed', async () => {

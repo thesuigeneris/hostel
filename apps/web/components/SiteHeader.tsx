@@ -8,6 +8,8 @@ function navFor(user: User | null): NavItem[] {
   const links: NavItem[] = [{ href: '/hostels', label: 'Find a hostel' }];
   if (!user || user.role === 'tenant') links.push({ href: '/for-owners', label: 'For owners' });
   if (user?.role === 'tenant') links.push({ href: '/account', label: 'My plan' }, { href: '/stay', label: 'My hostel' });
+  // Owners and admins can hold a plan at someone else's hostel too.
+  else if (user) links.push({ href: '/account', label: 'My plan' });
   if (user?.role === 'owner' || user?.role === 'admin') links.push({ href: '/owner', label: 'Owner dashboard' });
   if (user?.role === 'admin') links.push({ href: '/admin', label: 'Admin' });
   return links;

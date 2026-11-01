@@ -65,6 +65,32 @@ Gates run at `d774465`:
 | UI-WORKSPACES | Owner, resident, admin workspaces | labels on unlabeled controls (community post, photo upload, weekly menu grid, admin fee and reason); white-on-amber Pay button fixed; display font for page headers | `e2e/workspaces.spec.ts`: 26 signed-in routes × axe (WCAG 2.2 AA serious/critical) × overflow at 360/390/768/1024/1440, plus role-aware nav and server-side role redirects; full suite 36/36 | verified (batch 4) for the demo-data states; states the seed doesn't produce (e.g. a rejected listing, an overdue resident) are not swept |
 | UI-ROLES | Navigation matches the role; hidden links are not the guard | `SiteHeader` links per role; `requireUser` in owner and admin layouts | `workspaces.spec.ts` › navigation matches the role (tenant → /admin and /owner redirected to login; owner → /admin redirected) | verified (batch 4) |
 
+## Review fixes ported from PRs #1–#5, and owner subscriptions
+
+The phase 1–5 branches got review fixes (`ba33254`, `517f837`, `e0309ec`, `4a01924`, `4787a49`, and the security review in `de5719a`) after this branch copied them. None were already fixed here; all are ported below. `ba33254` had to be adapted: this branch also grants admin with `admin:grant`, so server-granted admins are recorded (`users.admin_granted_at`) and keep the role.
+
+Gates run at `a1f9d34` on disposable databases (`hostels_test_a`, `hostels_e2e_a`; e2e on ports 4101/3101):
+- `bun run typecheck` (4/4 exit 0) and `bunx biome lint .` (clean).
+- Shared tests 28 pass; web unit tests 2 pass (`apps/web/test`); mobile tests 3 pass; API tests 110 pass.
+- `e2e:fresh`: 41/41.
+- Each fix was reverted on its own and its test failed, then restored.
+
+| Req | Requirement | Implementation | Test | Status |
+|---|---|---|---|---|
+| REV-ADMIN | Removing a phone from `ADMIN_PHONES` takes admin away from live and new sessions (drops to owner); server-granted and seeded admins keep it | `services/auth.ts` `resolveRole`, `withLiveRole`, `grantAdmin`; `users.admin_granted_at` (migration 0006); `db/seed.ts`; `PATCH /me` keeps the session role | `auth.test.ts` › removing a phone from ADMIN_PHONES…, › an admin granted on the server keeps admin…, › the seeded demo admin keeps admin… | verified @ef97189 |
+| REV-CANCEL | Cancelling after paying the next bill early keeps the plan to the end of that period | `billing.ts` `cancelSubscription` | `billing.test.ts` › cancelling after paying the next bill early… | verified @676a9ea |
+| REV-PLAN | A plan change voids only bills for periods not yet started and doesn't lift a suspension | `plans.ts` `switchPlan` | `personas.test.ts` › a plan change never voids the bill for a month already used (incl. upgrade while overdue stays suspended) | verified @676a9ea |
+| REV-ROOM | A room type in a move request can't be deleted (was a foreign-key 500) | `listings.ts` `deleteRoomType` | `food-moves.test.ts` › a room a tenant is moving into cannot be deleted | verified @676a9ea |
+| REV-MANAGE | Any role can read and manage the plan it holds: plan, bills, food, moves | `routes/tenant.ts` (`signedIn`) | `billing.test.ts` › a subscriber who later signs in as an owner still manages their plan; `routes.test.ts` › tenant routes; `subscriptions.test.ts` › needs a signed-in user with a plan | verified @676a9ea |
+| REV-REDIRECT | `next` and `_back` can't leave the site (`/\host`, tab tricks) | `apps/web/lib/paths.ts` `safePath` | `apps/web/test/paths.test.ts` (2); `e2e/handoff.spec.ts` › app hand-off…, › login form… | verified @1539dec |
+| REV-WEB-PLAN | `/account` and `/account/move` show a plan whatever the role | `app/account/page.tsx`, `app/account/move/page.tsx` | `e2e/plans-any-role.spec.ts` › a subscriber who later signs in as an owner… | verified @f30d72b |
+| REV-MOBILE-PLAN | My Stay shows a plan whatever the role | `apps/mobile/app/(tabs)/stay.tsx` | typecheck only | unverified: no mobile runtime test reaches My Stay |
+| SUB-ANY-ROLE | Any signed-in user may start a plan (product decision) | `routes/tenant.ts` subscribe uses `signedIn` | `subscriptions.test.ts` › an owner can take a plan at someone else's hostel… (201, pays, active) | verified @a1f9d34 |
+| SUB-NOT-OWN | Never at a hostel you own: 409 `cannot_subscribe_own_hostel`; moves follow the same rule | `billing.ts` `subscribe`, `moves.ts` `scheduleMove`; code in `packages/shared/src/types.ts` | `subscriptions.test.ts` › …never at their own, › an owner with a plan elsewhere cannot move it into their own hostel; `billing.test.ts` › free listings, the hostel's own owner… | verified @a1f9d34 |
+| SUB-ADMIN | Admins subscribe like anyone, except at a hostel they own | same | `subscriptions.test.ts` › admins may take a plan like anyone… | verified @a1f9d34 |
+| SUB-WEB | Subscribe offered to owners on others' hostels; explained (with Manage link) on their own; My plan link for owners and admins | `app/hostels/[slug]/page.tsx`, `app/subscribe/[slug]/page.tsx`, `components/SiteHeader.tsx` | `e2e/plans-any-role.spec.ts` › an owner subscribes at someone else's hostel…, › an owner is not offered a plan at their own hostel | verified @a1f9d34 |
+| SUB-MOBILE | Same in the app: notice instead of Subscribe on your own hostel; subscribe screen explains | `apps/mobile/app/hostel/[slug].tsx`, `apps/mobile/app/subscribe/[slug].tsx` | typecheck only | unverified: no mobile runtime test |
+
 ## Later PRPs (rows filled when each PRP is generated)
 
 | PRP | Area | Status |

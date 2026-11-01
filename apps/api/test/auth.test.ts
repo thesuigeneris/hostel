@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { eq } from 'drizzle-orm';
 import { getDb, schema } from '../src/db';
+import { seed } from '../src/db/seed';
+import { DEMO_PHONES } from '../src/db/seed-data';
 import { sha256Hex } from '../src/lib/crypto';
-import { requestOtp, verifyOtp } from '../src/services/auth';
+import { grantAdmin, requestOtp, verifyOtp } from '../src/services/auth';
 import { call, login, resetDb } from './helpers';
 
 beforeEach(resetDb);
@@ -124,6 +126,48 @@ describe('roles', () => {
   test('ADMIN_PHONES get admin, whatever role they ask for', async () => {
     const token = await login('9000000001', 'tenant');
     expect((await call('/me', { token })).body.role).toBe('admin');
+  });
+
+  test('removing a phone from ADMIN_PHONES takes admin away from old and new sessions', async () => {
+    const old = await login('9000000001');
+    const saved = process.env.ADMIN_PHONES;
+    process.env.ADMIN_PHONES = '';
+    try {
+      expect((await call('/admin/hostels', { token: old })).status).toBe(403);
+      expect((await call('/me', { token: old })).body.role).toBe('owner');
+      expect((await call('/me', { token: old, method: 'PATCH', body: { name: 'Former' } })).body.role).toBe('owner');
+      const fresh = await login('9000000001');
+      expect((await call('/admin/hostels', { token: fresh })).status).toBe(403);
+      expect((await call('/me', { token: fresh })).body.role).toBe('owner');
+      // Dropping to owner keeps access to the owner workspace (an admin may have created hostels).
+      expect((await call('/owner/hostels', { token: fresh })).status).toBe(200);
+    } finally {
+      process.env.ADMIN_PHONES = saved;
+    }
+    const back = await login('9000000001');
+    expect((await call('/me', { token: back })).body.role).toBe('admin');
+  });
+
+  test('an admin granted on the server keeps admin without ADMIN_PHONES', async () => {
+    const token = await login('9876543210');
+    await grantAdmin('9876543210');
+    expect((await call('/admin/hostels', { token })).status).toBe(200);
+    const again = await login('9876543210');
+    expect((await call('/me', { token: again })).body.role).toBe('admin');
+    expect((await call('/admin/hostels', { token: again })).status).toBe(200);
+  });
+
+  test('the seeded demo admin keeps admin without ADMIN_PHONES', async () => {
+    await seed(getDb());
+    const saved = process.env.ADMIN_PHONES;
+    process.env.ADMIN_PHONES = '';
+    try {
+      const demo = await call('/auth/demo', { body: { phone: DEMO_PHONES.admin } });
+      expect(demo.body.user.role).toBe('admin');
+      expect((await call('/admin/hostels', { token: demo.body.token })).status).toBe(200);
+    } finally {
+      process.env.ADMIN_PHONES = saved;
+    }
   });
 
   test('an existing owner is not downgraded by logging in as tenant', async () => {

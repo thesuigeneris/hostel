@@ -12,7 +12,7 @@ import {
   OWNER_TRIAL_MONTHS,
   periodContaining,
 } from '@hostels/shared';
-import { and, desc, eq, inArray, lte, ne } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lte, ne } from 'drizzle-orm';
 import { getDb, schema, type Tx } from '../db';
 import { clock } from '../lib/clock';
 import { AppError } from '../lib/errors';
@@ -28,13 +28,21 @@ export async function switchPlan(tx: Tx, hostelId: string, plan: OwnerPlanTier) 
   const trialEndsOn =
     current?.trialEndsOn ?? (plan === 'free' ? null : addMonths(today, OWNER_TRIAL_MONTHS));
   if (current) {
+    // Only bills for periods the old plan hasn't started are dropped; months already used stay owed,
+    // and refreshSuspensions keeps deciding whether the hostel is paused.
     await tx
       .update(schema.ownerInvoices)
       .set({ status: 'void' })
-      .where(and(eq(schema.ownerInvoices.ownerPlanId, current.id), eq(schema.ownerInvoices.status, 'due')));
+      .where(
+        and(
+          eq(schema.ownerInvoices.ownerPlanId, current.id),
+          eq(schema.ownerInvoices.status, 'due'),
+          gte(schema.ownerInvoices.periodStart, today),
+        ),
+      );
     await tx
       .update(schema.ownerPlans)
-      .set({ plan, startDate: today, trialEndsOn, pendingPlan: null, pendingPlanOn: null, suspended: false })
+      .set({ plan, startDate: today, trialEndsOn, pendingPlan: null, pendingPlanOn: null })
       .where(eq(schema.ownerPlans.id, current.id));
   } else {
     await tx.insert(schema.ownerPlans).values({ id: newId('opl'), hostelId, plan, startDate: today, trialEndsOn });
