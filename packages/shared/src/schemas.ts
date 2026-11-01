@@ -112,7 +112,17 @@ export const roomTypeInputSchema = z
   .object(roomFields)
   .refine((r) => r.bedsAvailable <= r.totalBeds, { message: 'Beds free cannot exceed total beds', path: ['bedsAvailable'] });
 export type RoomTypeInput = z.input<typeof roomTypeInputSchema>;
-export const roomTypeUpdateSchema = z.object(roomFields).partial();
+/**
+ * `totalBedsWas` and `bedsAvailableWas` are the counts the owner's form showed. The API applies the difference
+ * to the current counts, so a bed taken by a subscription while the form was open isn't given back.
+ */
+export const roomTypeUpdateSchema = z
+  .object(roomFields)
+  .partial()
+  .extend({
+    totalBedsWas: z.coerce.number().int().min(0).max(500).optional(),
+    bedsAvailableWas: z.coerce.number().int().min(0).max(500).optional(),
+  });
 export type RoomTypeUpdateInput = z.input<typeof roomTypeUpdateSchema>;
 
 export const photoInputSchema = z.object({ url: webUrl });

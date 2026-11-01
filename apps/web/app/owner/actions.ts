@@ -81,6 +81,8 @@ export async function updateRoomAction(form: FormData) {
     advanceAmount: num(form, 'advanceAmount'),
     totalBeds: num(form, 'totalBeds'),
     bedsAvailable: num(form, 'bedsAvailable'),
+    totalBedsWas: num(form, 'totalBedsWas'),
+    bedsAvailableWas: num(form, 'bedsAvailableWas'),
   }), { ok: 'Room updated' });
 }
 
