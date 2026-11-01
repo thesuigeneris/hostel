@@ -64,9 +64,10 @@ test('admin filters owner bills, waives one, and the audit log records it', asyn
   await row.getByRole('button', { name: 'Waive' }).click();
   await expect(admin.getByText('Bill waived')).toBeVisible();
 
-  await admin.goto('/admin/billing?bills=void');
+  await admin.goto('/admin/billing?bills=waived');
+  await expect(admin.getByRole('link', { name: 'Waived' })).toHaveAttribute('aria-current', 'page');
   // The owner plans table lists the hostel too; the bills table row is the one with the waived bill.
-  await expect(admin.getByRole('row', { name: new RegExp(partner.name) }).filter({ hasText: 'Void' }).first()).toBeVisible();
+  await expect(admin.getByRole('row', { name: new RegExp(partner.name) }).filter({ hasText: 'Waived' }).first()).toBeVisible();
 
   await admin.goto('/admin/audit?action=owner_invoice.void');
   await expect(admin.getByText(/Goodwill month after the kitchen repair/)).toBeVisible();

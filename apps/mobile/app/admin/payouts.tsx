@@ -1,4 +1,4 @@
-import { dateLabel, istDate, monthLabel, rupees } from '@hostels/shared';
+import { dateLabel, istDate, monthLabel, notCountedLabel, rupees } from '@hostels/shared';
 import { Stack } from 'expo-router';
 import { useState } from 'react';
 import { Text } from 'react-native';
@@ -22,17 +22,25 @@ export default function AdminPayoutsScreen() {
 
 function AdminPayouts() {
   const [month, setMonth] = useState(() => lastMonth(istDate()));
-  const s = useLoad(() => api.admin.payouts(month), [month]);
+  const s = useLoad(async () => {
+    const [payouts, revenue] = await Promise.all([api.admin.payouts(month), api.admin.revenue(month)]);
+    return { payouts, leftOut: notCountedLabel(revenue.notCounted.tenant) };
+  }, [month]);
   const a = useAction();
   const gate = whileLoading(s);
   if (gate) return gate;
-  const payouts = s.data!;
+  const { payouts, leftOut } = s.data!;
 
   return (
     <Screen refreshing={s.refreshing} onRefresh={s.refresh}>
-      <P muted>Generate after a month closes. Bills paid in that month count, minus each hostel's fee.</P>
+      <P muted>Generate after a month closes. Tenant bills paid that month through live Razorpay count, minus each hostel's fee.</P>
       <Stepper label={monthLabel(month)} onPrev={() => setMonth(shiftMonth(month, -1))} onNext={() => setMonth(shiftMonth(month, 1))} />
-      <Button title={`Generate for ${monthLabel(month)}`} busy={a.busy === 'gen'} onPress={() => a.run('gen', async () => s.setData(await api.admin.generatePayouts(month)), 'Payouts generated')} />
+      {leftOut && <P muted>{leftOut}, so it is never paid out.</P>}
+      <Button
+        title={`Generate for ${monthLabel(month)}`}
+        busy={a.busy === 'gen'}
+        onPress={() => a.run('gen', async () => s.setData({ payouts: await api.admin.generatePayouts(month), leftOut }), 'Payouts generated')}
+      />
       <ErrorText>{a.error ?? s.error}</ErrorText>
       <Notice>{a.ok}</Notice>
       {payouts.length === 0 ? <Empty title={`No payouts for ${monthLabel(month)} yet`} /> : payouts.map((p) => (

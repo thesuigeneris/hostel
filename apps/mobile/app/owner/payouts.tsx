@@ -1,4 +1,4 @@
-import { dateLabel, monthLabel, rupees } from '@hostels/shared';
+import { dateLabel, monthLabel, notCountedLabel, rupees } from '@hostels/shared';
 import { Stack } from 'expo-router';
 import { Text } from 'react-native';
 import { RoleGate } from '@/components/owner/Gate';
@@ -27,6 +27,7 @@ function Payouts() {
       <P muted>Rent and food paid online by your subscribers, minus the platform fee. Paid out monthly.</P>
       <ErrorText>{s.error}</ErrorText>
       <H2>So far in {monthLabel(data.thisMonth.month)}</H2>
+      {notCountedLabel(data.thisMonth.notCounted) && <P muted>{notCountedLabel(data.thisMonth.notCounted)}, so it is not paid out.</P>}
       {data.thisMonth.hostels.length === 0 ? <Empty title="No online payments yet this month" /> : data.thisMonth.hostels.map((h) => (
         <Card key={h.hostelId}>
           <Text style={{ fontWeight: '600', color: theme.colors.text }}>{h.hostelName}</Text>

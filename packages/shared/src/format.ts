@@ -61,7 +61,17 @@ export function notCountedLabel(n: NotCounted): string | null {
   return parts.length ? `Not counted: ${parts.join(' · ')} (no real money moved)` : null;
 }
 
-/** Why a payment could not be used, completing "We received ₹X, but …". */
+/** Why a payment could not be used, for the admin list. */
+export const REFUND_REASON_LABEL: Record<PaymentExceptionReason, string> = {
+  bed_taken: 'Bed hold ran out and the bed was taken',
+  has_other_plan: 'Payer had started another plan',
+  hostel_unavailable: 'Hostel stopped taking subscriptions',
+  bill_cancelled: 'Bill was cancelled',
+  bill_waived: 'Bill was waived',
+  duplicate_payment: 'Bill was already paid',
+};
+
+/** Why a payment could not be used, completing "We received ₹X, but …" for the payer. */
 export const REFUND_REASON_TEXT: Record<PaymentExceptionReason, string> = {
   bed_taken: 'your bed hold ran out and the last bed was taken before the payment reached us',
   has_other_plan: 'you had started another plan before the payment reached us',

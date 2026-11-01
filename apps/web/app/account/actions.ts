@@ -32,12 +32,15 @@ export async function createOrderAction(invoiceId: string) {
 }
 
 export async function verifyPaymentAction(invoiceId: string, payment: { razorpayOrderId: string; razorpayPaymentId: string; razorpaySignature: string }) {
+  let refunded = false;
   try {
-    await (await api()).payments.verify(invoiceId, payment);
+    const page = await (await api()).payments.verify(invoiceId, payment);
+    // The payment arrived after the bill closed: the page explains the refund instead of thanking them.
+    refunded = page.refund?.razorpayPaymentId === payment.razorpayPaymentId;
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Payment could not be verified' };
   }
-  redirect(`/pay/${invoiceId}?ok=${encodeURIComponent('Payment received. Thank you!')}`);
+  redirect(refunded ? `/pay/${invoiceId}` : `/pay/${invoiceId}?ok=${encodeURIComponent('Payment received. Thank you!')}`);
 }
 
 export async function updateProfileAction(form: FormData) {
