@@ -46,7 +46,7 @@
 | Area | Behaviour | Where |
 |---|---|---|
 | SMS OTP | No MSG91 key: code is always `123456` for **any** phone outside production; production returns 503 | `lib/msg91.ts`, `services/auth.ts` |
-| Payments | No Razorpay keys: "Simulate payment" marks the bill paid, with a `pay_stub_` id | `services/payments.ts` |
+| Payments | No Razorpay keys: "Simulate payment" marks the bill paid, with a `pay_stub_` id, recorded as `payment_mode = simulated` and never counted as money (M7 fixed) | `services/payments.ts` |
 | Photo storage | Local disk (`apps/api/uploads`) | `lib/storage.ts` |
 | Demo photos | Hot-linked Unsplash URLs in the seed | `db/seed-data.ts` |
 
@@ -60,7 +60,7 @@
 | M4 | **No login throttling** beyond OTP sends; no general rate limiting. | `docs/security-review.md` "Still open" | 01 (login), 11 (general) |
 | M5 | **Overbooking via a lost update.** `updateRoomType` writes back the stale `bedsAvailable` even when only the rent was edited. | `services/listings.ts:129` | 03 |
 | M6 | **External call inside the booking transaction.** The Razorpay order is created while the room row is locked. | `subscribe` in `services/billing.ts` | 03 |
-| M7 | **Stub and live payments are mixed.** No payment-mode column; simulated payments count in payouts and revenue. | `invoices` schema, `services/payouts.ts`, `services/insights.ts` | 04 |
+| M7 | ~~**Stub and live payments are mixed.** No payment-mode column; simulated payments count in payouts and revenue.~~ **Fixed** (branch `payment-mode`): `payment_mode` on tenant and owner bills (migration 0008, with backfill), set on every payment path and on admin waivers; payouts, platform revenue and owner insights count `razorpay_live` only and show what they left out. Late payments (edge case M1) are revived or recorded as refunds due. Evidence: `test/payment-modes.test.ts`, `test/late-payments.test.ts`, `e2e/payments.spec.ts`; rows PAY-* in `LEDGER.md`. | `invoices` schema, `services/payouts.ts`, `services/insights.ts` | 04 |
 | M8 | **Private attachments are public.** Issue and post photos are served to anyone with the URL, cached for a year as `public`. | `routes/uploads.ts` | 06 |
 | M9 | **Photo URLs are absolute and frozen** at upload time (`API_PUBLIC_URL`), which breaks them on domain or LAN changes and on mobile devices. | `lib/storage.ts` `put()` | 06 |
 | M10 | **Photo metadata, such as GPS from phone cameras, isn't stripped.** | `routes/uploads.ts` | 06 |
@@ -74,7 +74,7 @@
 | Item | Blocker | Cost facts (only what is known; to confirm at approval time) |
 |---|---|---|
 | Live SMS OTP (MSG91) | Account, DLT registration and paid credits | Paid per SMS, so it can't be the mandatory login. PRP-01 removes the dependency. |
-| Razorpay test-mode run | A Razorpay account (test mode) | Test mode moves no money; account creation needs your approval. |
+| Razorpay test-mode run | A Razorpay account (test mode) | Test mode moves no money; account creation needs your approval. Payments are recorded as `razorpay_test` and never counted as money. The checkout and webhook paths are tested against a mocked Razorpay order API only. |
 | Razorpay live payments | Live account and activation; real money | Needs approval; out of the ₹0 target. |
 | Public deployment | Hosting account(s), domain choice | PRP-09 researches free tiers and their terms; nothing gets deployed without approval. |
 | Native mobile runtime check | Your phone with Expo Go, or a machine with an emulator | ₹0. Needs you to run it, or a CI runner with an emulator. |
@@ -93,3 +93,8 @@ From base spec §3 "Out of scope (v1)":
 
 The spec doesn't mention **organizations or staff accounts** for owners: one owner per hostel (`hostels.ownerId`). Recorded as
 an open question in PRP-02 rather than invented.
+
+## Open questions recorded during PRP-04 (payment modes)
+
+- **Refund promise.** A payer whose payment arrived too late is told the money comes back within `REFUND_WITHIN_DAYS` = 7 days (`packages/shared/src/pricing.ts`). The specs don't state a refund time; confirm or change the number. Refunds themselves are made by hand in the Razorpay dashboard and recorded in the admin billing page.
+- **Old Razorpay payments.** Migration 0008 records paid bills with Razorpay-looking ids as test mode, since no live account had been connected. If one had, those rows need `razorpay_live` set by hand.

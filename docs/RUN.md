@@ -124,7 +124,7 @@ If SMS isn't set up, make your first admin from the server shell after they sign
 Before real users, set these in `apps/api/.env` (the API refuses stub OTP and stub payments when `NODE_ENV=production`):
 
 - `MSG91_AUTH_KEY` and `MSG91_TEMPLATE_ID` for OTP texts (optional: without them people use passwords)
-- `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET`, with the webhook pointed at `https://<api-host>/webhooks/razorpay`
+- `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET`, with the webhook pointed at `https://<api-host>/webhooks/razorpay`. Every bill records how it was paid: only payments taken with live keys (`rzp_live_…`) count as money in payouts and revenue; `rzp_test_…` keys are recorded as test mode and simulated payments as simulated. The API logs the mode at start (`payments: …`) and reports it as `payments` at `/`. Use different webhook secrets for Razorpay test and live mode. Payments that arrive after their bill closed are listed under **Payments to refund** on the admin billing page: refund them in the Razorpay dashboard, then mark them refunded there.
 - `OTP_PEPPER` to a long random value, `ADMIN_PHONES` to your team's numbers
 - `API_PUBLIC_URL`, `WEB_URL` and `CORS_ORIGINS` to the real hostnames, all on HTTPS
 
