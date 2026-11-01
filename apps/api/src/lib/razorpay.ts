@@ -1,3 +1,4 @@
+import type { PaymentMode } from '@hostels/shared';
 import { hmacHex, safeEqual } from './crypto';
 import { env } from './env';
 
@@ -14,6 +15,32 @@ export function isRazorpayConfigured(): boolean {
 
 export function getKeyId(): string {
   return process.env.RAZORPAY_KEY_ID ?? 'rzp_test_stub';
+}
+
+/** A payment mode that money can arrive in (`waived` is not a payment). */
+export type ReceivedMode = Exclude<PaymentMode, 'waived'>;
+
+/**
+ * Razorpay key ids say which mode they belong to: `rzp_live_` keys take real money, `rzp_test_` keys never do. Any
+ * other key id is treated as test mode, so a misconfigured key can only ever under-count money, never invent it.
+ */
+export function razorpayKeyMode(keyId = process.env.RAZORPAY_KEY_ID ?? ''): 'razorpay_live' | 'razorpay_test' {
+  return keyId.startsWith('rzp_live_') ? 'razorpay_live' : 'razorpay_test';
+}
+
+/** How payments taken by this instance right now are recorded. */
+export function instancePaymentMode(): ReceivedMode {
+  return isRazorpayConfigured() ? razorpayKeyMode() : 'simulated';
+}
+
+/**
+ * How a payment confirmed for `orderId` (by the checkout callback or a webhook) is recorded. Without keys, every
+ * payment is simulated: stub signatures can be made by anyone who reads this code. An order the stub created is
+ * simulated whatever keys are set now, since no Razorpay account ever saw it.
+ */
+export function paymentModeFor(orderId: string): ReceivedMode {
+  if (orderId.startsWith('order_stub_')) return 'simulated';
+  return instancePaymentMode();
 }
 
 function keySecret(): string {
@@ -38,6 +65,7 @@ export async function createOrder(opts: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Basic ${credentials}` },
     body: JSON.stringify({ amount: opts.amountInPaise, currency: 'INR', receipt: opts.receipt, notes: opts.notes ?? {} }),
+    signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) throw new Error(`razorpay order failed: ${res.status} ${await res.text()}`);
   return (await res.json()) as RazorpayOrder;

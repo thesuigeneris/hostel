@@ -56,8 +56,12 @@ import type {
   OwnerPayouts,
   OwnerPlanInfo,
   OwnerVisit,
+  AdminPaymentException,
+  PaymentExceptionStatus,
+  PaymentMode,
   PaymentPage,
   PayoutView,
+  PlatformRevenue,
   Residency,
   RentSheet,
   Review,
@@ -220,7 +224,8 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
       addRoom: (id: string, input: RoomTypeInput) => request<RoomType>(`/owner/hostels/${id}/rooms`, { body: input }),
       updateRoom: (roomId: string, input: RoomTypeUpdateInput) => request<RoomType>(`/owner/rooms/${roomId}`, { method: 'PATCH', body: input }),
       deleteRoom: (roomId: string) => request<{ ok: true }>(`/owner/rooms/${roomId}`, { method: 'DELETE' }),
-      addPhoto: (id: string, url: string) => request<HostelPhoto>(`/owner/hostels/${id}/photos`, { body: { url } }),
+      /** `photo` is the `upload` receipt from `POST /uploads` with purpose `listing`. */
+      addPhoto: (id: string, photo: string) => request<HostelPhoto>(`/owner/hostels/${id}/photos`, { body: { photo } }),
       deletePhoto: (id: string, photoId: string) => request<{ ok: true }>(`/owner/hostels/${id}/photos/${photoId}`, { method: 'DELETE' }),
       reorderPhotos: (id: string, photoIds: string[]) => request<HostelPhoto[]>(`/owner/hostels/${id}/photos/order`, { method: 'PUT', body: { photoIds } }),
       visits: (status?: VisitStatus) => request<OwnerVisit[]>('/owner/visits', { query: { status } }),
@@ -272,11 +277,15 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
         request<{ subscription: Subscription; user: { id: string; name: string; phone: string }; hostelName: string }[]>('/admin/subscriptions', { query: { status } }),
       moves: () => request<MoveRequest[]>('/admin/moves'),
       overdue: () => request<{ invoice: Invoice; userName: string; phone: string; hostelName: string }[]>('/admin/invoices/overdue'),
-      ownerInvoices: (filter: { status?: string; overdue?: boolean; q?: string } = {}) =>
+      ownerInvoices: (filter: { status?: string; mode?: PaymentMode; overdue?: boolean; q?: string } = {}) =>
         request<AdminOwnerInvoice[]>('/admin/owner-invoices', { query: filter }),
       ownerPlans: (filter: { plan?: OwnerPlanTier; suspended?: boolean; q?: string } = {}) =>
         request<AdminOwnerPlan[]>('/admin/owner-plans', { query: filter }),
       voidOwnerInvoice: (id: string, reason: string) => request<OwnerInvoice>(`/admin/owner-invoices/${id}/void`, { body: { reason } }),
+      revenue: (month?: string) => request<PlatformRevenue>('/admin/revenue', { query: { month } }),
+      paymentExceptions: (status?: PaymentExceptionStatus) =>
+        request<AdminPaymentException[]>('/admin/payment-exceptions', { query: { status } }),
+      markRefunded: (id: string, note: string) => request<AdminPaymentException>(`/admin/payment-exceptions/${id}/refunded`, { body: { note } }),
       payouts: (month?: string) => request<PayoutView[]>('/admin/payouts', { query: { month } }),
       generatePayouts: (month: string) => request<PayoutView[]>('/admin/payouts/generate', { body: { month } }),
       markPayoutPaid: (id: string) => request('/admin/payouts/' + id + '/paid', { method: 'POST' }),

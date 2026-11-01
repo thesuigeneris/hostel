@@ -2,17 +2,6 @@ import type { GenderType, Meal, SharingType } from '@hostels/shared';
 
 export const DEMO_PHONES = { admin: '9000000001', owner: '9000000002', tenant: '9000000003' } as const;
 
-export const PHOTOS = [
-  'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=1200',
-  'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=1200',
-  'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200',
-  'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=1200',
-  'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200',
-  'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=1200',
-  'https://images.unsplash.com/photo-1540518614846-7eded433c457?w=1200',
-  'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=1200',
-];
-
 export const FOOD_PARTNERS = [
   { name: 'California Burrito', cuisine: 'Mexican' },
   { name: 'EatSure', cuisine: 'Multi-cuisine' },

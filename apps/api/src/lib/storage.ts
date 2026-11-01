@@ -1,23 +1,21 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { env } from './env';
 
 export interface Storage {
-  put(key: string, data: Uint8Array, contentType: string): Promise<string>;
+  put(key: string, data: Uint8Array): Promise<void>;
   get(key: string): Promise<{ data: Uint8Array<ArrayBuffer>; contentType: string } | null>;
 }
 
 const TYPES: Record<string, string> = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
 
-/** Stores files on local disk and serves them from /uploads/*. An R2 implementation can replace it later. */
+/** Stores files on local disk; `routes/uploads.ts` serves them. An R2 implementation can replace it later. */
 export class LocalStorage implements Storage {
   constructor(private dir = process.env.UPLOAD_DIR ?? fileURLToPath(new URL('../../uploads', import.meta.url))) {}
 
-  async put(key: string, data: Uint8Array): Promise<string> {
+  async put(key: string, data: Uint8Array): Promise<void> {
     await mkdir(this.dir, { recursive: true });
     await writeFile(path.join(this.dir, key), data);
-    return `${env.publicUrl}/uploads/${key}`;
   }
 
   async get(key: string) {

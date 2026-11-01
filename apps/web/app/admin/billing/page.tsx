@@ -1,14 +1,17 @@
-import { OWNER_PLAN_TIERS, OWNER_PLANS, type OwnerPlanTier } from '@hostels/shared';
+import { type AdminOwnerInvoice, OWNER_PLAN_TIERS, OWNER_PLANS, type OwnerPlanTier, REFUND_REASON_LABEL } from '@hostels/shared';
 import Link from 'next/link';
 import { SubmitButton } from '@/components/SubmitButton';
 import { Back, Badge, Checkbox, Field, Flash, Input, PageHeader, pillClass, Select, Stat, StatusBadge, Table, Td } from '@/components/ui';
 import { api } from '@/lib/api';
-import { dateLabel, planLabel, rupees } from '@/lib/format';
-import { voidOwnerBillAction } from '../actions';
+import { dateLabel, monthLabel, notCountedLabel, PAYMENT_MODE_LABEL, planLabel, rupees } from '@/lib/format';
+import { markRefundedAction, voidOwnerBillAction } from '../actions';
 
 type Props = { searchParams: Promise<{ q?: string; plan?: string; paused?: string; bills?: string; error?: string; ok?: string }> };
 
-const BILL_FILTERS = { all: 'All', due: 'Unpaid', overdue: 'Overdue', paid: 'Paid', void: 'Waived' } as const;
+const BILL_FILTERS = { all: 'All', due: 'Unpaid', overdue: 'Overdue', paid: 'Paid', waived: 'Waived' } as const;
+
+/** Waived (an admin chose to) is told apart from cancelled (a plan change dropped the bill). */
+const billStatus = (b: AdminOwnerInvoice) => (b.isOverdue ? 'overdue' : b.status === 'void' && b.paymentMode === 'waived' ? 'waived' : b.status);
 
 export default async function AdminBilling({ searchParams }: Props) {
   const q = await searchParams;
@@ -16,7 +19,7 @@ export default async function AdminBilling({ searchParams }: Props) {
   const billFilter = (q.bills && q.bills in BILL_FILTERS ? q.bills : 'all') as keyof typeof BILL_FILTERS;
   const client = await api();
   const filtered = !!(q.q || plan || q.paused === '1');
-  const [subs, overdue, plans, allPlans, ownerBills, moves] = await Promise.all([
+  const [subs, overdue, plans, allPlans, ownerBills, moves, refunds, revenue] = await Promise.all([
     client.admin.subscriptions(),
     client.admin.overdue(),
     client.admin.ownerPlans({ q: q.q, plan, suspended: q.paused === '1' ? true : undefined }),
@@ -24,24 +27,63 @@ export default async function AdminBilling({ searchParams }: Props) {
     client.admin.ownerInvoices({
       q: q.q,
       overdue: billFilter === 'overdue' ? true : undefined,
-      status: billFilter === 'due' || billFilter === 'paid' || billFilter === 'void' ? billFilter : undefined,
+      status: billFilter === 'due' || billFilter === 'paid' ? billFilter : undefined,
+      mode: billFilter === 'waived' ? 'waived' : undefined,
     }),
     client.admin.moves(),
+    client.admin.paymentExceptions(),
+    client.admin.revenue(),
   ]);
   const params = new URLSearchParams(Object.entries({ q: q.q, plan: q.plan, paused: q.paused, bills: q.bills }).filter((e): e is [string, string] => !!e[1]));
   const path = `/admin/billing${params.size ? `?${params}` : ''}`;
   const totals = allPlans ?? plans;
-  const mrr = totals.filter((p) => !p.inTrial && !p.suspended).reduce((n, p) => n + OWNER_PLANS[p.plan].price, 0);
+  const refundsDue = refunds.filter((r) => r.status === 'refund_due');
 
   return (
     <>
       <PageHeader title="Subscriptions & bills" />
       <Flash error={q.error} ok={q.ok} />
 
+      <section id="refunds" aria-labelledby="refunds-heading" className="mb-8">
+        <h2 id="refunds-heading" className="mb-1 text-lg font-semibold">Payments to refund ({refundsDue.length})</h2>
+        <p className="mb-3 text-sm text-ink-soft">
+          Money that reached us after its bill had closed (the bed hold ran out and the bed went, the bill was waived or already paid).
+          Refund it in the Razorpay dashboard, then record it here.
+        </p>
+        {refunds.length === 0 ? <p className="text-sm text-ink-soft">None. Every payment so far was applied to its bill.</p> : (
+          <Table head={['Payer', 'Hostel', 'Amount', 'Why', 'Received', 'Refund']}>
+            {refunds.map((r) => (
+              <tr key={r.id}>
+                <Td><div>{r.payer.name || '—'}</div><div className="text-xs text-ink-muted">+91 {r.payer.phone}</div></Td>
+                <Td>{r.hostelName}<div className="text-xs text-ink-muted">{r.billKind === 'owner' ? 'Owner plan bill' : 'Tenant bill'}</div></Td>
+                <Td>{rupees(r.amount)}<div className="text-xs text-ink-muted">{PAYMENT_MODE_LABEL[r.paymentMode]} · {r.razorpayPaymentId}</div></Td>
+                <Td className="max-w-xs text-sm">{REFUND_REASON_LABEL[r.reason]}</Td>
+                <Td>{dateLabel(r.createdAt)}</Td>
+                <Td>
+                  {r.status === 'refund_due' ? (
+                    <form action={markRefundedAction} className="flex items-center gap-2">
+                      <Back to={path} /><input type="hidden" name="id" value={r.id} />
+                      <Input name="note" required minLength={3} placeholder="Refund reference" className="h-9 w-40" aria-label={`How the ${rupees(r.amount)} payment from ${r.payer.name || r.payer.phone} was refunded`} />
+                      <SubmitButton size="sm" variant="secondary" confirm="Record this payment as refunded?">Mark refunded</SubmitButton>
+                    </form>
+                  ) : (
+                    <div><StatusBadge kind="refund" status={r.status} /><div className="text-xs text-ink-muted">{dateLabel(r.refundedAt)}{r.refundNote ? ` · ${r.refundNote}` : ''}</div></div>
+                  )}
+                </Td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </section>
+
       <h2 className="mb-3 text-lg font-semibold">Owner plans</h2>
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Stat label="Paying plans" value={totals.filter((p) => p.plan !== 'free' && !p.inTrial).length} hint={`${totals.filter((p) => p.inTrial).length} in free trial`} />
-        <Stat label="Monthly plan revenue" value={rupees(mrr)} hint="Pro and Partner, outside trial, not paused" />
+        <Stat
+          label={`Plan bills paid · ${monthLabel(revenue.month)}`}
+          value={rupees(revenue.ownerPlans)}
+          hint={notCountedLabel(revenue.notCounted.owner) ?? 'Real money only: live Razorpay payments'}
+        />
         <Stat label="Owed by owners" value={rupees(totals.reduce((n, p) => n + p.amountDue, 0))} />
         <Stat label="Paused hostels" value={totals.filter((p) => p.suspended).length} hint="Bill 15+ days overdue" />
       </div>
@@ -113,7 +155,10 @@ export default async function AdminBilling({ searchParams }: Props) {
                 <Td>{dateLabel(b.periodStart)} – {dateLabel(b.periodEnd)}</Td>
                 <Td>{rupees(b.amount)}</Td>
                 <Td>{dateLabel(b.dueDate)}</Td>
-                <Td><StatusBadge kind="invoice" status={b.isOverdue ? 'overdue' : b.status} /></Td>
+                <Td>
+                  <StatusBadge kind="invoice" status={billStatus(b)} />
+                  {b.status === 'paid' && b.paymentMode && b.paymentMode !== 'razorpay_live' && <div className="text-xs text-ink-muted">{PAYMENT_MODE_LABEL[b.paymentMode]}</div>}
+                </Td>
                 <Td>
                   {b.status === 'due' && (
                     <form action={voidOwnerBillAction} className="flex items-center gap-2">

@@ -1,5 +1,5 @@
 {
-  "id": "7ead0a53-2618-4276-bd44-f2dfc608275d",
+  "id": "5e553641-e808-4690-9bf0-e0641c36904f",
   "prevId": "a42b6c56-0608-47f2-8638-2e7acc12e414",
   "version": "7",
   "dialect": "postgresql",
@@ -975,6 +975,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "payment_mode": {
+          "name": "payment_mode",
+          "type": "payment_mode",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1095,7 +1102,12 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "invoices_payment_mode_status": {
+          "name": "invoices_payment_mode_status",
+          "value": "(\"invoices\".\"status\" = 'paid' and \"invoices\".\"payment_mode\" is not null and \"invoices\".\"payment_mode\" <> 'waived') or (\"invoices\".\"status\" <> 'paid' and \"invoices\".\"payment_mode\" is null)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.issue_updates": {
@@ -2047,6 +2059,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "payment_mode": {
+          "name": "payment_mode",
+          "type": "payment_mode",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -2131,7 +2150,12 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "owner_invoices_payment_mode_status": {
+          "name": "owner_invoices_payment_mode_status",
+          "value": "(\"owner_invoices\".\"status\" = 'paid' and \"owner_invoices\".\"payment_mode\" is not null and \"owner_invoices\".\"payment_mode\" <> 'waived') or (\"owner_invoices\".\"status\" = 'void' and (\"owner_invoices\".\"payment_mode\" is null or \"owner_invoices\".\"payment_mode\" = 'waived')) or (\"owner_invoices\".\"status\" = 'due' and \"owner_invoices\".\"payment_mode\" is null)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.owner_plans": {
@@ -2363,6 +2387,223 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.payment_exceptions": {
+      "name": "payment_exceptions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "invoice_id": {
+          "name": "invoice_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "owner_invoice_id": {
+          "name": "owner_invoice_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hostel_id": {
+          "name": "hostel_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payment_mode": {
+          "name": "payment_mode",
+          "type": "payment_mode",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "payment_exception_reason",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "payment_exception_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'refund_due'"
+        },
+        "razorpay_order_id": {
+          "name": "razorpay_order_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "razorpay_payment_id": {
+          "name": "razorpay_payment_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "refunded_at": {
+          "name": "refunded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "refunded_by": {
+          "name": "refunded_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "refund_note": {
+          "name": "refund_note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "payment_exceptions_status_idx": {
+          "name": "payment_exceptions_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "payment_exceptions_invoice_id_invoices_id_fk": {
+          "name": "payment_exceptions_invoice_id_invoices_id_fk",
+          "tableFrom": "payment_exceptions",
+          "tableTo": "invoices",
+          "columnsFrom": [
+            "invoice_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "payment_exceptions_owner_invoice_id_owner_invoices_id_fk": {
+          "name": "payment_exceptions_owner_invoice_id_owner_invoices_id_fk",
+          "tableFrom": "payment_exceptions",
+          "tableTo": "owner_invoices",
+          "columnsFrom": [
+            "owner_invoice_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "payment_exceptions_user_id_users_id_fk": {
+          "name": "payment_exceptions_user_id_users_id_fk",
+          "tableFrom": "payment_exceptions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "payment_exceptions_hostel_id_hostels_id_fk": {
+          "name": "payment_exceptions_hostel_id_hostels_id_fk",
+          "tableFrom": "payment_exceptions",
+          "tableTo": "hostels",
+          "columnsFrom": [
+            "hostel_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "payment_exceptions_refunded_by_users_id_fk": {
+          "name": "payment_exceptions_refunded_by_users_id_fk",
+          "tableFrom": "payment_exceptions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "refunded_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "payment_exceptions_razorpay_payment_id_unique": {
+          "name": "payment_exceptions_razorpay_payment_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "razorpay_payment_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "payment_exceptions_one_bill": {
+          "name": "payment_exceptions_one_bill",
+          "value": "num_nonnulls(\"payment_exceptions\".\"invoice_id\", \"payment_exceptions\".\"owner_invoice_id\") = 1"
+        },
+        "payment_exceptions_paid_mode": {
+          "name": "payment_exceptions_paid_mode",
+          "value": "\"payment_exceptions\".\"payment_mode\" <> 'waived'"
+        },
+        "payment_exceptions_refunded": {
+          "name": "payment_exceptions_refunded",
+          "value": "(\"payment_exceptions\".\"status\" = 'refunded') = (\"payment_exceptions\".\"refunded_at\" is not null)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.payouts": {
@@ -3503,28 +3744,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "visit_requests_one_open": {
-          "name": "visit_requests_one_open",
-          "columns": [
-            {
-              "expression": "hostel_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"visit_requests\".\"status\" = 'new'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -3668,6 +3887,36 @@
         "applied",
         "verified",
         "rejected"
+      ]
+    },
+    "public.payment_exception_reason": {
+      "name": "payment_exception_reason",
+      "schema": "public",
+      "values": [
+        "bed_taken",
+        "has_other_plan",
+        "hostel_unavailable",
+        "bill_cancelled",
+        "bill_waived",
+        "duplicate_payment"
+      ]
+    },
+    "public.payment_exception_status": {
+      "name": "payment_exception_status",
+      "schema": "public",
+      "values": [
+        "refund_due",
+        "refunded"
+      ]
+    },
+    "public.payment_mode": {
+      "name": "payment_mode",
+      "schema": "public",
+      "values": [
+        "razorpay_live",
+        "razorpay_test",
+        "simulated",
+        "waived"
       ]
     },
     "public.payout_status": {

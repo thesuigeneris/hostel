@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { setClock } from '../src/lib/clock';
-import { activeSubscriber, admin, liveHostel, newOwner, newTenant } from './fixtures';
+import { runJobs } from '../src/services/jobs';
+import { activeSubscriber, admin, liveHostel, liveSubscriber, newOwner, newTenant, payByCheckout, withRazorpay } from './fixtures';
 import { call, resetDb } from './helpers';
 
 let ownerToken: string;
@@ -104,15 +105,26 @@ describe('admin escalations', () => {
 });
 
 describe('admin revenue', () => {
-  test('subscription gross, platform fees, and owner plans once the trial ends', async () => {
+  test('money received this month: fees on tenant bills paid with real money, and paid owner plans', async () => {
     const t = await newTenant('Asha');
-    await activeSubscriber(t.token, hostel.id, room.id, 'full');
+    await liveSubscriber(t.token, hostel.id, room.id, 'full');
     const now = (await call('/admin/stats', { token: adminToken })).body.revenue;
     // ₹10,000 rent + ₹6,000 full food plan; 10% platform fee. The partner plan is in its free month.
-    expect(now).toEqual({ subscriptionGross: 16000, platformFees: 1600, ownerPlans: 0, trialHostels: 1 });
+    expect(now).toEqual({
+      month: '2026-11',
+      subscriptionGross: 16000,
+      platformFees: 1600,
+      ownerPlans: 0,
+      trialHostels: 1,
+      notCounted: { tenant: { simulated: 0, test: 0 }, owner: { simulated: 0, test: 0 } },
+    });
 
     setClock('2026-12-10T06:00:00Z');
-    const later = (await call('/admin/stats', { token: adminToken })).body.revenue;
-    expect(later).toMatchObject({ ownerPlans: 1999, trialHostels: 0 });
+    await runJobs(); // bills the first month after the free one
+    // Billed is not received: the plan bill counts once it is paid.
+    expect((await call('/admin/stats', { token: adminToken })).body.revenue).toMatchObject({ month: '2026-12', subscriptionGross: 0, ownerPlans: 0, trialHostels: 0 });
+    const bill = (await call(`/owner/hostels/${hostel.id}/plan`, { token: ownerToken })).body.bills.find((b: { status: string }) => b.status === 'due');
+    await withRazorpay('live', () => payByCheckout(ownerToken, bill.id));
+    expect((await call('/admin/stats', { token: adminToken })).body.revenue).toMatchObject({ ownerPlans: 1999 });
   });
 });

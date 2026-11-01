@@ -28,7 +28,13 @@ export function RazorpayButton({ invoiceId, label, description, phone }: { invoi
     setBusy(true);
     setError(null);
     try {
-      const [Razorpay, order] = await Promise.all([loadCheckout(), createOrderAction(invoiceId)]);
+      const [Razorpay, created] = await Promise.all([loadCheckout(), createOrderAction(invoiceId)]);
+      const { order } = created;
+      if (!order) {
+        setError(created.error ?? 'Could not start the payment');
+        setBusy(false);
+        return;
+      }
       new Razorpay({
         key: order.keyId,
         order_id: order.orderId,

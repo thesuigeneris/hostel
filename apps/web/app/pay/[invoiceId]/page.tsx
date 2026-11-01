@@ -6,7 +6,7 @@ import { RazorpayButton } from '@/components/RazorpayButton';
 import { SubmitButton } from '@/components/SubmitButton';
 import { Card, Flash, LinkButton, PageHeader, StatusBadge } from '@/components/ui';
 import { api, requireUser } from '@/lib/api';
-import { dateLabel, rupees } from '@/lib/format';
+import { dateLabel, refundMessage, rupees } from '@/lib/format';
 import { holdText } from '@/lib/hold';
 
 type Props = { params: Promise<{ invoiceId: string }>; searchParams: Promise<{ error?: string; ok?: string }> };
@@ -27,6 +27,7 @@ export default async function PayPage({ params, searchParams }: Props) {
   const mine = tenantBill && page.status === 'due' ? await client.me.subscription().catch(() => null) : null;
   const held = mine?.subscription.status === 'pending' && mine.subscription.id === tenantBill?.subscriptionId ? mine : null;
   const hold = held ? holdText(held.subscription.createdAt) : null;
+  const waived = page.status === 'void' && page.invoice.paymentMode === 'waived';
   const doneHref = page.kind === 'tenant' ? '/account' : `/owner/hostels/${page.invoice.hostelId}/plan`;
 
   return (
@@ -38,7 +39,7 @@ export default async function PayPage({ params, searchParams }: Props) {
           <span className="text-sm text-ink-muted">
             {dateLabel(page.invoice.periodStart)} – {dateLabel(page.invoice.periodEnd)}
           </span>
-          <StatusBadge kind="invoice" status={page.invoice.isOverdue ? 'overdue' : page.status} />
+          <StatusBadge kind="invoice" status={page.invoice.isOverdue ? 'overdue' : waived ? 'waived' : page.status} />
         </div>
         {tenantBill && (
           <dl className="mt-4 space-y-2 text-sm">
@@ -63,6 +64,16 @@ export default async function PayPage({ params, searchParams }: Props) {
           </p>
         )}
 
+        {page.refund && (
+          <section aria-labelledby="refund-heading" className="mt-6 rounded-xl border border-food/50 bg-food-soft p-4 text-sm text-ink">
+            <h2 id="refund-heading" className="font-medium">
+              {page.refund.status === 'refunded' ? 'Refunded' : page.refund.paymentMode === 'simulated' ? 'Payment not used' : 'Your payment will be refunded'}
+            </h2>
+            <p className="mt-1">{refundMessage(page.refund)}</p>
+            <p className="mt-1 text-xs text-ink-muted">Payment reference {page.refund.razorpayPaymentId}</p>
+          </section>
+        )}
+
         <div className="mt-6">
           {page.status === 'paid' ? (
             <>
@@ -70,13 +81,18 @@ export default async function PayPage({ params, searchParams }: Props) {
               <LinkButton href={doneHref} size="lg" className="w-full">Done</LinkButton>
             </>
           ) : page.status === 'void' ? (
-            <div className="text-sm text-ink-soft">
-              <p>
-                This bill is no longer due, so there is nothing to pay here. It was replaced by a newer bill, or the plan it belonged to was cancelled or
-                not paid in time.
-              </p>
-              <LinkButton href={doneHref} variant="secondary" className="mt-3 w-full">{page.kind === 'tenant' ? 'See my plan and bills' : 'See plan and bills'}</LinkButton>
-            </div>
+            page.refund ? (
+              <LinkButton href={doneHref} size="lg" variant="secondary" className="w-full">Done</LinkButton>
+            ) : (
+              <div className="text-sm text-ink-soft">
+                <p>
+                  {waived
+                    ? 'This bill was waived. Nothing to pay here.'
+                    : 'This bill is no longer due, so there is nothing to pay here. It was replaced by a newer bill, or the plan it belonged to was cancelled or not paid in time.'}
+                </p>
+                <LinkButton href={doneHref} variant="secondary" className="mt-3 w-full">{page.kind === 'tenant' ? 'See my plan and bills' : 'See plan and bills'}</LinkButton>
+              </div>
+            )
           ) : page.stub ? (
             <form action={simulatePaymentAction}>
               <input type="hidden" name="invoiceId" value={invoiceId} />

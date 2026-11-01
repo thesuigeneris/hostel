@@ -24,8 +24,9 @@ import { getDb, schema } from '../db';
 import { clock } from '../lib/clock';
 import { isUniqueViolation } from '../lib/db-errors';
 import { AppError, notFound } from '../lib/errors';
+import { claimUpload } from '../lib/uploads';
 import { isBookable, ownedHostel, planFor } from './access';
-import { toHostel, toRoomType } from './mappers';
+import { toHostel, toPhoto, toRoomType } from './mappers';
 import { closeApplication, openApplication } from './partners';
 import { switchPlan } from './plans';
 
@@ -131,27 +132,67 @@ async function ownedRoom(user: User, roomTypeId: string) {
   return { room, hostel };
 }
 
+/** Beds a room type has promised: pending and active plans in it, and plans scheduled to move into it. */
+function heldBeds(roomTypeId: string) {
+  return sql<number>`(
+    (select count(*) from ${schema.subscriptions}
+      where ${schema.subscriptions.roomTypeId} = ${roomTypeId} and ${schema.subscriptions.status} in ('pending', 'active'))
+    + (select count(*) from ${schema.moveRequests}
+      where ${schema.moveRequests.toRoomTypeId} = ${roomTypeId} and ${schema.moveRequests.status} = 'scheduled')
+  )::int`;
+}
+
+/**
+ * Bed counts move by the difference between what the owner entered and what their form showed (`*Was`, or the
+ * current count when not sent), in one conditional UPDATE. Subscriptions take and return beds at any moment, so
+ * writing back absolute counts would hand out a bed that was just taken. Beds held by plans can't be freed or removed.
+ */
 export async function updateRoomType(user: User, roomTypeId: string, patch: RoomTypeUpdateInput) {
   const { room, hostel } = await ownedRoom(user, roomTypeId);
-  const next = { ...room, ...patch } as typeof room;
-  if (next.bedsAvailable > next.totalBeds) {
-    throw new AppError('validation', 'Beds free cannot exceed total beds', 400, [{ path: 'bedsAvailable', message: 'Too many' }]);
+  const dTotal = patch.totalBeds === undefined ? 0 : patch.totalBeds - (patch.totalBedsWas ?? room.totalBeds);
+  const dFree = patch.bedsAvailable === undefined ? 0 : patch.bedsAvailable - (patch.bedsAvailableWas ?? room.bedsAvailable);
+  const fields = Object.fromEntries(
+    Object.entries({
+      sharing: patch.sharing,
+      monthlyRent: patch.monthlyRent,
+      advanceAmount: hostel.partnerStatus === 'verified' ? 0 : patch.advanceAmount,
+    }).filter(([, v]) => v !== undefined),
+  );
+  const rt = schema.roomTypes;
+  return getDb().transaction(async (tx) => {
+    if (dTotal === 0 && dFree === 0) {
+      const [row] = Object.keys(fields).length
+        ? await tx.update(rt).set(fields).where(eq(rt.id, room.id)).returning()
+        : await tx.select().from(rt).where(eq(rt.id, room.id));
+      return toRoomType(row!);
+    }
+    // Wait for any booking that is taking a bed right now, so the held count below includes it.
+    await tx.select({ id: rt.id }).from(rt).where(eq(rt.id, room.id)).for('update');
+    const total = sql`(${rt.totalBeds} + ${dTotal})`;
+    const free = sql`(${rt.bedsAvailable} + ${dFree})`;
+    const [row] = await tx
+      .update(rt)
+      .set({ ...fields, totalBeds: total, bedsAvailable: free, bedsUpdatedAt: clock.now() })
+      .where(and(eq(rt.id, room.id), sql`${total} >= 1`, sql`${free} >= 0`, sql`${total} - ${free} >= ${heldBeds(room.id)}`))
+      .returning();
+    if (row) return toRoomType(row);
+    const [now] = await tx.select().from(rt).where(eq(rt.id, room.id));
+    const [counted] = await tx.execute<{ held: number }>(sql`select ${heldBeds(room.id)} as held`);
+    throw bedChangeRefused(now!.totalBeds + dTotal, now!.bedsAvailable + dFree, counted!.held, now!.bedsAvailable);
+  });
+}
+
+function bedChangeRefused(total: number, free: number, held: number, freeNow: number) {
+  const field = (path: string, message: string) => new AppError('validation', message, 400, [{ path, message }]);
+  if (total < 1) return field('totalBeds', 'A room type needs at least one bed');
+  if (total < held) {
+    return new AppError('invalid_state', `${held} beds here are taken by tenants with a plan, so total beds can't go below ${held}`);
   }
-  if (hostel.partnerStatus === 'verified') next.advanceAmount = 0;
-  const bedsChanged = next.totalBeds !== room.totalBeds || next.bedsAvailable !== room.bedsAvailable;
-  const [row] = await getDb()
-    .update(schema.roomTypes)
-    .set({
-      sharing: next.sharing,
-      monthlyRent: next.monthlyRent,
-      advanceAmount: next.advanceAmount,
-      totalBeds: next.totalBeds,
-      bedsAvailable: next.bedsAvailable,
-      ...(bedsChanged ? { bedsUpdatedAt: clock.now() } : {}),
-    })
-    .where(eq(schema.roomTypes.id, room.id))
-    .returning();
-  return toRoomType(row!);
+  if (free < 0) return field('bedsAvailable', `Only ${freeNow} beds are free right now, so that's as many as you can take off`);
+  if (held > 0) {
+    return new AppError('invalid_state', `At most ${total - held} of ${total} beds can be free: ${held} are taken by tenants with a plan`);
+  }
+  return field('bedsAvailable', 'Beds free cannot exceed total beds');
 }
 
 export async function deleteRoomType(user: User, roomTypeId: string) {
@@ -173,8 +214,10 @@ export async function deleteRoomType(user: User, roomTypeId: string) {
 
 // --- photos ----------------------------------------------------------------
 
-export async function addPhoto(user: User, hostelId: string, url: string) {
+/** `photo` is the receipt of a listing photo this user uploaded. */
+export async function addPhoto(user: User, hostelId: string, photo: string) {
   const h = await ownedHostel(user, hostelId);
+  const stored = claimUpload(user, photo, 'listing', 'photo');
   const db = getDb();
   const [max] = await db
     .select({ n: sql<number>`coalesce(max(${schema.hostelPhotos.sortOrder}), -1)::int` })
@@ -182,9 +225,9 @@ export async function addPhoto(user: User, hostelId: string, url: string) {
     .where(eq(schema.hostelPhotos.hostelId, h.id));
   const [row] = await db
     .insert(schema.hostelPhotos)
-    .values({ id: newId('pho'), hostelId: h.id, url, sortOrder: max!.n + 1 })
+    .values({ id: newId('pho'), hostelId: h.id, url: stored, sortOrder: max!.n + 1 })
     .returning();
-  return row!;
+  return toPhoto(row!);
 }
 
 export async function deletePhoto(user: User, hostelId: string, photoId: string) {
@@ -207,7 +250,8 @@ export async function reorderPhotos(user: User, hostelId: string, photoIds: stri
         .where(and(eq(schema.hostelPhotos.id, id), eq(schema.hostelPhotos.hostelId, h.id)));
     }
   });
-  return db.select().from(schema.hostelPhotos).where(eq(schema.hostelPhotos.hostelId, h.id)).orderBy(asc(schema.hostelPhotos.sortOrder));
+  const rows = await db.select().from(schema.hostelPhotos).where(eq(schema.hostelPhotos.hostelId, h.id)).orderBy(asc(schema.hostelPhotos.sortOrder));
+  return rows.map(toPhoto);
 }
 
 // --- partner flow ----------------------------------------------------------
@@ -340,7 +384,7 @@ export async function hostelDetail(hostel: typeof schema.hostels.$inferSelect): 
   return {
     ...toHostel(hostel),
     isVerified: isBookable(hostel, plan),
-    photos,
+    photos: photos.map(toPhoto),
     roomTypes: rooms.map(toRoomType),
     ratings,
     transparency,

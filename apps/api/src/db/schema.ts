@@ -27,6 +27,9 @@ import {
   MOVE_STATUSES,
   OWNER_PLAN_TIERS,
   PARTNER_STATUSES,
+  PAYMENT_EXCEPTION_REASONS,
+  PAYMENT_EXCEPTION_STATUSES,
+  PAYMENT_MODES,
   PAYOUT_STATUSES,
   POST_KINDS,
   RENT_METHODS,
@@ -51,6 +54,9 @@ export const subscriptionStatusEnum = pgEnum('subscription_status', SUBSCRIPTION
 export const invoiceStatusEnum = pgEnum('invoice_status', INVOICE_STATUSES);
 export const moveStatusEnum = pgEnum('move_status', MOVE_STATUSES);
 export const payoutStatusEnum = pgEnum('payout_status', PAYOUT_STATUSES);
+export const paymentModeEnum = pgEnum('payment_mode', PAYMENT_MODES);
+export const paymentExceptionReasonEnum = pgEnum('payment_exception_reason', PAYMENT_EXCEPTION_REASONS);
+export const paymentExceptionStatusEnum = pgEnum('payment_exception_status', PAYMENT_EXCEPTION_STATUSES);
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 const day = (name: string) => date(name, { mode: 'string' });
@@ -299,6 +305,8 @@ export const invoices = pgTable(
     razorpayOrderId: text('razorpay_order_id').unique(),
     razorpayPaymentId: text('razorpay_payment_id'),
     paidAt: timestamp('paid_at', { withTimezone: true }),
+    /** How the bill was paid; set exactly when it is paid. Money figures count only real money (`razorpay_live`). */
+    paymentMode: paymentModeEnum('payment_mode'),
     createdAt: createdAt(),
   },
   (t) => [
@@ -308,6 +316,11 @@ export const invoices = pgTable(
     uniqueIndex('invoices_subscription_period')
       .on(t.subscriptionId, t.periodStart)
       .where(sql`${t.status} <> 'void'`),
+    // A paid bill always says how it was paid, and only a paid bill does (tenant bills are never waived).
+    check(
+      'invoices_payment_mode_status',
+      sql`(${t.status} = 'paid' and ${t.paymentMode} is not null and ${t.paymentMode} <> 'waived') or (${t.status} <> 'paid' and ${t.paymentMode} is null)`,
+    ),
   ],
 );
 
@@ -623,12 +636,57 @@ export const ownerInvoices = pgTable(
     razorpayOrderId: text('razorpay_order_id').unique(),
     razorpayPaymentId: text('razorpay_payment_id'),
     paidAt: timestamp('paid_at', { withTimezone: true }),
+    /** How the bill was settled: a payment mode when paid, `waived` when an admin waived it (status void). */
+    paymentMode: paymentModeEnum('payment_mode'),
     createdAt: createdAt(),
   },
   (t) => [
     uniqueIndex('owner_invoices_plan_period')
       .on(t.ownerPlanId, t.periodStart)
       .where(sql`${t.status} <> 'void'`),
+    // Paid bills say how they were paid; a void bill is either waived by an admin or dropped by the system (null).
+    check(
+      'owner_invoices_payment_mode_status',
+      sql`(${t.status} = 'paid' and ${t.paymentMode} is not null and ${t.paymentMode} <> 'waived') or (${t.status} = 'void' and (${t.paymentMode} is null or ${t.paymentMode} = 'waived')) or (${t.status} = 'due' and ${t.paymentMode} is null)`,
+    ),
+  ],
+);
+
+/**
+ * A payment we received but could not apply, because its bill stopped being payable while the payment was on its way
+ * (the bed hold expired and the bed went, the plan changed, an admin waived the bill, or the bill was already paid).
+ * The money is owed back until an admin marks it refunded. One row per Razorpay payment, so retried webhooks and the
+ * checkout callback can never record it twice.
+ */
+export const paymentExceptions = pgTable(
+  'payment_exceptions',
+  {
+    id: text('id').primaryKey(),
+    invoiceId: text('invoice_id').references(() => invoices.id),
+    ownerInvoiceId: text('owner_invoice_id').references(() => ownerInvoices.id),
+    /** Who paid: the tenant, or the owner for a plan bill. */
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    hostelId: text('hostel_id')
+      .notNull()
+      .references(() => hostels.id),
+    amount: integer('amount').notNull(),
+    paymentMode: paymentModeEnum('payment_mode').notNull(),
+    reason: paymentExceptionReasonEnum('reason').notNull(),
+    status: paymentExceptionStatusEnum('status').notNull().default('refund_due'),
+    razorpayOrderId: text('razorpay_order_id').notNull(),
+    razorpayPaymentId: text('razorpay_payment_id').notNull().unique(),
+    createdAt: createdAt(),
+    refundedAt: timestamp('refunded_at', { withTimezone: true }),
+    refundedBy: text('refunded_by').references(() => users.id, { onDelete: 'set null' }),
+    refundNote: text('refund_note'),
+  },
+  (t) => [
+    index('payment_exceptions_status_idx').on(t.status, t.createdAt),
+    check('payment_exceptions_one_bill', sql`num_nonnulls(${t.invoiceId}, ${t.ownerInvoiceId}) = 1`),
+    check('payment_exceptions_paid_mode', sql`${t.paymentMode} <> 'waived'`),
+    check('payment_exceptions_refunded', sql`(${t.status} = 'refunded') = (${t.refundedAt} is not null)`),
   ],
 );
 

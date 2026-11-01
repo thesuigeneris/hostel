@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { getDb, pingDb, schema } from '../db';
 import { notFound } from '../lib/errors';
 import { isMsg91Configured } from '../lib/msg91';
-import { isRazorpayConfigured } from '../lib/razorpay';
+import { instancePaymentMode, isRazorpayConfigured } from '../lib/razorpay';
 import { parseQuery } from '../lib/validate';
 import type { AppEnv } from '../middleware/auth';
 import { listFoodPartners, publicMenu } from '../services/food';
@@ -36,6 +36,7 @@ export const publicRoutes = new Hono<AppEnv>()
       version: API_VERSION,
       db: (await pingDb()) ? 'up' : 'down',
       razorpay,
+      payments: instancePaymentMode(),
       msg91,
       devMode: razorpay === 'stub' || msg91 === 'stub',
     };

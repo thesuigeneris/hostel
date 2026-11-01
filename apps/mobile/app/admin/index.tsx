@@ -36,6 +36,7 @@ function AdminHome() {
         <Stat label="Live hostels" value={st.liveHostels} />
         <Stat label="Active subscriptions" value={st.activeSubscriptions} />
         <Stat label="Overdue bills" value={st.overdueBills} onPress={go('/admin/billing')} />
+        <Stat label="Refunds due" value={st.refundsDue} onPress={go('/admin/billing')} />
       </StatGrid>
 
       <NavRow title="Listings" hint="Approve or send back new listings" onPress={go('/admin/listings')} />

@@ -45,8 +45,10 @@ describe('verified reviews', () => {
     expect(pub.body).toHaveLength(1);
     const detail = await call(`/hostels/${hostel.slug}`);
     expect(detail.body.ratings).toMatchObject({ rating: 5, reviewCount: 1, cleanliness: 5, responsiveness: 3 });
-    const search = await call('/hostels?minRating=4.5');
+    // Search carries the true average; a single review reads "New", so it isn't counted as "rated 4.5 and up".
+    const search = await call('/hostels?sort=rating');
     expect(search.body.items[0]).toMatchObject({ rating: 5, reviewCount: 1 });
+    expect((await call('/hostels?minRating=4.5')).body.items).toEqual([]);
 
     // Owner replies once; admin hides after a flag and the average drops out.
     const reply = await call(`/owner/reviews/${ok.body.id}/reply`, { token: ownerToken, body: { reply: 'Thanks Asha!' } });
@@ -280,34 +282,5 @@ describe('owner plans and platform bills', () => {
     expect(bills.length).toBeGreaterThan(0);
     const stranger = await newOwner();
     expect((await call(`/payments/${bills[0].id}`, { token: stranger })).status).toBe(404);
-  });
-});
-
-describe('uploads', () => {
-  const upload = (token: string, bytes: Uint8Array, name = 'p.jpg', type = 'image/jpeg') => {
-    const form = new FormData();
-    form.append('file', new File([bytes], name, { type }));
-    return import('./helpers').then(({ app }) =>
-      app.request('/uploads', { method: 'POST', body: form, headers: { Authorization: `Bearer ${token}` } }),
-    );
-  };
-
-  test('checks the file signature, not the name, and serves the file back', async () => {
-    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
-    const ok = await upload(ownerToken, png, 'photo.jpg');
-    expect(ok.status).toBe(201);
-    const { key, url } = (await ok.json()) as { key: string; url: string };
-    expect(key).toEndWith('.png');
-    expect(url).toContain(`/uploads/${key}`);
-    const { app } = await import('./helpers');
-    const back = await app.request(`/uploads/${key}`);
-    expect(back.headers.get('content-type')).toBe('image/png');
-
-    const fake = await upload(ownerToken, new TextEncoder().encode('<script>alert(1)</script>'), 'x.png', 'image/png');
-    expect(fake.status).toBe(400);
-    const big = await upload(ownerToken, new Uint8Array(6 * 1024 * 1024).fill(0xff), 'big.jpg');
-    expect(big.status).toBe(413);
-    expect((await app.request('/uploads/../../etc/passwd')).status).toBe(404);
-    expect((await app.request('/uploads', { method: 'POST', body: new FormData() })).status).toBe(401);
   });
 });

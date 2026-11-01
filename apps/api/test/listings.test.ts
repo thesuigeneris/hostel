@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { addDays, istDate } from '@hostels/shared';
 import { setClock } from '../src/lib/clock';
-import { activeSubscriber, admin, liveHostel, newOwner, newTenant } from './fixtures';
+import { activeSubscriber, addListingPhoto, admin, liveHostel, newOwner, newTenant } from './fixtures';
 import { call, resetDb } from './helpers';
 
 let ownerToken: string;
@@ -30,7 +30,7 @@ describe('listing lifecycle', () => {
       token: ownerToken,
       body: { sharing: '3-sharing', monthlyRent: 7000, advanceAmount: 7000, totalBeds: 9, bedsAvailable: 3 },
     });
-    await call(`/owner/hostels/${h.body.id}/photos`, { token: ownerToken, body: { url: 'https://example.com/p.jpg' } });
+    await addListingPhoto(ownerToken, h.body.id);
     expect((await call(`/owner/hostels/${h.body.id}/submit`, { token: ownerToken, method: 'POST' })).body.status).toBe('pending');
     expect((await call('/hostels/lotus-pg-madhapur')).status).toBe(404);
 
@@ -55,7 +55,7 @@ describe('listing lifecycle', () => {
       body: { name: 'Shady Stay', area: 'Ameerpet', lat: 17.43, lng: 78.44, genderType: 'boys', contactPhone: '9876500002' },
     });
     await call(`/owner/hostels/${h.body.id}/rooms`, { token: ownerToken, body: { sharing: '4-sharing', monthlyRent: 5000, totalBeds: 4, bedsAvailable: 4 } });
-    await call(`/owner/hostels/${h.body.id}/photos`, { token: ownerToken, body: { url: 'https://example.com/p.jpg' } });
+    await addListingPhoto(ownerToken, h.body.id);
     await call(`/owner/hostels/${h.body.id}/submit`, { token: ownerToken, method: 'POST' });
     const rej = await call(`/admin/hostels/${h.body.id}/reject`, { token: adminToken, body: { reason: 'Photos look like stock images' } });
     expect(rej.body).toMatchObject({ status: 'rejected', rejectionReason: 'Photos look like stock images' });
@@ -147,7 +147,7 @@ describe('search', () => {
       body: { name: 'Delta', area: 'Gachibowli', lat: 17.44, lng: 78.35, genderType: 'boys', contactPhone: '9876500004' },
     });
     await call(`/owner/hostels/${pending.body.id}/rooms`, { token: ownerToken, body: { sharing: '2-sharing', monthlyRent: 9000, totalBeds: 4, bedsAvailable: 4 } });
-    await call(`/owner/hostels/${pending.body.id}/photos`, { token: ownerToken, body: { url: 'https://example.com/p.jpg' } });
+    await addListingPhoto(ownerToken, pending.body.id);
     expect((await call(`/owner/hostels/${pending.body.id}/submit`, { token: ownerToken, method: 'POST' })).body.status).toBe('pending');
 
     expect((await call('/hostels?q=delta')).body).toMatchObject({ total: 0, items: [] });
@@ -162,7 +162,7 @@ describe('search', () => {
 
   test('summaries carry the cheapest matching room, beds free and the cover photo', async () => {
     const res = await call('/hostels?q=bravo');
-    expect(res.body.items[0]).toMatchObject({ minRent: 5500, bedsAvailable: 1, coverPhotoUrl: 'https://example.com/a.jpg', isVerified: false });
+    expect(res.body.items[0]).toMatchObject({ minRent: 5500, bedsAvailable: 1, coverPhotoUrl: expect.stringMatching(/\/uploads\/pho_[a-z0-9]{16}\.png$/), isVerified: false });
     expect(res.body.items[0].sharingTypes.sort()).toEqual(['4-sharing', 'private']);
     const filtered = await call('/hostels?q=bravo&sharing=private');
     expect(filtered.body.items[0].minRent).toBe(15000);
@@ -239,5 +239,68 @@ describe('bed count freshness', () => {
     await activeSubscriber(tenantToken, hostel.id, roomId);
     const pub = await call(`/hostels/${hostel.slug}`);
     expect(pub.body.roomTypes[0]).toMatchObject({ bedsAvailable: 3, bedsUpdatedAt: '2026-11-05T04:30:00.000Z' });
+  });
+});
+
+describe('room edits while beds are being booked', () => {
+  const edit = (roomId: string, body: Record<string, unknown>) => call(`/owner/rooms/${roomId}`, { token: ownerToken, method: 'PATCH', body });
+  const subscribe = (token: string, hostelId: string, roomTypeId: string) =>
+    call(`/hostels/${hostelId}/subscribe`, { token, body: { roomTypeId, mealPlan: 'none' } });
+
+  test('saving a form opened before a booking never gives the booked bed back', async () => {
+    const { hostel, rooms } = await liveHostel(ownerToken, adminToken, { partner: true });
+    const room = rooms[0] as { id: string; totalBeds: number; bedsAvailable: number };
+    const form = { monthlyRent: 10000, advanceAmount: 0, totalBeds: room.totalBeds, bedsAvailable: room.bedsAvailable };
+    const was = { totalBedsWas: room.totalBeds, bedsAvailableWas: room.bedsAvailable };
+
+    // The owner's form shows 5 free; a tenant takes one before the owner saves a rent change.
+    const { token } = await newTenant();
+    expect((await subscribe(token, hostel.id, room.id)).status).toBe(201);
+    const rentOnly = await edit(room.id, { ...form, ...was, monthlyRent: 12000 });
+    expect(rentOnly.status).toBe(200);
+    expect(rentOnly.body).toMatchObject({ monthlyRent: 12000, bedsAvailable: 4, totalBeds: 10 });
+
+    // A real change from the same stale form applies as a difference: two people left (5 → 7 on the form) → 6.
+    const freed = await edit(room.id, { ...form, ...was, bedsAvailable: 7 });
+    expect(freed.body).toMatchObject({ bedsAvailable: 6, totalBeds: 10 });
+  });
+
+  test('rent edits racing bookings keep every booked bed taken', async () => {
+    const { hostel, rooms } = await liveHostel(ownerToken, adminToken, { partner: true });
+    const roomId = rooms[0].id as string;
+    const tenants = await Promise.all(Array.from({ length: 4 }, () => newTenant()));
+    const results = await Promise.all([
+      ...tenants.map((t) => subscribe(t.token, hostel.id, roomId)),
+      ...[11000, 11500, 12000, 12500].map((monthlyRent) => edit(roomId, { monthlyRent })),
+    ]);
+    expect(results.every((r) => r.status === 200 || r.status === 201)).toBe(true);
+    expect((await call(`/hostels/${hostel.slug}`)).body.roomTypes[0].bedsAvailable).toBe(1);
+  });
+
+  test('beds held by plans cannot be removed or marked free, and the refusal says why', async () => {
+    const { hostel, rooms } = await liveHostel(ownerToken, adminToken, {
+      partner: true,
+      rooms: [{ sharing: '2-sharing', monthlyRent: 10000, totalBeds: 10, bedsAvailable: 5 }],
+    });
+    const roomId = rooms[0].id as string;
+    for (const t of await Promise.all([newTenant(), newTenant()])) await activeSubscriber(t.token, hostel.id, roomId, 'none');
+    // 10 beds, 3 free, 2 held by plans.
+
+    const shrink = await edit(roomId, { totalBeds: 1, totalBedsWas: 10 });
+    expect(shrink.status).toBe(409);
+    expect(shrink.body.error).toBe('invalid_state');
+    expect(shrink.body.message).toContain("total beds can't go below 2");
+
+    const allFree = await edit(roomId, { bedsAvailable: 10, bedsAvailableWas: 3 });
+    expect(allFree.status).toBe(409);
+    expect(allFree.body.message).toBe('At most 8 of 10 beds can be free: 2 are taken by tenants with a plan');
+
+    const negative = await edit(roomId, { bedsAvailable: 0, bedsAvailableWas: 5 });
+    expect(negative.status).toBe(400);
+
+    // Nothing changed, and the largest allowed values still work.
+    expect((await call(`/hostels/${hostel.slug}`)).body.roomTypes[0]).toMatchObject({ totalBeds: 10, bedsAvailable: 3 });
+    expect((await edit(roomId, { bedsAvailable: 8 })).body.bedsAvailable).toBe(8);
+    expect((await edit(roomId, { totalBeds: 2, bedsAvailable: 0 })).body).toMatchObject({ totalBeds: 2, bedsAvailable: 0 });
   });
 });

@@ -19,7 +19,7 @@ export async function pickPhoto(source: 'library' | 'camera' = 'library'): Promi
   return photo;
 }
 
-/** Uploads a photo to `POST /uploads` and returns its public URL. */
+/** Uploads an issue or community photo to `POST /uploads` as a private attachment and returns the receipt to attach it with. */
 export async function uploadPhoto(photo: Photo): Promise<string> {
   const part = photoPart(photo);
   const body = new FormData();
@@ -31,6 +31,7 @@ export async function uploadPhoto(photo: Photo): Promise<string> {
     // React Native's FormData streams a local file from { uri, name, type }.
     body.append('file', part as unknown as Blob);
   }
-  const res = await api.request<{ url: string }>('/uploads', { body });
-  return res.url;
+  body.append('purpose', 'attachment');
+  const res = await api.request<{ upload: string }>('/uploads', { body });
+  return res.upload;
 }

@@ -16,6 +16,12 @@ export const viewport: Viewport = { themeColor: '#1F5C46', width: 'device-width'
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const [user, status] = await Promise.all([currentUser().catch(() => null), health()]);
+  // Anything that is not the real thing is said on every page, including Razorpay test keys (no real money moves).
+  const devNotes = status
+    ? [status.msg91 === 'stub' && 'OTP is 123456', status.payments === 'simulated' && 'payments are simulated', status.payments === 'razorpay_test' && 'Razorpay test mode, no real money moves'].filter(
+        (n): n is string => !!n,
+      )
+    : [];
   return (
     <html lang="en-IN">
       <body className="min-h-screen">
@@ -25,12 +31,8 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         >
           Skip to content
         </a>
-        {status?.devMode && (
-          <div className="bg-food-soft px-4 py-1 text-center text-xs text-food-ink">
-            Dev mode: {status.msg91 === 'stub' && 'OTP is 123456'}
-            {status.msg91 === 'stub' && status.razorpay === 'stub' && ' · '}
-            {status.razorpay === 'stub' && 'payments are simulated'}
-          </div>
+        {devNotes.length > 0 && (
+          <div className="bg-food-soft px-4 py-1 text-center text-xs text-food-ink">Dev mode: {devNotes.join(' · ')}</div>
         )}
         {status === null && <div className="bg-danger-soft px-4 py-1 text-center text-xs text-danger">The API is not reachable. Start it with `bun run dev:api`.</div>}
         <SiteHeader user={user} />

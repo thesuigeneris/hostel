@@ -61,8 +61,15 @@
     {
       "idx": 8,
       "version": "7",
-      "when": 1793556587188,
-      "tag": "0008_visit_one_open",
+      "when": 1793556737336,
+      "tag": "0008_payment_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793559799742,
+      "tag": "0009_visit_one_open",
       "breakpoints": true
     }
   ]

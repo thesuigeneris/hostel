@@ -10,6 +10,9 @@ import {
   ownerInvoiceVoidSchema,
   partnerChecklistSchema,
   PARTNER_STATUSES,
+  PAYMENT_EXCEPTION_STATUSES,
+  PAYMENT_MODES,
+  paymentRefundSchema,
   partnerVerifySchema,
   payoutGenerateSchema,
   reasonSchema,
@@ -21,6 +24,7 @@ import { and, asc, eq, ilike, or, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb, schema } from '../db';
+import { clock } from '../lib/clock';
 import { notFound } from '../lib/errors';
 import { parseBody, parseQuery } from '../lib/validate';
 import { type AppEnv, requireAuth } from '../middleware/auth';
@@ -28,14 +32,15 @@ import { audit, listAudit } from '../services/audit';
 import { adminSubscriptions, overdueInvoices } from '../services/billing';
 import { escalatedIssues, openReports } from '../services/community';
 import { listFoodPartners } from '../services/food';
-import { revenueSummary } from '../services/insights';
 import { runJobs } from '../services/jobs';
 import { decidePartner, hostelDetail, reviewListing, setPlatformFee } from '../services/listings';
 import { toHostel } from '../services/mappers';
+import { adminRevenue, platformRevenue } from '../services/money';
 import { adminMoves } from '../services/moves';
 import { generatePayouts, listPayouts, markPayoutPaid } from '../services/payouts';
 import { adminApplications, saveChecklist } from '../services/partners';
 import { adminOwnerInvoices, adminOwnerPlans, voidOwnerInvoice } from '../services/plans';
+import { countRefundsDue, listPaymentExceptions, markRefunded } from '../services/refunds';
 import { flaggedReviews, moderateReview } from '../services/residents';
 
 export const adminRoutes = new Hono<AppEnv>()
@@ -53,7 +58,8 @@ export const adminRoutes = new Hono<AppEnv>()
       openReports: (await openReports()).length,
       overdueBills: (await overdueInvoices()).length,
       escalatedIssues: (await escalatedIssues(c.get('user'))).length,
-      revenue: await revenueSummary(),
+      refundsDue: await countRefundsDue(),
+      revenue: await adminRevenue(),
       overdueOwnerBills: (await adminOwnerInvoices({ overdue: true })).length,
       suspendedHostels: await count(db.select({ n }).from(schema.ownerPlans).where(eq(schema.ownerPlans.suspended, true))),
     });
@@ -168,21 +174,40 @@ export const adminRoutes = new Hono<AppEnv>()
     return c.json(await adminOwnerPlans({ plan, suspended, q }));
   })
   .get('/admin/owner-invoices', async (c) => {
-    const { status, overdue, q } = parseQuery(
+    const { status, mode, overdue, q } = parseQuery(
       c,
       z.object({
         status: z.enum(INVOICE_STATUSES).optional(),
+        mode: z.enum(PAYMENT_MODES).optional(),
         overdue: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
         q: z.string().trim().max(80).optional(),
       }),
     );
-    return c.json(await adminOwnerInvoices({ status, overdue, q }));
+    return c.json(await adminOwnerInvoices({ status, mode, overdue, q }));
   })
   .post('/admin/owner-invoices/:id/void', async (c) => {
     const { reason } = await parseBody(c, ownerInvoiceVoidSchema);
     const bill = await voidOwnerInvoice(c.req.param('id'));
     await audit(c.get('user').id, 'owner_invoice.void', { type: 'owner_invoice', id: bill.id }, `Waived ₹${bill.amount} (${bill.periodStart}): ${reason}`);
     return c.json(bill);
+  })
+
+  // Payments that arrived for bills that could no longer take them: refunds owed.
+  .get('/admin/payment-exceptions', async (c) => {
+    const { status } = parseQuery(c, z.object({ status: z.enum(PAYMENT_EXCEPTION_STATUSES).optional() }));
+    return c.json(await listPaymentExceptions(status));
+  })
+  .post('/admin/payment-exceptions/:id/refunded', async (c) => {
+    const { note } = await parseBody(c, paymentRefundSchema);
+    const row = await markRefunded(c.req.param('id'), c.get('user').id, note);
+    await audit(c.get('user').id, 'payment.refunded', { type: 'payment_exception', id: row.id }, `Refunded ₹${row.amount} (${row.razorpayPaymentId}): ${note}`);
+    return c.json(row);
+  })
+
+  // Money received in a month, real money only, with what was left out.
+  .get('/admin/revenue', async (c) => {
+    const { month } = parseQuery(c, z.object({ month: monthSchema.optional() }));
+    return c.json(await platformRevenue(month ?? clock.today().slice(0, 7)));
   })
 
   // Payouts.

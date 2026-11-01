@@ -79,7 +79,8 @@ function RoomCard({ room, a, onChanged }: { room: RoomType; a: ReturnType<typeof
     const n = roomNumbers(d);
     if (!n.ok) return a.setError(n.error);
     a.run(`save-${room.id}`, async () => {
-      await api.owner.updateRoom(room.id, n.value);
+      // The counts this card showed: the API applies the change as a difference, so bookings made meanwhile stand.
+      await api.owner.updateRoom(room.id, { ...n.value, totalBedsWas: room.totalBeds, bedsAvailableWas: room.bedsAvailable });
       await onChanged();
     }, 'Room updated');
   }

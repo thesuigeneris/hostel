@@ -1,4 +1,4 @@
-import type { AdminOwnerInvoice, AdminOwnerPlan, InvoiceStatus, OwnerPlanTier, User } from '@hostels/shared';
+import type { AdminOwnerInvoice, AdminOwnerPlan, InvoiceStatus, OwnerPlanTier, PaymentMode, User } from '@hostels/shared';
 import {
   addDays,
   addMonths,
@@ -240,7 +240,9 @@ export async function adminOwnerPlans(filter: { plan?: OwnerPlanTier; suspended?
   });
 }
 
-export async function adminOwnerInvoices(filter: { status?: InvoiceStatus; overdue?: boolean; q?: string } = {}): Promise<AdminOwnerInvoice[]> {
+export async function adminOwnerInvoices(
+  filter: { status?: InvoiceStatus; mode?: PaymentMode; overdue?: boolean; q?: string } = {},
+): Promise<AdminOwnerInvoice[]> {
   const rows = await getDb()
     .select({ invoice: schema.ownerInvoices, hostelName: schema.hostels.name, ownerName: schema.users.name, ownerPhone: schema.users.phone })
     .from(schema.ownerInvoices)
@@ -249,6 +251,7 @@ export async function adminOwnerInvoices(filter: { status?: InvoiceStatus; overd
     .where(
       and(
         filter.overdue ? eq(schema.ownerInvoices.status, 'due') : filter.status ? eq(schema.ownerInvoices.status, filter.status) : undefined,
+        filter.mode ? eq(schema.ownerInvoices.paymentMode, filter.mode) : undefined,
         ownerSearch(filter.q),
       ),
     )
@@ -263,9 +266,10 @@ export async function voidOwnerInvoice(id: string) {
   const [row] = await db.select().from(schema.ownerInvoices).where(eq(schema.ownerInvoices.id, id));
   if (!row) throw notFound('Bill');
   if (row.status !== 'due') throw new AppError('invalid_state', row.status === 'paid' ? 'This bill is already paid' : 'This bill is already void');
+  // Marked `waived`, unlike bills a plan change drops, so it is never mistaken for revenue or for a system cancellation.
   const [updated] = await db
     .update(schema.ownerInvoices)
-    .set({ status: 'void' })
+    .set({ status: 'void', paymentMode: 'waived' })
     .where(and(eq(schema.ownerInvoices.id, id), eq(schema.ownerInvoices.status, 'due')))
     .returning();
   if (!updated) throw new AppError('invalid_state', 'This bill changed while you were looking; refresh and try again');

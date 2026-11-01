@@ -89,7 +89,7 @@ export function Badge({ label, tone = 'gray' }: { label: string; tone?: keyof ty
 const STATUS_TONE: Record<string, keyof typeof BADGE> = {
   live: 'green', active: 'green', paid: 'green', resolved: 'green', contacted: 'green', verified: 'green',
   pending: 'food', due: 'food', invited: 'food', acknowledged: 'food', in_progress: 'food', scheduled: 'food', new: 'food',
-  overdue: 'red', open: 'red', rejected: 'red',
+  overdue: 'red', open: 'red', rejected: 'red', refund_due: 'red',
 };
 export function StatusBadge({ status }: { status: string }) {
   return <Badge label={status.replace(/_/g, ' ')} tone={STATUS_TONE[status] ?? 'gray'} />;

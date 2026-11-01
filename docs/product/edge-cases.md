@@ -34,7 +34,7 @@ only when a test proves it (and, for a bug, fails without the fix).
 | I5 | Reporter moves out before the issue is resolved. | The issue stays on the hostel's record; the former resident can still see their own issue (read-only) or is told why not. | Verify |
 | I6 | "Me too" on your own issue; on a closed issue; twice. | Refused; refused; idempotent. | Verify (closed: decide) |
 | I7 | Other residents read an issue. | Never see the reporter's name; comment authors other than the owner show as "Resident". | Verify |
-| I8 | Resident attaches a photo URL from another site to an issue or post. | Refused: attachments must be the user's own uploads, served privately. | **Found**: `webUrl` accepted (`schemas.ts`); fix in progress |
+| I8 | Resident attaches a photo URL from another site to an issue or post. | Refused: attachments must be the user's own uploads, served privately. | **Fixed**: photos are upload receipts checked against the uploader and purpose (`claimUpload`); `uploads.test.ts` › a resident can only attach their own private uploads… |
 | I9 | Board access when the hostel drops to Free or is suspended. | Board is read-only or hidden with an explanation; data kept and back when the plan returns. | Verify |
 | I10 | Post exactly 1,000 characters; 1,001; only whitespace; emoji and Devanagari. | Accepted, refused, refused, accepted with the right count. | Verify |
 
@@ -42,9 +42,9 @@ only when a test proves it (and, for a bug, fails without the fix).
 
 | ID | Case | Must happen | Status |
 |---|---|---|---|
-| M1 | Seeker pays at minute 29; the webhook lands at minute 31, after the pending plan expired and the bill was voided. | Money is never lost silently: if the bed is still free, revive the plan and mark the bill paid; otherwise record a refund-needed entry an admin sees and can mark refunded. | **Found**: only `console.error` (`payments.ts`) |
-| M2 | Pay the same bill from two tabs, or callback and webhook together. | Paid once; the second sees "already paid". | Verify |
-| M3 | Simulated or waived payments. | Never counted as revenue, payouts or owner earnings. | Fix in progress (M7) |
+| M1 | Seeker pays at minute 29; the webhook lands at minute 31, after the pending plan expired and the bill was voided. | Money is never lost silently: if the bed is still free, revive the plan and mark the bill paid; otherwise record a refund-needed entry an admin sees and can mark refunded. | **Fixed** (PRP-04): `markOrderPaid` revives the plan or records a `payment_exceptions` row; `test/late-payments.test.ts`, `e2e/payments.spec.ts` |
+| M2 | Pay the same bill from two tabs, or callback and webhook together. | Paid once; the second sees "already paid". | **Verified** (PRP-04): two tabs now get the same order (before, the second tab overwrote it, so the first paid an order no bill pointed at); a second payment for a paid bill is recorded as a refund due. `late-payments.test.ts` › two tabs…, › a second payment…; `billing.test.ts` › checkout callback and webhook… |
+| M3 | Simulated or waived payments. | Never counted as revenue, payouts or owner earnings. | **Fixed** (PRP-04): `payment_mode`; only `razorpay_live` counts. `test/payment-modes.test.ts`, `e2e/payments.spec.ts` |
 | M4 | Skip meals in the last period of a cancelled plan. | No bill will ever carry that credit, so the skip still counts for headcount, earns ₹0, and the screen says why. | **Found**: credit silently lost (`food.ts`, `billing.ts`) |
 | M5 | Plan starting on the 29th, 30th or 31st; February in a leap year. | Periods are continuous with no gaps or overlaps (e.g. start 31 Jan → 31 Jan–27 Feb, 28 Feb–30 Mar). Bills appear 5 days ahead. | Verify |
 | M6 | Skip cut-offs at 21:59 / 22:00 IST the night before (breakfast), 08:59 / 09:00 (lunch), 14:59 / 15:00 (dinner), with the server clock in UTC. | Exactly at the cut-off is too late. The UI shows the cut-off in IST. | Verify |
@@ -52,8 +52,8 @@ only when a test proves it (and, for a bug, fails without the fix).
 | M8 | Owner upgrades Pro → Partner mid-period after paying for Pro. | No double charge for the overlapping days: the unused part of the paid Pro period is credited on the first Partner bill. | **Found**: `switchPlan` re-anchors and bills the full Partner month |
 | M9 | Owner downgrades during the free month; upgrades again. | No second free month for the same hostel. | Verify |
 | M10 | Owner bill 15 vs 16 days past due; paid on day 16. | Paused on day 16; restored at once on payment. | Verify |
-| M11 | Last bed: two seekers subscribe at the same moment; owner edits rent at the same time. | One gets the bed, the other "no beds left"; the rent edit never restores a bed. | Fix in progress (M5) |
-| M12 | Razorpay order creation fails or is slow. | No DB transaction held open; the bed is released by the 30-minute expiry; the seeker can retry from `/pay`. | Fix in progress (M6) |
+| M11 | Last bed: two seekers subscribe at the same moment; owner edits rent at the same time. | One gets the bed, the other "no beds left"; the rent edit never restores a bed. | **Fixed** (M5): `listings.test.ts` › rent edits racing bookings keep every booked bed taken, › saving a form opened before a booking never gives the booked bed back; last-bed race: `billing.test.ts` › concurrent subscribes never overbook the last bed |
+| M12 | Razorpay order creation fails or is slow. | No DB transaction held open; the bed is released by the 30-minute expiry; the seeker can retry from `/pay`. | **Fixed** (M6): `subscriptions.test.ts` › while the payment service is slow…, › if the payment service fails, the tenant can retry… |
 | M13 | Move scheduled into a hostel that is delisted or loses verification before the move date. | The move is cancelled, the bed released, and the resident told; they stay where they are. | **Found**: `completeDueMoves` completes it anyway |
 
 ## 4. Seeker journeys
@@ -80,7 +80,7 @@ only when a test proves it (and, for a bug, fails without the fix).
 | O5 | Headcount at a hostel on a platform with thousands of subscribers. | Filtered in SQL by hostel (including moves in), not by loading every active subscription. | **Found**: loads all active subscriptions (`food.ts`) |
 | O6 | Owner with zero hostels, one draft, a rejected listing, a suspended plan. | Each dashboard state has a next step; nothing blank. | Verify |
 | O7 | Admin acts on an owner's hostel through the owner routes. | Allowed, and written to the audit log with the admin as the actor. | Verify |
-| O8 | Admin waives a bill that the owner pays at the same moment. | One outcome; never "paid" and "waived" together. | Verify |
+| O8 | Admin waives a bill that the owner pays at the same moment. | One outcome; never "paid" and "waived" together. | **Verified** for waive-then-pay (PRP-04): the bill stays waived and the payment becomes a refund due (`late-payments.test.ts` › owner bills…); a check constraint forbids a paid bill marked waived |
 
 ## 6. Cross-cutting
 

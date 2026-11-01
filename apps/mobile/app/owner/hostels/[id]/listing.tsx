@@ -31,9 +31,9 @@ function Listing() {
 
   const upload = () =>
     a.run('upload', async () => {
-      const url = await pickAndUploadPhoto();
-      if (!url) return;
-      await api.owner.addPhoto(id, url);
+      const uploaded = await pickAndUploadPhoto('listing');
+      if (!uploaded) return;
+      await api.owner.addPhoto(id, uploaded.upload);
       await s.reload();
       a.setOk('Photo added');
     });
