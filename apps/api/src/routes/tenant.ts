@@ -26,7 +26,6 @@ import {
 import { myVisits, requestVisit } from '../services/visits';
 
 const signedIn = requireAuth();
-const tenant = requireAuth('tenant');
 
 export const tenantRoutes = new Hono<AppEnv>()
   // Visits: any signed-in user.
@@ -35,9 +34,9 @@ export const tenantRoutes = new Hono<AppEnv>()
   )
   .get('/me/visits', signedIn, async (c) => c.json(await myVisits(c.get('user'))))
 
-  // Subscription and bills. Starting a plan is for tenants; managing one is for whoever holds it,
-  // since a subscriber may later sign in as a hostel owner.
-  .post('/hostels/:id/subscribe', tenant, async (c) =>
+  // Subscription and bills: any signed-in user (owners and admins can live in someone else's hostel).
+  // The service refuses a plan at a hostel the caller owns.
+  .post('/hostels/:id/subscribe', signedIn, async (c) =>
     c.json(await subscribe(c.get('user'), c.req.param('id'), await parseBody(c, subscribeSchema)), 201),
   )
   .get('/me/subscription', signedIn, async (c) => c.json(await mySubscription(c.get('user'))))

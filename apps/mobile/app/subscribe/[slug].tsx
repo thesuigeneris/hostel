@@ -4,12 +4,14 @@ import { useState } from 'react';
 import { Pressable, Text } from 'react-native';
 import { Button, Card, Empty, ErrorText, H1, H2, Loading, P, Row, Screen, Segmented } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { openPayment } from '@/lib/pay';
 import { theme } from '@/lib/theme';
 import { useLoad } from '@/lib/useLoad';
 
 export default function Subscribe() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
+  const { user } = useAuth();
   const { data: h, error, loading } = useLoad(() => api.hostels.get(slug), [slug]);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [plan, setPlan] = useState<MealPlan>('full');
@@ -19,6 +21,9 @@ export default function Subscribe() {
 
   if (loading) return <Loading />;
   if (!h) return <Screen><ErrorText>{error}</ErrorText></Screen>;
+  if (user && user.id === h.ownerId) {
+    return <Screen><Empty title="This is your hostel">Plans are for people who live at a hostel, so you can’t take one at a hostel you own.</Empty></Screen>;
+  }
   const rooms = h.roomTypes.filter((r) => r.bedsAvailable > 0);
   const room = rooms.find((r) => r.id === roomId) ?? rooms[0];
   const plans = h.foodAvailable ? MEAL_PLANS : (['none'] as const);

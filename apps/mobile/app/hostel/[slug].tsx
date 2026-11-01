@@ -71,7 +71,12 @@ export default function HostelScreen() {
           {h.isVerified ? (
             <>
               <P>One bill for bed and food. Food plans from {rupees(FOOD_PLANS['two-meals'].price)}. No advance. Move or cancel anytime.</P>
-              <Button title="Subscribe" onPress={() => (user ? router.push(`/subscribe/${slug}`) : router.push({ pathname: '/login', params: { next: `/subscribe/${slug}` } }))} />
+              {user && user.id === h.ownerId ? (
+                // Owners can take a plan anywhere except at their own hostel; the API refuses it too.
+                <Notice>You own this hostel, so you can’t take a plan here.</Notice>
+              ) : (
+                <Button title="Subscribe" onPress={() => (user ? router.push(`/subscribe/${slug}`) : router.push({ pathname: '/login', params: { next: `/subscribe/${slug}` } }))} />
+              )}
             </>
           ) : visitMsg ? (
             <Notice>{visitMsg}</Notice>

@@ -14,11 +14,21 @@ export const metadata: Metadata = { title: 'Subscribe', robots: { index: false }
 export default async function SubscribePage({ params, searchParams }: Props) {
   const { slug } = await params;
   const { error } = await searchParams;
-  await requireUser(`/subscribe/${slug}`, 'tenant');
+  // Any signed-in person may take a plan; owners and admins live in hostels too.
+  const user = await requireUser(`/subscribe/${slug}`);
   const h = await publicApi(0).hostels.get(slug).catch((e) => {
     if (e instanceof ApiError && e.status === 404) notFound();
     throw e;
   });
+  if (h.ownerId === user.id) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-10">
+        <Empty title="This is your hostel" action={<LinkButton href={`/owner/hostels/${h.id}`} variant="secondary">Manage {h.name}</LinkButton>}>
+          Plans are for people who live at a hostel, so you can&apos;t take one at a hostel you own. You can still subscribe at any other verified hostel.
+        </Empty>
+      </div>
+    );
+  }
   if (!h.isVerified) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-10">

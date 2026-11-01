@@ -29,6 +29,10 @@ export async function scheduleMove(user: User, input: { toRoomTypeId: string; mo
       if (!hostel || !isBookable(hostel, await planFor(hostel.id, tx))) {
         throw new AppError('not_verified', 'You can only move to a verified partner hostel');
       }
+      // Same rule as subscribing: never a plan at your own hostel.
+      if (hostel.ownerId === user.id) {
+        throw new AppError('cannot_subscribe_own_hostel', 'You own that hostel, so you can’t move your plan there.', 409);
+      }
       if (sub.mealPlan !== 'none' && !hostel.foodAvailable) throw new AppError('move_not_allowed', 'That hostel does not serve food');
       if (!(await reserveBed(tx, room.id))) throw new AppError('no_beds_available', 'No beds left in that room type');
       const [move] = await tx

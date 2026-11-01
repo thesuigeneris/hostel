@@ -38,6 +38,44 @@ function paidWebhook(orderId: string, paymentId: string) {
 }
 
 describe('subscribe', () => {
+  test('an owner can take a plan at someone else\'s hostel, never at their own', async () => {
+    const own = await subscribe(ownerToken);
+    expect(own.status).toBe(409);
+    expect(own.body.error).toBe('cannot_subscribe_own_hostel');
+    expect(await roomBeds(ownerToken, hostel.id, room.id)).toBe(5);
+
+    const otherOwner = await newOwner();
+    const elsewhere = await subscribe(otherOwner);
+    expect(elsewhere.status).toBe(201);
+    expect(elsewhere.body.subscription.status).toBe('pending');
+    expect((await call('/me', { token: otherOwner })).body.role).toBe('owner');
+    const paid = await call(`/payments/${elsewhere.body.invoice.id}/simulate`, { token: otherOwner, method: 'POST' });
+    expect(paid.body.status).toBe('paid');
+    expect((await call('/me/subscription', { token: otherOwner })).body.subscription.status).toBe('active');
+    expect(await roomBeds(ownerToken, hostel.id, room.id)).toBe(4);
+  });
+
+  test('admins may take a plan like anyone, except at a hostel they own', async () => {
+    // The admin's own hostel: admin rights don't make it any less theirs.
+    const adminHostel = await liveHostel(adminToken, adminToken, { partner: true });
+    const own = await subscribe(adminToken, adminHostel.hostel.id, adminHostel.rooms[0].id);
+    expect(own.body.error).toBe('cannot_subscribe_own_hostel');
+
+    const elsewhere = await subscribe(adminToken);
+    expect(elsewhere.status).toBe(201);
+    expect((await call('/me/subscription', { token: adminToken })).body.subscription.hostelId).toBe(hostel.id);
+  });
+
+  test('an owner with a plan elsewhere cannot move it into their own hostel', async () => {
+    const otherOwner = await newOwner();
+    await activeSubscriber(otherOwner, hostel.id, room.id);
+    const mine = await liveHostel(otherOwner, adminToken, { partner: true, area: 'Madhapur' });
+    setClock('2026-11-12T06:00:00Z');
+    const move = await call('/me/moves', { token: otherOwner, body: { toRoomTypeId: mine.rooms[0].id, moveDate: '2026-11-20' } });
+    expect(move.status).toBe(409);
+    expect(move.body.error).toBe('cannot_subscribe_own_hostel');
+  });
+
   test('needs a signed-in tenant and a live hostel', async () => {
     expect((await call(`/hostels/${hostel.id}/subscribe`, { body: { roomTypeId: room.id, mealPlan: 'full' } })).status).toBe(401);
     const { token } = await newTenant();

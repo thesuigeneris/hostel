@@ -303,6 +303,7 @@ export const ERROR_CODES = [
   'internal',
   'no_beds_available',
   'already_subscribed',
+  'cannot_subscribe_own_hostel',
   'not_verified',
   'cutoff_passed',
   'meal_not_in_plan',

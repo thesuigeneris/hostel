@@ -50,13 +50,13 @@ describe('subscribe', () => {
     expect(await roomBeds(ownerToken, hostel.id, room.id)).toBe(4);
   });
 
-  test('free listings, owners and food plans at no-food hostels are refused', async () => {
+  test('free listings, the hostel\'s own owner and food plans at no-food hostels are refused', async () => {
     const free = await liveHostel(ownerToken, adminToken);
     const { token } = await newTenant();
     const r1 = await call(`/hostels/${free.hostel.id}/subscribe`, { token, body: { roomTypeId: free.rooms[0].id, mealPlan: 'full' } });
     expect(r1.body.error).toBe('not_verified');
     const r2 = await call(`/hostels/${hostel.id}/subscribe`, { token: ownerToken, body: { roomTypeId: room.id, mealPlan: 'full' } });
-    expect(r2.status).toBe(403);
+    expect(r2).toMatchObject({ status: 409, body: { error: 'cannot_subscribe_own_hostel' } });
     const noFood = await liveHostel(ownerToken, adminToken, { partner: true, foodAvailable: false });
     const r3 = await call(`/hostels/${noFood.hostel.id}/subscribe`, { token, body: { roomTypeId: noFood.rooms[0].id, mealPlan: 'full' } });
     expect(r3.status).toBe(400);
