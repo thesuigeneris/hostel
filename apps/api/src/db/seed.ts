@@ -149,6 +149,8 @@ async function seedData(db: DB, today: string) {
         amount: OWNER_PLANS[plan].price,
         dueDate: p.start,
         status: 'paid',
+        // Demo data: no money moved, so it never shows up as revenue.
+        paymentMode: 'simulated',
         razorpayPaymentId: `pay_seed_${hostelId.slice(4)}`,
         paidAt: istInstant(p.start, 10),
       });
@@ -240,6 +242,7 @@ async function seedResidents(db: DB, today: string, ctx: { tenantId: string; own
         periodEnd: p.end,
         ...computeBill({ rent: room.monthlyRent, mealPlan: opts.plan, skipCredits: n === 0 ? 0 : 130 }),
         status: 'paid',
+        paymentMode: 'simulated',
         dueDate: p.start,
         razorpayOrderId: `order_seed_${newId('inv').slice(4)}`,
         razorpayPaymentId: `pay_seed_${newId('inv').slice(4)}`,

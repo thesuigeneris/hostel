@@ -56,8 +56,12 @@ import type {
   OwnerPayouts,
   OwnerPlanInfo,
   OwnerVisit,
+  AdminPaymentException,
+  PaymentExceptionStatus,
+  PaymentMode,
   PaymentPage,
   PayoutView,
+  PlatformRevenue,
   Residency,
   RentSheet,
   Review,
@@ -268,11 +272,15 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
         request<{ subscription: Subscription; user: { id: string; name: string; phone: string }; hostelName: string }[]>('/admin/subscriptions', { query: { status } }),
       moves: () => request<MoveRequest[]>('/admin/moves'),
       overdue: () => request<{ invoice: Invoice; userName: string; phone: string; hostelName: string }[]>('/admin/invoices/overdue'),
-      ownerInvoices: (filter: { status?: string; overdue?: boolean; q?: string } = {}) =>
+      ownerInvoices: (filter: { status?: string; mode?: PaymentMode; overdue?: boolean; q?: string } = {}) =>
         request<AdminOwnerInvoice[]>('/admin/owner-invoices', { query: filter }),
       ownerPlans: (filter: { plan?: OwnerPlanTier; suspended?: boolean; q?: string } = {}) =>
         request<AdminOwnerPlan[]>('/admin/owner-plans', { query: filter }),
       voidOwnerInvoice: (id: string, reason: string) => request<OwnerInvoice>(`/admin/owner-invoices/${id}/void`, { body: { reason } }),
+      revenue: (month?: string) => request<PlatformRevenue>('/admin/revenue', { query: { month } }),
+      paymentExceptions: (status?: PaymentExceptionStatus) =>
+        request<AdminPaymentException[]>('/admin/payment-exceptions', { query: { status } }),
+      markRefunded: (id: string, note: string) => request<AdminPaymentException>(`/admin/payment-exceptions/${id}/refunded`, { body: { note } }),
       payouts: (month?: string) => request<PayoutView[]>('/admin/payouts', { query: { month } }),
       generatePayouts: (month: string) => request<PayoutView[]>('/admin/payouts/generate', { body: { month } }),
       markPayoutPaid: (id: string) => request('/admin/payouts/' + id + '/paid', { method: 'POST' }),

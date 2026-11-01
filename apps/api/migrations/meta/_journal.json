@@ -57,6 +57,13 @@
       "when": 1793554965327,
       "tag": "0007_owner_admin",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793556737336,
+      "tag": "0008_payment_mode",
+      "breakpoints": true
     }
   ]
 }

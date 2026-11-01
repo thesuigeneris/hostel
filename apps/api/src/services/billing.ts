@@ -202,12 +202,15 @@ export async function subscribe(user: User, hostelId: string, input: z.output<ty
   }
 }
 
-/** Runs when a bill is paid: a pending subscription becomes active and its residency starts. */
-export async function activateIfPending(tx: Tx, subscriptionId: string) {
+/**
+ * Runs when a bill is paid: a pending subscription becomes active and its residency starts. `from: 'expired'` takes
+ * back up a plan whose bed hold ran out before its first payment arrived (see `markOrderPaid`).
+ */
+export async function activateIfPending(tx: Tx, subscriptionId: string, from: 'pending' | 'expired' = 'pending') {
   const [sub] = await tx
     .update(schema.subscriptions)
     .set({ status: 'active' })
-    .where(and(eq(schema.subscriptions.id, subscriptionId), eq(schema.subscriptions.status, 'pending')))
+    .where(and(eq(schema.subscriptions.id, subscriptionId), eq(schema.subscriptions.status, from)))
     .returning();
   if (!sub) return null;
   const [user] = await tx.select().from(schema.users).where(eq(schema.users.id, sub.userId));

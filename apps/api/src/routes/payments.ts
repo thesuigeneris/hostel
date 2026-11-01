@@ -1,7 +1,7 @@
 import { verifyPaymentSchema } from '@hostels/shared';
 import { Hono } from 'hono';
 import { AppError } from '../lib/errors';
-import { verifyWebhookSignature } from '../lib/razorpay';
+import { paymentModeFor, verifyWebhookSignature } from '../lib/razorpay';
 import { parseBody } from '../lib/validate';
 import { type AppEnv, requireAuth } from '../middleware/auth';
 import { markOrderPaid, orderFor, paymentPage, simulatePayment, verifyCheckout } from '../services/payments';
@@ -29,11 +29,12 @@ export const webhookRoutes = new Hono<AppEnv>().post('/webhooks/razorpay', async
   const entity = payload.payload?.payment?.entity;
   if ((payload.event === 'payment.captured' || payload.event === 'order.paid') && entity?.id && entity.order_id) {
     try {
-      await markOrderPaid(entity.order_id, entity.id);
+      // A payment for a bill that is no longer payable is revived or recorded as a refund due, never dropped.
+      await markOrderPaid(entity.order_id, entity.id, paymentModeFor(entity.order_id));
     } catch (e) {
-      // Unknown or cancelled orders are acknowledged so Razorpay stops retrying; they are logged for follow-up.
+      // Unknown orders are acknowledged so Razorpay stops retrying; they are logged for follow-up.
       if (!(e instanceof AppError)) throw e;
-      console.error(`[webhook] ${e.code}: ${e.message} (order ${entity.order_id})`);
+      console.error(`[webhook] ${e.code}: ${e.message} (order ${entity.order_id}, payment ${entity.id})`);
     }
   }
   return c.json({ ok: true });

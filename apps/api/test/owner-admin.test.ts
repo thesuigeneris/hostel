@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { PARTNER_STANDARD_IDS } from '@hostels/shared';
 import { setClock } from '../src/lib/clock';
 import { runJobs } from '../src/services/jobs';
-import { activeSubscriber, admin, liveHostel, newOwner, newTenant } from './fixtures';
+import { activeSubscriber, admin, liveHostel, liveSubscriber, newOwner, newTenant } from './fixtures';
 import { call, resetDb } from './helpers';
 
 let ownerToken: string;
@@ -102,7 +102,7 @@ describe('owner insights', () => {
       rooms: [{ sharing: '2-sharing', monthlyRent: 10000, totalBeds: 10, bedsAvailable: 6 }],
     });
     const t = await newTenant('Ravi Kumar');
-    await activeSubscriber(t.token, hostel.id, rooms[0].id, 'none');
+    await liveSubscriber(t.token, hostel.id, rooms[0].id, 'none');
     const issue = await call(`/hostels/${hostel.id}/issues`, { token: t.token, body: { category: 'wifi', title: 'Wi-Fi drops at night' } });
     expect(issue.status).toBe(201);
 
@@ -114,7 +114,7 @@ describe('owner insights', () => {
     expect(res.body).toMatchObject({ locked: false, occupancyPct: 50, activeResidents: 1, openIssues: 1, visitRequests30d: 0, plan: { effective: 'partner' } });
     expect(res.body.viewsByDay).toHaveLength(30);
     expect(res.body.occupancy).toMatchObject({ totalBeds: 10, freeBeds: 5, occupiedBeds: 5, occupancyPct: 50, activeSubscribers: 1, activeResidents: 1 });
-    expect(res.body.revenue).toMatchObject({ subscriptionGross: 10000, platformFeePct: 10, platformFee: 1000, subscriptionNet: 9000 });
+    expect(res.body.revenue).toMatchObject({ subscriptionGross: 10000, platformFeePct: 10, platformFee: 1000, subscriptionNet: 9000, notCounted: { simulated: 0, test: 0 } });
     expect(res.body.issues).toMatchObject({
       open: 1,
       needsResponse: 1,
