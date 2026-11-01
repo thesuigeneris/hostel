@@ -6,10 +6,11 @@ import {
   reviewInputSchema,
   skipSchema,
   subscribeSchema,
-  visitRequestSchema,
+  visitRequestSchemaOn,
 } from '@hostels/shared';
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { clock } from '../lib/clock';
 import { parse, parseBody, parseQuery } from '../lib/validate';
 import { type AppEnv, requireAuth } from '../middleware/auth';
 import { cancelSubscription, myInvoices, mySubscription, subscribe } from '../services/billing';
@@ -30,7 +31,7 @@ const signedIn = requireAuth();
 export const tenantRoutes = new Hono<AppEnv>()
   // Visits: any signed-in user.
   .post('/hostels/:id/visits', signedIn, async (c) =>
-    c.json(await requestVisit(c.get('user'), c.req.param('id'), await parseBody(c, visitRequestSchema)), 201),
+    c.json(await requestVisit(c.get('user'), c.req.param('id'), await parseBody(c, visitRequestSchemaOn(() => clock.today()))), 201),
   )
   .get('/me/visits', signedIn, async (c) => c.json(await myVisits(c.get('user'))))
   .delete('/me/visits/:id', signedIn, async (c) => c.json(await cancelVisit(c.get('user'), c.req.param('id'))))

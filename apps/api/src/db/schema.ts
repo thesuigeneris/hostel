@@ -202,7 +202,11 @@ export const visitRequests = pgTable(
     status: visitStatusEnum('status').notNull().default('new'),
     createdAt: createdAt(),
   },
-  (t) => [index('visit_requests_hostel_idx').on(t.hostelId)],
+  (t) => [
+    index('visit_requests_hostel_idx').on(t.hostelId),
+    // One waiting request per person per hostel, even when the form is sent twice at once.
+    uniqueIndex('visit_requests_one_open').on(t.hostelId, t.userId).where(sql`${t.status} = 'new'`),
+  ],
 );
 
 export const foodPartners = pgTable('food_partners', {

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { addDays, istDate } from '@hostels/shared';
 import { setClock } from '../src/lib/clock';
 import { activeSubscriber, admin, liveHostel, newOwner, newTenant } from './fixtures';
 import { call, resetDb } from './helpers';
@@ -197,9 +198,10 @@ describe('visit requests', () => {
   test('tenant requests, owner moves it through the inbox', async () => {
     const { hostel } = await liveHostel(ownerToken, adminToken);
     const { token } = await newTenant('Visitor');
-    const v = await call(`/hostels/${hostel.id}/visits`, { token, body: { preferredDate: '2099-01-10', message: 'Evening please' } });
+    // Visits can be asked for up to 90 days ahead, so the dates follow today.
+    const v = await call(`/hostels/${hostel.id}/visits`, { token, body: { preferredDate: addDays(istDate(), 10), message: 'Evening please' } });
     expect(v.status).toBe(201);
-    expect((await call(`/hostels/${hostel.id}/visits`, { token, body: { preferredDate: '2099-01-11' } })).body.error).toBe('invalid_state');
+    expect((await call(`/hostels/${hostel.id}/visits`, { token, body: { preferredDate: addDays(istDate(), 11) } })).body.error).toBe('invalid_state');
     expect((await call(`/hostels/${hostel.id}/visits`, { token, body: { preferredDate: '2000-01-01' } })).status).toBe(400);
 
     const inbox = await call('/owner/visits?status=new', { token: ownerToken });
