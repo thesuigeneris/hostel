@@ -26,6 +26,7 @@ export default function RootLayout() {
           <Stack.Screen name="move" options={{ title: 'Move' }} />
           <Stack.Screen name="home/[hostelId]" options={{ title: 'My hostel' }} />
           <Stack.Screen name="issue/[id]" options={{ title: 'Issue' }} />
+          <Stack.Screen name="hostels-in/[area]" options={{ title: 'Hostels' }} />
         </Stack>
       </AuthProvider>
     </SafeAreaProvider>
