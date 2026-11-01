@@ -1,7 +1,10 @@
-import { AREAS, GENDER_TYPES, SHARING_TYPES } from '@hostels/shared';
+import { GENDER_TYPES, SHARING_TYPES } from '@hostels/shared';
 import { GENDER_LABEL, rupees, SHARING_LABEL } from '@/lib/format';
+import { areaOptions, areaValue } from '@/lib/search';
 import { FilterDrawer } from './FilterDrawer';
-import { Button, Checkbox, Field, focusRing, Input, Select } from './ui';
+import { SearchButton } from './SearchButton';
+import { SearchSuggest } from './SearchSuggest';
+import { Checkbox, Field, focusRing, Input, Select } from './ui';
 
 export type SearchParams = Record<string, string | undefined>;
 
@@ -70,10 +73,20 @@ export function AppliedFilters({ items, clearHref }: { items: Applied[]; clearHr
 const DRAWER_KEYS = ['sharing', 'gender', 'minRent', 'maxRent', 'verified', 'food', 'minRating'] as const;
 
 /**
- * One GET form. Search text and area are always visible; the rest sit inline on large screens and in a
- * bottom sheet on phones. On area pages the area comes from the URL, so it is not offered here.
+ * One GET form. Search text (with suggestions while typing) and area are always visible; the rest sit inline on
+ * large screens and in a bottom sheet on phones. On area pages the area comes from the URL, so it is not offered here.
  */
-export function SearchFilters({ q, action = '/hostels', lockArea }: { q: SearchParams; action?: string; lockArea?: boolean }) {
+export function SearchFilters({
+  q,
+  action = '/hostels',
+  lockArea,
+  areas = null,
+}: {
+  q: SearchParams;
+  action?: string;
+  lockArea?: boolean;
+  areas?: { area: string }[] | null;
+}) {
   const near = !!(q.lat && q.lng);
   const count = DRAWER_KEYS.filter((k) => !!q[k]).length;
   const clearHref = searchHref(action, { view: q.view });
@@ -81,14 +94,12 @@ export function SearchFilters({ q, action = '/hostels', lockArea }: { q: SearchP
     <search aria-label="Filter hostels" className="block rounded-2xl border border-line bg-surface p-4 shadow-card">
       <form action={action}>
         <div className={`grid items-end gap-3 ${lockArea ? 'sm:grid-cols-[1fr_auto]' : 'sm:grid-cols-[3fr_2fr] lg:grid-cols-[3fr_2fr_auto]'}`}>
-          <Field label="Search">
-            <Input type="search" name="q" defaultValue={q.q} placeholder="Hostel name or street" enterKeyHint="search" />
-          </Field>
+          <SearchSuggest label="Search" defaultValue={q.q} />
           {!lockArea && (
             <Field label="Area">
-              <Select name="area" defaultValue={q.area ?? ''}>
+              <Select name="area" defaultValue={areaValue(areaOptions(areas, q.area), q.area)}>
                 <option value="">All areas</option>
-                {AREAS.map((a) => <option key={a}>{a}</option>)}
+                {areaOptions(areas, q.area).map((a) => <option key={a}>{a}</option>)}
               </Select>
             </Field>
           )}
@@ -96,7 +107,7 @@ export function SearchFilters({ q, action = '/hostels', lockArea }: { q: SearchP
             <FilterDrawer count={count} clearHref={clearHref}>
               <MoreFilters q={q} near={near} />
             </FilterDrawer>
-            <Button type="submit" className="flex-1 lg:flex-none lg:px-6">Search</Button>
+            <SearchButton className="flex-1 lg:flex-none lg:px-6" />
           </div>
         </div>
         {q.lat && <input type="hidden" name="lat" value={q.lat} />}

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { addDays, VISIT_MAX_DAYS_AHEAD } from '@hostels/shared';
+import { addDays, standardsFor, VISIT_MAX_DAYS_AHEAD } from '@hostels/shared';
 import { setClock } from '../src/lib/clock';
 import { activeSubscriber, admin, liveHostel, newOwner, newTenant } from './fixtures';
 import { call, resetDb } from './helpers';
@@ -193,5 +193,25 @@ describe('visit requests', () => {
     const first = await call(`/hostels/${hostel.id}/visits`, { token: seeker.token, body: { preferredDate: addDays(TODAY, 1) } });
     expect((await call(`/me/visits/${first.body.id}`, { token: seeker.token, method: 'DELETE' })).status).toBe(200);
     expect((await call(`/hostels/${hostel.id}/visits`, { token: seeker.token, body: { preferredDate: addDays(TODAY, 3) } })).status).toBe(201);
+  });
+});
+
+describe('verified partner explainer', () => {
+  test('hostel pages carry what the in-person check covered, never the inspector notes', async () => {
+    const { hostel } = await liveHostel(ownerToken, adminToken, { name: 'Checked House', foodAvailable: false, rooms: [ROOM] });
+    expect((await call(`/hostels/${hostel.slug}`)).body.partnerCheck).toBeNull();
+
+    expect((await call(`/owner/hostels/${hostel.id}/partner`, { token: ownerToken, method: 'POST' })).status).toBe(200);
+    const checklist = standardsFor(false).map((s) => s.id);
+    const verified = await call(`/admin/hostels/${hostel.id}/partner/verify`, {
+      token: adminToken,
+      body: { platformFeePct: 10, checklist, note: 'Owner phone 98xxx, papers in the drive' },
+    });
+    expect(verified.status).toBe(200);
+    const page = (await call(`/hostels/${hostel.slug}`)).body;
+    expect(page.partnerCheck).toEqual({ checkedOn: TODAY, checks: checklist });
+    // Without food, the kitchen check doesn't apply and isn't claimed.
+    expect(page.partnerCheck.checks).not.toContain('kitchen_hygiene');
+    expect(JSON.stringify(page)).not.toContain('papers in the drive');
   });
 });

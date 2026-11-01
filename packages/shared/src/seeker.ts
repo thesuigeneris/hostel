@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { dateLabel } from './format';
-import { TRANSPARENCY_MIN_ISSUES, TRANSPARENCY_WINDOW_DAYS } from './pricing';
+import type { PartnerStandardId } from './owner-admin';
+import { PENDING_SUBSCRIPTION_TTL_MINUTES, TRANSPARENCY_MIN_ISSUES, TRANSPARENCY_WINDOW_DAYS } from './pricing';
 import { addDays, type ISODate, isValidDate } from './time';
 
 // Rules a seeker meets while searching and judging a hostel. The API, the website and the app read them from here.
@@ -54,6 +55,15 @@ export function suggestionDetail(s: Suggestion): string {
   return `Hostel · ${s.area}${s.isVerified ? ' · verified partner' : ''}`;
 }
 
+/**
+ * What our team checked before verifying a partner, from the inspection record: the standards ticked and the day of
+ * the decision. Public, so the "Verified partner" label can say what it rests on. The inspector's notes stay private.
+ */
+export type PartnerCheck = { checkedOn: ISODate | null; checks: PartnerStandardId[] };
+
+/** Why a seeker reports a review. The admin queue shows the reason with the review. */
+export const REVIEW_FLAG_REASONS = ['Looks fake or not a real stay', 'Abusive or hateful', 'Shares personal data', 'Off-topic or spam'] as const;
+
 /** How to show a hostel's rating: nothing yet, "New" below the threshold, or the true average with its count. */
 export type RatingView = { kind: 'none' } | { kind: 'new'; count: number } | { kind: 'rated'; rating: number; count: number };
 
@@ -91,6 +101,22 @@ export function visitDateProblem(date: string, today: ISODate): string | null {
   if (date > last) return `Pick a date in the next ${VISIT_MAX_DAYS_AHEAD} days (by ${dateLabel(last)})`;
   return null;
 }
+
+/** A time of day in India as people say it ("6:42 pm"). IST has no daylight saving, so no time-zone data is needed. */
+export function istClockTime(at: Date): string {
+  const ist = new Date(at.getTime() + (5 * 60 + 30) * 60_000);
+  const h = ist.getUTCHours();
+  return `${h % 12 || 12}:${String(ist.getUTCMinutes()).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
+}
+
+/** When the bed held for an unpaid first bill is released, and whether that time has passed. */
+export function bedHold(createdAt: string, now = new Date()): { endsAt: Date; ended: boolean; until: string } {
+  const endsAt = new Date(Date.parse(createdAt) + PENDING_SUBSCRIPTION_TTL_MINUTES * 60_000);
+  return { endsAt, ended: endsAt.getTime() <= now.getTime(), until: istClockTime(endsAt) };
+}
+
+/** A visit request's status in the visitor's words. */
+export const VISIT_STATUS_LABEL = { new: 'Requested', contacted: 'Hostel contacted', closed: 'Closed' } as const;
 
 /** What happens next with a visit request, in the visitor's words. */
 export function visitNextStep(v: { status: 'new' | 'contacted' | 'closed'; preferredDate: ISODate }, today: ISODate): string {

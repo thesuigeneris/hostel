@@ -1,6 +1,6 @@
 'use server';
 
-import type { Meal, MealPlan, Diet } from '@hostels/shared';
+import { ApiError, type Diet, type Meal, type MealPlan } from '@hostels/shared';
 import { redirect } from 'next/navigation';
 import { run, safePath, str } from '@/lib/actions';
 import { api } from '@/lib/api';
@@ -18,6 +18,27 @@ export async function subscribeAction(form: FormData) {
         diet: (str(form, 'diet') || 'veg') as Diet,
       }),
     { to: (r) => `/pay/${r.invoice.id}` },
+  );
+}
+
+/**
+ * Releases a bed held for an unpaid first bill, so the person can pick again. Only a hold is released: if the bill
+ * was paid in another tab meanwhile, the running plan is left alone and the page says so.
+ */
+export async function releaseHoldAction(form: FormData) {
+  const slug = str(form, 'slug');
+  const back = slug ? `/subscribe/${encodeURIComponent(slug)}` : '/account';
+  await run(
+    back,
+    async () => {
+      const client = await api();
+      const mine = await client.me.subscription();
+      if (!mine || mine.subscription.id !== str(form, 'subscriptionId') || mine.subscription.status !== 'pending') {
+        throw new ApiError(409, 'invalid_state', 'There is no unpaid hold to release any more. This page shows where things stand now.');
+      }
+      return client.me.cancelSubscription();
+    },
+    { ok: 'The bed is released. Pick a room and food plan again.' },
   );
 }
 
