@@ -5,6 +5,7 @@ import type { z } from 'zod';
 import { getDb, schema } from '../db';
 import { clock } from '../lib/clock';
 import { AppError, forbidden, notFound } from '../lib/errors';
+import { attachmentRef, photoUrl } from '../lib/uploads';
 import { hostelIdsOwnedBy, requireMember, requirePlan } from './access';
 
 type IssueRow = typeof schema.issues.$inferSelect;
@@ -21,7 +22,7 @@ export async function reportIssue(user: User, hostelId: string, input: z.output<
   if (!residency) throw new AppError('not_a_resident', 'Only residents can report issues', 403);
   const [row] = await getDb()
     .insert(schema.issues)
-    .values({ id: newId('iss'), hostelId, reporterId: user.id, residencyId: residency.id, ...input, photoUrl: input.photoUrl ?? null, createdAt: clock.now() })
+    .values({ id: newId('iss'), hostelId, reporterId: user.id, residencyId: residency.id, ...input, photoUrl: attachmentRef(input.photoUrl), createdAt: clock.now() })
     .returning();
   return toIssue(row!, { viewer: user, isOwner: false, reporterName: user.name, upvotes: 0, upvoted: false });
 }
@@ -34,7 +35,8 @@ function toIssue(r: IssueRow, ctx: { viewer: User; isOwner: boolean; reporterNam
     category: r.category,
     title: r.title,
     description: r.description,
-    photoUrl: r.photoUrl,
+    // Built here, after the membership check that every caller of toIssue makes.
+    photoUrl: photoUrl(r.photoUrl),
     status: r.status,
     createdAt: r.createdAt.toISOString(),
     acknowledgedAt: r.acknowledgedAt?.toISOString() ?? null,
@@ -254,7 +256,7 @@ export async function feed(user: User, hostelId: string) {
     id: post.id,
     kind: post.kind,
     body: post.body,
-    photoUrl: post.photoUrl,
+    photoUrl: photoUrl(post.photoUrl),
     pinned: post.pinned,
     hidden: post.hidden,
     createdAt: post.createdAt.toISOString(),
@@ -286,12 +288,12 @@ export async function createPost(user: User, hostelId: string, input: z.output<t
       authorId: user.id,
       kind: input.kind,
       body: input.body,
-      photoUrl: input.photoUrl ?? null,
+      photoUrl: attachmentRef(input.photoUrl),
       pinned: input.kind === 'announcement',
       createdAt: clock.now(),
     })
     .returning();
-  return { ...row!, createdAt: row!.createdAt.toISOString() };
+  return { ...row!, photoUrl: photoUrl(row!.photoUrl), createdAt: row!.createdAt.toISOString() };
 }
 
 async function loadPost(user: User, postId: string) {

@@ -47,7 +47,7 @@ export async function reportIssueAction(form: FormData) {
   const hostelId = str(form, 'hostelId');
   await run(back(form), async () => {
     const client = await api();
-    const photoUrl = await uploadPhoto(client, form);
+    const photoUrl = await uploadPhoto(client, form, 'attachment');
     const issue = await client.resident.reportIssue(hostelId, {
       category: str(form, 'category') as IssueCategory,
       title: str(form, 'title'),
@@ -78,7 +78,7 @@ export async function upvoteAction(form: FormData) {
 export async function postAction(form: FormData) {
   await run(back(form), async () => {
     const client = await api();
-    const photoUrl = await uploadPhoto(client, form);
+    const photoUrl = await uploadPhoto(client, form, 'attachment');
     return client.resident.post(str(form, 'hostelId'), { kind: (str(form, 'kind') || 'general') as PostKind, body: str(form, 'body'), photoUrl });
   });
 }

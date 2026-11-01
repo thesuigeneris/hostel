@@ -81,6 +81,9 @@ const shortText = (max: number) => z.string().trim().max(max);
 const stringList = z.array(z.string().trim().min(1).max(80)).max(30);
 /** Photo links must be plain web URLs; `javascript:` and `data:` links are refused. */
 const webUrl = z.string().trim().max(500).url().refine((v) => /^https?:\/\//i.test(v), 'Use an http or https link');
+/** A photo uploaded through `POST /uploads`, sent back as the `path` it returned. */
+const uploadPath = z.string().regex(/^\/uploads\/[a-z0-9_]+\.(jpg|png|webp)$/, 'Upload the photo first');
+const photoLink = z.union([uploadPath, webUrl]);
 
 export const hostelInputSchema = z.object({
   name: z.string().trim().min(3).max(80),
@@ -125,7 +128,7 @@ export const roomTypeUpdateSchema = z
   });
 export type RoomTypeUpdateInput = z.input<typeof roomTypeUpdateSchema>;
 
-export const photoInputSchema = z.object({ url: webUrl });
+export const photoInputSchema = z.object({ url: photoLink });
 export const photoOrderSchema = z.object({ photoIds: z.array(z.string()).min(1).max(30) });
 
 const boolParam = z
@@ -232,7 +235,7 @@ export const issueInputSchema = z.object({
   category: z.enum(ISSUE_CATEGORIES),
   title: z.string().trim().min(4).max(120),
   description: shortText(2000).default(''),
-  photoUrl: webUrl.nullable().optional(),
+  photoUrl: photoLink.nullable().optional(),
 });
 export type IssueInput = z.input<typeof issueInputSchema>;
 export const issueUpdateSchema = z
@@ -243,7 +246,7 @@ export type IssueUpdateInput = z.input<typeof issueUpdateSchema>;
 export const postInputSchema = z.object({
   kind: z.enum(POST_KINDS).default('general'),
   body: z.string().trim().min(1).max(1000),
-  photoUrl: webUrl.nullable().optional(),
+  photoUrl: photoLink.nullable().optional(),
 });
 export type PostInput = z.input<typeof postInputSchema>;
 export const commentInputSchema = z.object({ body: z.string().trim().min(1).max(500) });

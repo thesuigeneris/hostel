@@ -21,7 +21,8 @@ import { clock } from '../lib/clock';
 import { isUniqueViolation } from '../lib/db-errors';
 import { AppError, notFound } from '../lib/errors';
 import { isBookable, ownedHostel, planFor } from './access';
-import { toHostel, toRoomType } from './mappers';
+import { listingPhotoRef } from '../lib/uploads';
+import { toHostel, toPhoto, toRoomType } from './mappers';
 import { switchPlan } from './plans';
 
 export function slugify(value: string): string {
@@ -217,9 +218,9 @@ export async function addPhoto(user: User, hostelId: string, url: string) {
     .where(eq(schema.hostelPhotos.hostelId, h.id));
   const [row] = await db
     .insert(schema.hostelPhotos)
-    .values({ id: newId('pho'), hostelId: h.id, url, sortOrder: max!.n + 1 })
+    .values({ id: newId('pho'), hostelId: h.id, url: listingPhotoRef(url), sortOrder: max!.n + 1 })
     .returning();
-  return row!;
+  return toPhoto(row!);
 }
 
 export async function deletePhoto(user: User, hostelId: string, photoId: string) {
@@ -242,7 +243,8 @@ export async function reorderPhotos(user: User, hostelId: string, photoIds: stri
         .where(and(eq(schema.hostelPhotos.id, id), eq(schema.hostelPhotos.hostelId, h.id)));
     }
   });
-  return db.select().from(schema.hostelPhotos).where(eq(schema.hostelPhotos.hostelId, h.id)).orderBy(asc(schema.hostelPhotos.sortOrder));
+  const rows = await db.select().from(schema.hostelPhotos).where(eq(schema.hostelPhotos.hostelId, h.id)).orderBy(asc(schema.hostelPhotos.sortOrder));
+  return rows.map(toPhoto);
 }
 
 // --- partner flow ----------------------------------------------------------
@@ -348,7 +350,7 @@ export async function hostelDetail(hostel: typeof schema.hostels.$inferSelect): 
   return {
     ...toHostel(hostel),
     isVerified: isBookable(hostel, plan),
-    photos,
+    photos: photos.map(toPhoto),
     roomTypes: rooms.map(toRoomType),
     ratings,
     transparency,
