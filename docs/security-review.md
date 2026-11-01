@@ -4,7 +4,7 @@ A pass over the API, website and app before the first real users. Each item list
 
 ## Checked and in place
 
-- **Login.** OTPs are stored as HMACs with a server pepper, expire in 5 minutes, allow 5 wrong tries, and at most 5 texts per phone per hour. Sessions are random tokens stored as SHA-256 hashes and last 30 days. Nobody can make themselves admin; only phones in `ADMIN_PHONES` become admins. Stub OTP is refused in production. (`apps/api/src/services/auth.ts`)
+- **Login.** OTPs are stored as HMACs with a server pepper, expire in 5 minutes, allow 5 wrong tries, and at most 5 texts per phone per hour. Sessions are random tokens stored as SHA-256 hashes and last 30 days. Nobody can make themselves admin; only phones in `ADMIN_PHONES` (and accounts granted admin on the server with `admin:grant`) are admins, and removing a phone from `ADMIN_PHONES` takes admin away from its next request, including live sessions; it drops to owner. Stub OTP is refused in production. (`apps/api/src/services/auth.ts`)
 - **Login without SMS (PRP-01).**
   - Phone and password with argon2id, 15–128 characters, a blocklist, and generic errors that don't reveal whether a phone has an account.
   - A per-phone lockout (5 tries, then 15 minutes) that also covers phones with no account and parallel guesses.
@@ -30,5 +30,5 @@ A pass over the API, website and app before the first real users. Each item list
 - **General rate limiting.** Only OTP sending and password login are rate-limited (sign-up isn't). Put the API behind a proxy or add a limiter for login, search, issue and post creation.
 - **Inline scripts in the CSP.** Next.js needs `'unsafe-inline'` for scripts without nonces. Moving to nonce-based CSP via middleware would tighten it.
 - **Photo storage.** Uploads sit on the API's local disk. Move them to object storage (R2 or S3) before running more than one API instance.
-- **Owner-added residents.** They are labelled on reviews, but an owner could still add people who never lived there. Consider requiring a few months of rent records, or an admin spot-check, before their reviews count in the rating.
+- **Owner-added residents.** They are labelled on reviews, but an owner could still add people who never lived there. An owner can also backdate a resident's start date, which makes them eligible to review at once. Consider requiring a few months of rent records, or an admin spot-check, before their reviews count in the rating.
 - **Secrets and HTTPS.** Real MSG91 and Razorpay keys, a long `OTP_PEPPER`, HTTPS everywhere, and database backups. See the run guide.

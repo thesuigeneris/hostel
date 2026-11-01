@@ -63,5 +63,6 @@ export const authRoutes = new Hono<AppEnv>()
     const [row] = Object.keys(patch).length
       ? await db.update(schema.users).set(patch).where(eq(schema.users.id, c.get('user').id)).returning()
       : await db.select().from(schema.users).where(eq(schema.users.id, c.get('user').id));
-    return c.json(toUser(row!));
+    // Keep the role the session resolved (an admin no longer in ADMIN_PHONES acts as owner).
+    return c.json({ ...toUser(row!), role: c.get('user').role });
   });
