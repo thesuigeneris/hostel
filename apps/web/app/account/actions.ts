@@ -26,10 +26,16 @@ export async function simulatePaymentAction(form: FormData) {
   await run(`/pay/${id}`, async () => (await api()).payments.simulate(id), { ok: 'Payment received. Thank you!' });
 }
 
-/** Called from the Razorpay Checkout handler in the browser. Returns an error message, or redirects on success. */
+/** Creates (or reuses) the bill's payment order. Errors come back as values: production builds hide thrown messages. */
 export async function createOrderAction(invoiceId: string) {
-  return (await api()).payments.order(invoiceId);
+  try {
+    return { order: await (await api()).payments.order(invoiceId) };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Could not start the payment' };
+  }
 }
+
+/** Called from the Razorpay Checkout handler in the browser. Returns an error message, or redirects on success. */
 
 export async function verifyPaymentAction(invoiceId: string, payment: { razorpayOrderId: string; razorpayPaymentId: string; razorpaySignature: string }) {
   try {

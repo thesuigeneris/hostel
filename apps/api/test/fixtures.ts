@@ -77,6 +77,13 @@ export async function activeSubscriber(tenantToken: string, hostelId: string, ro
   return sub.body as { subscription: { id: string; startDate: string }; invoice: { id: string } };
 }
 
+/** Opens checkout for a bill, as the pay page does, and returns its payment order id. */
+export async function checkoutOrderId(token: string, invoiceId: string): Promise<string> {
+  const order = await call(`/payments/${invoiceId}/order`, { token, method: 'POST' });
+  expect(order.status).toBe(200);
+  return order.body.orderId;
+}
+
 export async function roomBeds(ownerToken: string, hostelId: string, roomTypeId: string) {
   const res = await call(`/owner/hostels/${hostelId}`, { token: ownerToken });
   return res.body.roomTypes.find((r: { id: string }) => r.id === roomTypeId).bedsAvailable as number;
