@@ -10,7 +10,7 @@ import { API, apiToken, OTP, publicGet, signIn } from './helpers';
  * paid bill that can't be paid twice.
  */
 
-test.describe.configure({ mode: 'serial' });
+// Not serial: each journey signs in on its own, so one failure doesn't hide the others.
 
 const run = Date.now().toString().slice(-6);
 const SEEKER = `9811${run}`;
@@ -228,9 +228,10 @@ test('S4 + S8: subscribe with the first bill shown, release and re-pick, pay onc
   await seeker.keyboard.press('ArrowRight');
   await seeker.keyboard.press('ArrowLeft');
   await expect(seeker.locator('input[name=roomTypeId]').first()).toBeFocused();
-  expect(await shadow()).toContain('rgb(31, 92, 70)');
+  // The ring eases in over 150 ms, so wait for it to settle.
+  await expect.poll(shadow).toContain('rgb(31, 92, 70)');
   await seeker.getByRole('heading', { level: 1 }).click();
-  expect(await shadow()).not.toContain('rgb(31, 92, 70)');
+  await expect.poll(shadow).not.toContain('rgb(31, 92, 70)');
 
   // The first bill follows the picks.
   const detail = await publicGet<HostelDetail>(`/hostels/${partner.slug}`);
