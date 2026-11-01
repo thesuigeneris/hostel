@@ -1,7 +1,7 @@
 import { PASSWORD_MIN_LENGTH } from '@hostels/shared';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { cancelMoveAction, cancelSubscriptionAction, changePasswordAction, skipMealAction, updateProfileAction } from '@/app/account/actions';
+import { cancelMoveAction, cancelSubscriptionAction, cancelVisitAction, changePasswordAction, skipMealAction, updateProfileAction } from '@/app/account/actions';
 import { SubmitButton } from '@/components/SubmitButton';
 import { Back, Badge, Card, Empty, Field, Flash, Input, LinkButton, PageHeader, StatusBadge, Table, Td } from '@/components/ui';
 import { api, requireUser } from '@/lib/api';
@@ -143,7 +143,7 @@ export default async function AccountPage({ searchParams }: Props) {
           {isTenant && invoices.length > 0 && (
             <section>
               <h2 className="mb-3 text-lg font-semibold">Bills</h2>
-              <Table head={['Period', 'Rent', 'Food', 'Credit', 'Total', 'Status', '']}>
+              <Table head={['Period', 'Rent', 'Food', 'Meal credit', 'Total', 'Status', '']}>
                 {invoices.map((i) => (
                   <tr key={i.id}>
                     <Td>{dateLabel(i.periodStart)} – {dateLabel(i.periodEnd)}</Td>
@@ -152,7 +152,10 @@ export default async function AccountPage({ searchParams }: Props) {
                     <Td>{i.creditAmount ? `−${rupees(i.creditAmount)}` : '—'}</Td>
                     <Td className="font-medium">{rupees(i.totalAmount)}</Td>
                     <Td><StatusBadge kind="invoice" status={i.isOverdue ? 'overdue' : i.status} /></Td>
-                    <Td>{i.status === 'due' && <Link href={`/pay/${i.id}`}>Pay</Link>}</Td>
+                    <Td>
+                      {i.status === 'due' && <Link href={`/pay/${i.id}`}>Pay</Link>}
+                      {i.status === 'paid' && <span className="text-xs text-ink-muted">Paid {dateLabel(i.paidAt)}</span>}
+                    </Td>
                   </tr>
                 ))}
               </Table>
@@ -170,7 +173,17 @@ export default async function AccountPage({ searchParams }: Props) {
                       <div className="text-sm text-ink-soft">{dateLabel(v.preferredDate)}{v.message && ` · ${v.message}`}</div>
                       <div className="mt-1 text-xs text-ink-muted">{VISIT_NEXT[v.status]}</div>
                     </div>
-                    <StatusBadge kind="visit" status={v.status} />
+                    <div className="flex items-center gap-2">
+                      <StatusBadge kind="visit" status={v.status} />
+                      {v.status === 'new' && (
+                        <form action={cancelVisitAction}>
+                          <input type="hidden" name="visitId" value={v.id} />
+                          <SubmitButton size="sm" variant="secondary" confirm="Withdraw this visit request?" aria-label={`Withdraw visit request to ${v.hostel.name}`}>
+                            Withdraw
+                          </SubmitButton>
+                        </form>
+                      )}
+                    </div>
                   </Card>
                 ))}
               </div>

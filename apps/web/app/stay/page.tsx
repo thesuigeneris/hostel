@@ -54,10 +54,13 @@ export default async function StayPage({ searchParams }: Props) {
               <LinkButton href={`/stay/${s.hostel.id}`} size="sm">Open</LinkButton>
               <LinkButton href={`/stay/${s.hostel.id}?tab=issues`} variant="secondary" size="sm">Report an issue</LinkButton>
               {s.canReview && <LinkButton href={`/stay/${s.hostel.id}?tab=review`} variant="secondary" size="sm">{s.hasReview ? 'Edit review' : 'Write a review'}</LinkButton>}
-              {s.source === 'owner' && (
+              {s.source === 'owner' ? (
                 <form action={moveOutAction}><input type="hidden" name="id" value={s.id} /><SubmitButton size="sm" variant="ghost" confirm="Mark yourself as moved out?">I moved out</SubmitButton></form>
+              ) : (
+                <LinkButton href="/account" variant="ghost" size="sm">Move or cancel plan</LinkButton>
               )}
             </div>
+            {!s.canReview && s.reviewBlockedReason && <p className="mt-3 text-xs text-ink-muted">Reviews: {s.reviewBlockedReason}.</p>}
           </Card>
         ))}
       </div>

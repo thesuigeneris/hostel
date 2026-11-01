@@ -228,6 +228,15 @@ export function Pagination({ page, pages, href }: { page: number; pages: number;
   );
 }
 
+/** A filter link in a row of filters (36 px target). The current one is filled; pair it with `aria-current`. */
+export function pillClass(active: boolean) {
+  return cx(
+    'inline-flex min-h-9 items-center gap-1 rounded-full px-3 text-sm no-underline',
+    focusRing,
+    active ? 'bg-brand text-brand-on' : 'border border-line bg-surface text-ink-soft hover:text-brand',
+  );
+}
+
 /** A hidden field telling the action which page to come back to. */
 export function Back({ to }: { to: string }) {
   return <input type="hidden" name="_back" value={to} />;

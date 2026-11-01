@@ -1,5 +1,7 @@
 import { Skeleton } from '@/components/ui';
 
+// Lives in the (list) group so it wraps only the search page. A loading boundary above /hostels/[slug] made
+// server-action redirects back to a hostel page (visit request, review report) hang on the skeleton.
 export default function Loading() {
   return (
     <div className="mx-auto max-w-content px-4 py-8" aria-busy="true">
