@@ -4,11 +4,7 @@ import { revalidatePath, revalidateTag } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { PUBLIC_DATA_TAG } from './api';
 
-/** A same-site path to come back to; anything else falls back to the home page. */
-export function safePath(value: FormDataEntryValue | string | null | undefined, fallback = '/'): string {
-  const v = typeof value === 'string' ? value : '';
-  return v.startsWith('/') && !v.startsWith('//') ? v : fallback;
-}
+export { safePath } from './paths';
 
 function withParam(path: string, key: string, value: string) {
   const [base, query = ''] = path.split('?');
