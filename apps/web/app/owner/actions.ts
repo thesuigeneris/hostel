@@ -46,9 +46,9 @@ export async function uploadPhotoAction(form: FormData) {
   const id = str(form, 'hostelId');
   await run(`/owner/hostels/${id}`, async () => {
     const client = await api();
-    const url = await uploadPhoto(client, form, 'listing');
-    if (!url) throw new ApiError(400, 'validation', 'Choose a photo first');
-    return client.owner.addPhoto(id, url);
+    const photo = await uploadPhoto(client, form, 'listing');
+    if (!photo) throw new ApiError(400, 'validation', 'Choose a photo first');
+    return client.owner.addPhoto(id, photo);
   }, { ok: 'Photo added' });
 }
 

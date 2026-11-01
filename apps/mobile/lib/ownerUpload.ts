@@ -5,11 +5,11 @@ import { photoPart } from './owner';
 
 /**
  * Lets the owner pick a photo from the library and uploads it to POST /uploads. `listing` photos are public;
- * `attachment` photos (community posts) are shown only to the hostel's members. Returns a link to show the photo
- * (the API also accepts it when attaching), or null when the owner cancelled. Throws with a readable message when
- * access is denied or the upload fails.
+ * `attachment` photos (community posts) are shown only to the hostel's members. Returns the receipt to attach the
+ * photo with and a link to show it, or null when the owner cancelled. Throws with a readable message when access is
+ * denied or the upload fails.
  */
-export async function pickAndUploadPhoto(purpose: 'listing' | 'attachment'): Promise<string | null> {
+export async function pickAndUploadPhoto(purpose: 'listing' | 'attachment'): Promise<{ upload: string; url: string } | null> {
   if (Platform.OS !== 'web') {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) throw new Error('Allow access to your photos to add pictures of your hostel.');
@@ -27,6 +27,5 @@ export async function pickAndUploadPhoto(purpose: 'listing' | 'attachment'): Pro
     body.append('file', { uri: asset.uri, name, type } as unknown as Blob);
   }
   body.append('purpose', purpose);
-  const { url } = await api.request<{ url: string }>('/uploads', { body });
-  return url;
+  return api.request<{ upload: string; url: string }>('/uploads', { body });
 }

@@ -79,11 +79,16 @@ const isoDate = z.string().refine(isValidDate, 'Use a YYYY-MM-DD date');
 const rupees = z.coerce.number().int().min(0).max(1_000_000);
 const shortText = (max: number) => z.string().trim().max(max);
 const stringList = z.array(z.string().trim().min(1).max(80)).max(30);
-/** Photo links must be plain web URLs; `javascript:` and `data:` links are refused. */
+/** Links must be plain web URLs; `javascript:` and `data:` links are refused. */
 const webUrl = z.string().trim().max(500).url().refine((v) => /^https?:\/\//i.test(v), 'Use an http or https link');
-/** A photo uploaded through `POST /uploads`, sent back as the `path` it returned. */
-const uploadPath = z.string().regex(/^\/uploads\/[a-z0-9_]+\.(jpg|png|webp)$/, 'Upload the photo first');
-const photoLink = z.union([uploadPath, webUrl]);
+/**
+ * A photo is always one the caller uploaded through `POST /uploads`, sent as the `upload` receipt it returned.
+ * Outside links aren't accepted: they would skip the upload checks and metadata stripping.
+ */
+const uploadReceipt = z
+  .string()
+  .trim()
+  .regex(/^[a-z]{3}_[a-z0-9]{16}\.(jpg|png|webp)\.[0-9a-f]{32}$/, 'Upload the photo, then attach it');
 
 export const hostelInputSchema = z.object({
   name: z.string().trim().min(3).max(80),
@@ -128,7 +133,7 @@ export const roomTypeUpdateSchema = z
   });
 export type RoomTypeUpdateInput = z.input<typeof roomTypeUpdateSchema>;
 
-export const photoInputSchema = z.object({ url: photoLink });
+export const photoInputSchema = z.object({ photo: uploadReceipt });
 export const photoOrderSchema = z.object({ photoIds: z.array(z.string()).min(1).max(30) });
 
 const boolParam = z
@@ -235,7 +240,7 @@ export const issueInputSchema = z.object({
   category: z.enum(ISSUE_CATEGORIES),
   title: z.string().trim().min(4).max(120),
   description: shortText(2000).default(''),
-  photoUrl: photoLink.nullable().optional(),
+  photo: uploadReceipt.nullable().optional(),
 });
 export type IssueInput = z.input<typeof issueInputSchema>;
 export const issueUpdateSchema = z
@@ -246,7 +251,7 @@ export type IssueUpdateInput = z.input<typeof issueUpdateSchema>;
 export const postInputSchema = z.object({
   kind: z.enum(POST_KINDS).default('general'),
   body: z.string().trim().min(1).max(1000),
-  photoUrl: photoLink.nullable().optional(),
+  photo: uploadReceipt.nullable().optional(),
 });
 export type PostInput = z.input<typeof postInputSchema>;
 export const commentInputSchema = z.object({ body: z.string().trim().min(1).max(500) });

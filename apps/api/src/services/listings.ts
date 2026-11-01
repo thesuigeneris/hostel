@@ -20,8 +20,8 @@ import { getDb, schema } from '../db';
 import { clock } from '../lib/clock';
 import { isUniqueViolation } from '../lib/db-errors';
 import { AppError, notFound } from '../lib/errors';
+import { claimUpload } from '../lib/uploads';
 import { isBookable, ownedHostel, planFor } from './access';
-import { listingPhotoRef } from '../lib/uploads';
 import { toHostel, toPhoto, toRoomType } from './mappers';
 import { closeApplication, openApplication } from './partners';
 import { switchPlan } from './plans';
@@ -210,8 +210,10 @@ export async function deleteRoomType(user: User, roomTypeId: string) {
 
 // --- photos ----------------------------------------------------------------
 
-export async function addPhoto(user: User, hostelId: string, url: string) {
+/** `photo` is the receipt of a listing photo this user uploaded. */
+export async function addPhoto(user: User, hostelId: string, photo: string) {
   const h = await ownedHostel(user, hostelId);
+  const stored = claimUpload(user, photo, 'listing', 'photo');
   const db = getDb();
   const [max] = await db
     .select({ n: sql<number>`coalesce(max(${schema.hostelPhotos.sortOrder}), -1)::int` })
@@ -219,7 +221,7 @@ export async function addPhoto(user: User, hostelId: string, url: string) {
     .where(eq(schema.hostelPhotos.hostelId, h.id));
   const [row] = await db
     .insert(schema.hostelPhotos)
-    .values({ id: newId('pho'), hostelId: h.id, url: listingPhotoRef(url), sortOrder: max!.n + 1 })
+    .values({ id: newId('pho'), hostelId: h.id, url: stored, sortOrder: max!.n + 1 })
     .returning();
   return toPhoto(row!);
 }

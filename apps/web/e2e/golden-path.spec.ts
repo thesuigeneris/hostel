@@ -149,9 +149,16 @@ test('owner to admin to tenant to resident', async ({ browser }) => {
     homeId = new URL(resident.url()).pathname.split('/').pop()!;
     await resident.locator('input[name=title]').fill(issueTitle);
     await resident.locator('textarea[name=description]').fill('Third floor, left bathroom. Dripping all night.');
+    await resident.locator('input[name=photo]').setInputFiles('e2e/fixtures/room.png');
     await resident.getByRole('button', { name: 'Report issue' }).click();
     await expect(resident).toHaveURL(/\/issues\//);
     issuePath = new URL(resident.url()).pathname;
+    // The photo is private: the page gets a signed, expiring link that loads; the bare file is not served.
+    const photo = resident.getByRole('img', { name: issueTitle });
+    await expect.poll(() => photo.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+    const src = new URL((await photo.getAttribute('src'))!);
+    expect(src.searchParams.get('sig')).toBeTruthy();
+    expect((await fetch(`${src.origin}${src.pathname}`)).status).toBe(404);
     await resident.context().close();
   });
 
@@ -159,6 +166,8 @@ test('owner to admin to tenant to resident', async ({ browser }) => {
     const owner = await login(browser, DEMO_OWNER);
     await owner.goto('/owner/issues');
     await owner.getByRole('link', { name: new RegExp(issueTitle) }).click();
+    // The hostel's owner sees the resident's photo too.
+    await expect.poll(() => owner.getByRole('img', { name: issueTitle }).evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
     await owner.locator('textarea[name=message]').fill('Plumber replaced the washer this morning.');
     await owner.getByRole('button', { name: 'Mark resolved' }).click();
     await expect(owner.getByText('Plumber replaced the washer this morning.')).toBeVisible();

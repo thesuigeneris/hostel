@@ -5,7 +5,7 @@ import type { z } from 'zod';
 import { getDb, schema } from '../db';
 import { clock } from '../lib/clock';
 import { AppError, forbidden, notFound } from '../lib/errors';
-import { attachmentRef, photoUrl } from '../lib/uploads';
+import { claimUpload, photoUrl } from '../lib/uploads';
 import { hostelIdsOwnedBy, requireMember, requirePlan } from './access';
 
 type IssueRow = typeof schema.issues.$inferSelect;
@@ -22,7 +22,17 @@ export async function reportIssue(user: User, hostelId: string, input: z.output<
   if (!residency) throw new AppError('not_a_resident', 'Only residents can report issues', 403);
   const [row] = await getDb()
     .insert(schema.issues)
-    .values({ id: newId('iss'), hostelId, reporterId: user.id, residencyId: residency.id, ...input, photoUrl: attachmentRef(input.photoUrl), createdAt: clock.now() })
+    .values({
+      id: newId('iss'),
+      hostelId,
+      reporterId: user.id,
+      residencyId: residency.id,
+      category: input.category,
+      title: input.title,
+      description: input.description,
+      photoUrl: input.photo ? claimUpload(user, input.photo, 'attachment', 'photo') : null,
+      createdAt: clock.now(),
+    })
     .returning();
   return toIssue(row!, { viewer: user, isOwner: false, reporterName: user.name, upvotes: 0, upvoted: false });
 }
@@ -288,7 +298,7 @@ export async function createPost(user: User, hostelId: string, input: z.output<t
       authorId: user.id,
       kind: input.kind,
       body: input.body,
-      photoUrl: attachmentRef(input.photoUrl),
+      photoUrl: input.photo ? claimUpload(user, input.photo, 'attachment', 'photo') : null,
       pinned: input.kind === 'announcement',
       createdAt: clock.now(),
     })

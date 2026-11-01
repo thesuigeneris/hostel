@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { setClock } from '../src/lib/clock';
-import { activeSubscriber, admin, liveHostel, newOwner, newTenant } from './fixtures';
+import { activeSubscriber, addListingPhoto, admin, liveHostel, newOwner, newTenant } from './fixtures';
 import { call, resetDb } from './helpers';
 
 let ownerToken: string;
@@ -29,7 +29,7 @@ describe('listing lifecycle', () => {
       token: ownerToken,
       body: { sharing: '3-sharing', monthlyRent: 7000, advanceAmount: 7000, totalBeds: 9, bedsAvailable: 3 },
     });
-    await call(`/owner/hostels/${h.body.id}/photos`, { token: ownerToken, body: { url: 'https://example.com/p.jpg' } });
+    await addListingPhoto(ownerToken, h.body.id);
     expect((await call(`/owner/hostels/${h.body.id}/submit`, { token: ownerToken, method: 'POST' })).body.status).toBe('pending');
     expect((await call('/hostels/lotus-pg-madhapur')).status).toBe(404);
 
@@ -54,7 +54,7 @@ describe('listing lifecycle', () => {
       body: { name: 'Shady Stay', area: 'Ameerpet', lat: 17.43, lng: 78.44, genderType: 'boys', contactPhone: '9876500002' },
     });
     await call(`/owner/hostels/${h.body.id}/rooms`, { token: ownerToken, body: { sharing: '4-sharing', monthlyRent: 5000, totalBeds: 4, bedsAvailable: 4 } });
-    await call(`/owner/hostels/${h.body.id}/photos`, { token: ownerToken, body: { url: 'https://example.com/p.jpg' } });
+    await addListingPhoto(ownerToken, h.body.id);
     await call(`/owner/hostels/${h.body.id}/submit`, { token: ownerToken, method: 'POST' });
     const rej = await call(`/admin/hostels/${h.body.id}/reject`, { token: adminToken, body: { reason: 'Photos look like stock images' } });
     expect(rej.body).toMatchObject({ status: 'rejected', rejectionReason: 'Photos look like stock images' });
@@ -146,7 +146,7 @@ describe('search', () => {
       body: { name: 'Delta', area: 'Gachibowli', lat: 17.44, lng: 78.35, genderType: 'boys', contactPhone: '9876500004' },
     });
     await call(`/owner/hostels/${pending.body.id}/rooms`, { token: ownerToken, body: { sharing: '2-sharing', monthlyRent: 9000, totalBeds: 4, bedsAvailable: 4 } });
-    await call(`/owner/hostels/${pending.body.id}/photos`, { token: ownerToken, body: { url: 'https://example.com/p.jpg' } });
+    await addListingPhoto(ownerToken, pending.body.id);
     expect((await call(`/owner/hostels/${pending.body.id}/submit`, { token: ownerToken, method: 'POST' })).body.status).toBe('pending');
 
     expect((await call('/hostels?q=delta')).body).toMatchObject({ total: 0, items: [] });
@@ -161,7 +161,7 @@ describe('search', () => {
 
   test('summaries carry the cheapest matching room, beds free and the cover photo', async () => {
     const res = await call('/hostels?q=bravo');
-    expect(res.body.items[0]).toMatchObject({ minRent: 5500, bedsAvailable: 1, coverPhotoUrl: 'https://example.com/a.jpg', isVerified: false });
+    expect(res.body.items[0]).toMatchObject({ minRent: 5500, bedsAvailable: 1, coverPhotoUrl: expect.stringMatching(/\/uploads\/pho_[a-z0-9]{16}\.png$/), isVerified: false });
     expect(res.body.items[0].sharingTypes.sort()).toEqual(['4-sharing', 'private']);
     const filtered = await call('/hostels?q=bravo&sharing=private');
     expect(filtered.body.items[0].minRent).toBe(15000);

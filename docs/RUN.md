@@ -125,7 +125,7 @@ Before real users, set these in `apps/api/.env` (the API refuses stub OTP and st
 
 - `MSG91_AUTH_KEY` and `MSG91_TEMPLATE_ID` for OTP texts (optional: without them people use passwords)
 - `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET`, with the webhook pointed at `https://<api-host>/webhooks/razorpay`
-- `OTP_PEPPER` to a long random value, `ADMIN_PHONES` to your team's numbers
-- `API_PUBLIC_URL`, `WEB_URL` and `CORS_ORIGINS` to the real hostnames, all on HTTPS
+- `OTP_PEPPER` to a long random value, `ADMIN_PHONES` to your team's numbers. It also signs private photo links and upload receipts, so changing it breaks links already handed out (they last at most 90 minutes) and photos uploaded but not yet attached.
+- `API_PUBLIC_URL`, `WEB_URL` and `CORS_ORIGINS` to the real hostnames, all on HTTPS. `API_PUBLIC_URL` is where browsers and the app load photos from. Photo links are built for each response, so changing it needs no data change (set it to your computer's LAN address to load photos in the app on a phone). The website also reads it when it is built, for the images its Content Security Policy allows, so rebuild the website after changing it.
 
 See [security-review.md](security-review.md) for what was checked and what is still open.

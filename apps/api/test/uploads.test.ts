@@ -4,13 +4,10 @@ import { eq } from 'drizzle-orm';
 import sharp from 'sharp';
 import { getDb, schema } from '../src/db';
 import { setClock } from '../src/lib/clock';
-import { activeSubscriber, admin, liveHostel, newOwner, newTenant } from './fixtures';
+import { activeSubscriber, admin, liveHostel, newOwner, newTenant, PNG, uploadPhoto } from './fixtures';
 import { app, call, resetDb } from './helpers';
 
-/** A real 1×1 PNG. */
-const PNG = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0));
-
-type Uploaded = { key: string; path: string; url: string };
+type Uploaded = { upload: string; url: string };
 
 async function upload(token: string, bytes: Uint8Array, opts: { purpose?: string; name?: string; type?: string } = {}) {
   const form = new FormData();
@@ -18,6 +15,9 @@ async function upload(token: string, bytes: Uint8Array, opts: { purpose?: string
   if (opts.purpose) form.append('purpose', opts.purpose);
   return app.request('/uploads', { method: 'POST', body: form, headers: { Authorization: `Bearer ${token}` } });
 }
+
+/** The stored file's key, from the link the upload returned. */
+const keyOf = (up: Uploaded) => new URL(up.url).pathname.split('/').pop()!;
 
 /** Fetches a photo link the way a browser would: no session, just the URL. */
 function fetchLink(link: string) {
@@ -34,12 +34,12 @@ const originalPublicUrl = process.env.API_PUBLIC_URL;
 beforeEach(async () => {
   await resetDb();
   setClock('2026-11-09T06:00:00Z');
+  process.env.API_PUBLIC_URL = 'http://api.test';
   ownerToken = await newOwner();
   adminToken = await admin();
   const h = await liveHostel(ownerToken, adminToken, { partner: true });
   hostel = h.hostel;
   room = h.rooms[0];
-  process.env.API_PUBLIC_URL = 'http://api.test';
 });
 
 afterEach(() => {
@@ -52,10 +52,9 @@ describe('uploads', () => {
   test('checks the file signature, not the name, and refuses odd input', async () => {
     const ok = await upload(ownerToken, PNG, { purpose: 'listing', name: 'photo.jpg', type: 'image/jpeg' });
     expect(ok.status).toBe(201);
-    const { key } = (await ok.json()) as Uploaded;
-    expect(key).toEndWith('.png');
-    const back = await app.request(`/uploads/${key}`);
-    expect(back.headers.get('content-type')).toBe('image/png');
+    const up = (await ok.json()) as Uploaded;
+    expect(keyOf(up)).toEndWith('.png');
+    expect((await fetchLink(up.url)).headers.get('content-type')).toBe('image/png');
 
     const fake = await upload(ownerToken, new TextEncoder().encode('<script>alert(1)</script>'), { name: 'x.png' });
     expect(fake.status).toBe(400);
@@ -67,46 +66,93 @@ describe('uploads', () => {
   });
 });
 
+describe('photos are your own uploads, made for the purpose', () => {
+  const addPhoto = (token: string, photo: string) => call(`/owner/hostels/${hostel.id}/photos`, { token, body: { photo } });
+  const report = (token: string, photo: string) =>
+    call(`/hostels/${hostel.id}/issues`, { token, body: { category: 'water', title: 'Leaking tap', photo } });
+  const post = (token: string, photo: string) => call(`/hostels/${hostel.id}/community`, { token, body: { body: 'Look at this', photo } });
+
+  test('an owner can only add listing photos they uploaded', async () => {
+    const mine = await uploadPhoto(ownerToken, 'listing');
+    const theirs = await uploadPhoto(await newOwner(), 'listing');
+    const privateOne = await uploadPhoto(ownerToken, 'attachment');
+
+    // Outside links (stock photos, trackers), and bare paths or links to uploads, are not receipts.
+    for (const photo of ['https://images.example.com/stock.jpg', `/uploads/${keyOf(mine)}`, mine.url]) {
+      expect((await addPhoto(ownerToken, photo)).status).toBe(400);
+    }
+    // Someone else's receipt, or their key with my signature moved onto it, doesn't verify for me.
+    const theirsRes = await addPhoto(ownerToken, theirs.upload);
+    expect(theirsRes.status).toBe(400);
+    expect(theirsRes.body.message).toBe('Upload the photo again, then attach it');
+    expect((await addPhoto(ownerToken, `${keyOf(theirs)}.${mine.upload.split('.').pop()}`)).status).toBe(400);
+    // A private attachment can't be published on the listing.
+    const wrongPurpose = await addPhoto(ownerToken, privateOne.upload);
+    expect(wrongPurpose.status).toBe(400);
+    expect(wrongPurpose.body.message).toContain('private attachment');
+
+    expect((await addPhoto(ownerToken, mine.upload)).status).toBe(201);
+    expect((await call(`/hostels/${hostel.slug}`)).body.photos).toHaveLength(2);
+  });
+
+  test("a resident can only attach their own private uploads, never someone else's or a public one", async () => {
+    const [resident, neighbour] = await Promise.all([newTenant('Asha'), newTenant('Bina')]);
+    await activeSubscriber(resident.token, hostel.id, room.id);
+    await activeSubscriber(neighbour.token, hostel.id, room.id);
+    const neighbours = await uploadPhoto(neighbour.token, 'attachment');
+    const publicOne = await uploadPhoto(resident.token, 'listing');
+    const mine = await uploadPhoto(resident.token);
+
+    for (const photo of ['https://tracker.example/pixel.png', neighbours.upload, `/uploads/${keyOf(mine)}`]) {
+      expect((await report(resident.token, photo)).status).toBe(400);
+      expect((await post(resident.token, photo)).status).toBe(400);
+    }
+    const wrongPurpose = await report(resident.token, publicOne.upload);
+    expect(wrongPurpose.status).toBe(400);
+    expect(wrongPurpose.body.message).toContain('public listing photo');
+    expect((await post(resident.token, publicOne.upload)).status).toBe(400);
+
+    expect((await report(resident.token, mine.upload)).status).toBe(201);
+    expect((await post(resident.token, mine.upload)).status).toBe(201);
+  });
+});
+
 describe('photo links are built when a response is made', () => {
   test('a listing photo is public, stored as a path, and follows the API address', async () => {
-    const res = await upload(ownerToken, PNG, { purpose: 'listing' });
-    const up = (await res.json()) as Uploaded;
-    expect(up.key).toStartWith('pho_');
-    expect(up).toMatchObject({ path: `/uploads/${up.key}`, url: `http://api.test/uploads/${up.key}` });
+    const up = await uploadPhoto(ownerToken, 'listing');
+    const key = keyOf(up);
+    expect(key).toStartWith('pho_');
+    expect(up.url).toBe(`http://api.test/uploads/${key}`);
 
-    const added = await call(`/owner/hostels/${hostel.id}/photos`, { token: ownerToken, body: { url: up.path } });
+    const added = await call(`/owner/hostels/${hostel.id}/photos`, { token: ownerToken, body: { photo: up.upload } });
     expect(added.status).toBe(201);
-    expect(added.body.url).toBe(`http://api.test/uploads/${up.key}`);
+    expect(added.body.url).toBe(`http://api.test/uploads/${key}`);
     const [row] = await getDb().select().from(schema.hostelPhotos).where(eq(schema.hostelPhotos.id, added.body.id));
-    expect(row!.url).toBe(`/uploads/${up.key}`);
+    expect(row!.url).toBe(`/uploads/${key}`);
 
     // Anyone can load it, and it may be cached anywhere.
     const served = await fetchLink(added.body.url);
     expect(served.status).toBe(200);
     expect(served.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
 
-    // The API moves to a new address: the same row now links there, on the public page and in search.
+    // The API moves to a new address: the same rows now link there, on the public page and in search.
     process.env.API_PUBLIC_URL = 'https://api.example.in';
     const page = await call(`/hostels/${hostel.slug}`);
-    expect(page.body.photos.map((p: { url: string }) => p.url)).toEqual(['https://example.com/a.jpg', `https://api.example.in/uploads/${up.key}`]);
+    const urls: string[] = page.body.photos.map((p: { url: string }) => p.url);
+    expect(urls).toHaveLength(2);
+    for (const u of urls) expect(u).toStartWith('https://api.example.in/uploads/pho_');
+    expect(urls[1]).toBe(`https://api.example.in/uploads/${key}`);
     await call(`/owner/hostels/${hostel.id}/photos/order`, { token: ownerToken, method: 'PUT', body: { photoIds: [added.body.id, page.body.photos[0].id] } });
     const found = await call('/hostels?area=Gachibowli');
-    expect(found.body.items.find((h: { id: string }) => h.id === hostel.id).coverPhotoUrl).toBe(`https://api.example.in/uploads/${up.key}`);
+    expect(found.body.items.find((h: { id: string }) => h.id === hostel.id).coverPhotoUrl).toBe(`https://api.example.in/uploads/${key}`);
   });
 
-  test('older rows that stored an absolute link, and clients that send one, get the current address', async () => {
-    const up = (await (await upload(ownerToken, PNG, { purpose: 'listing' })).json()) as Uploaded;
-    // Written before links were stored relative, while the API ran on a LAN address.
-    await getDb().insert(schema.hostelPhotos).values({ id: newId('pho'), hostelId: hostel.id, url: `http://192.168.1.5:4000/uploads/${up.key}`, sortOrder: 5 });
-    // An older client sends back the absolute link the upload returned.
-    const second = (await (await upload(ownerToken, PNG, { purpose: 'listing' })).json()) as Uploaded;
-    const added = await call(`/owner/hostels/${hostel.id}/photos`, { token: ownerToken, body: { url: second.url } });
-    const [row] = await getDb().select().from(schema.hostelPhotos).where(eq(schema.hostelPhotos.id, added.body.id));
-    expect(row!.url).toBe(`/uploads/${second.key}`);
-
+  test('older rows that stored an absolute link get the current address', async () => {
+    const key = keyOf(await uploadPhoto(ownerToken, 'listing'));
+    // Written before photos were stored relative, while the API ran on a LAN address.
+    await getDb().insert(schema.hostelPhotos).values({ id: newId('pho'), hostelId: hostel.id, url: `http://192.168.1.5:4000/uploads/${key}`, sortOrder: 5 });
     const urls = (await call(`/hostels/${hostel.slug}`)).body.photos.map((p: { url: string }) => p.url);
-    expect(urls).toContain(`http://api.test/uploads/${up.key}`);
-    expect(urls).toContain(`http://api.test/uploads/${second.key}`);
+    expect(urls).toContain(`http://api.test/uploads/${key}`);
   });
 });
 
@@ -116,21 +162,21 @@ describe('issue and community photos are private to the hostel', () => {
     await activeSubscriber(resident.token, hostel.id, room.id);
     const outsider = await newTenant('Out');
 
-    const res = await upload(resident.token, PNG); // no purpose: private by default
-    const up = (await res.json()) as Uploaded;
-    expect(up.key).toStartWith('att_');
-    expect((await app.request(up.path)).status).toBe(404);
+    const up = await uploadPhoto(resident.token); // no purpose: private by default
+    const key = keyOf(up);
+    expect(key).toStartWith('att_');
+    expect((await app.request(`/uploads/${key}`)).status).toBe(404);
 
-    const issue = await call(`/hostels/${hostel.id}/issues`, { token: resident.token, body: { category: 'water', title: 'Leaking tap', photoUrl: up.path } });
+    const issue = await call(`/hostels/${hostel.id}/issues`, { token: resident.token, body: { category: 'water', title: 'Leaking tap', photo: up.upload } });
     expect(issue.status).toBe(201);
     const [row] = await getDb().select().from(schema.issues).where(eq(schema.issues.id, issue.body.id));
-    expect(row!.photoUrl).toBe(up.path);
+    expect(row!.photoUrl).toBe(`/uploads/${key}`);
 
     // The resident, the owner and an admin each get a signed link that loads, privately cached.
     for (const token of [resident.token, ownerToken, adminToken]) {
       const seen = await call(`/issues/${issue.body.id}`, { token });
       expect(seen.status).toBe(200);
-      expect(seen.body.photoUrl).toStartWith(`http://api.test/uploads/${up.key}?exp=`);
+      expect(seen.body.photoUrl).toStartWith(`http://api.test/uploads/${key}?exp=`);
       const img = await fetchLink(seen.body.photoUrl);
       expect(img.status).toBe(200);
       expect(img.headers.get('content-type')).toBe('image/png');
@@ -155,29 +201,13 @@ describe('issue and community photos are private to the hostel', () => {
   test('community posts work the same way', async () => {
     const resident = await newTenant('Asha');
     await activeSubscriber(resident.token, hostel.id, room.id);
-    const up = (await (await upload(resident.token, PNG, { purpose: 'attachment' })).json()) as Uploaded;
-    const post = await call(`/hostels/${hostel.id}/community`, { token: resident.token, body: { body: 'Our new plant', photoUrl: up.path } });
-    expect(post.status).toBe(201);
-    expect(post.body.photoUrl).toStartWith(`http://api.test/uploads/${up.key}?exp=`);
+    const up = await uploadPhoto(resident.token, 'attachment');
+    const created = await call(`/hostels/${hostel.id}/community`, { token: resident.token, body: { body: 'Our new plant', photo: up.upload } });
+    expect(created.status).toBe(201);
+    expect(created.body.photoUrl).toStartWith(`http://api.test/uploads/${keyOf(up)}?exp=`);
     const feed = await call(`/hostels/${hostel.id}/community`, { token: ownerToken });
     expect((await fetchLink(feed.body[0].photoUrl)).status).toBe(200);
-    expect((await app.request(up.path)).status).toBe(404);
-  });
-
-  test('attachments must be private uploads, and listing photos must not be', async () => {
-    const resident = await newTenant('Asha');
-    await activeSubscriber(resident.token, hostel.id, room.id);
-    const listing = (await (await upload(ownerToken, PNG, { purpose: 'listing' })).json()) as Uploaded;
-    const attachment = (await (await upload(resident.token, PNG)).json()) as Uploaded;
-
-    // An outside link would let a third party see who opens the issue; a public upload would be visible to anyone.
-    for (const photoUrl of ['https://tracker.example/pixel.png', listing.path]) {
-      const res = await call(`/hostels/${hostel.id}/issues`, { token: resident.token, body: { category: 'water', title: 'Leaking tap', photoUrl } });
-      expect(res.status).toBe(400);
-      expect((await call(`/hostels/${hostel.id}/community`, { token: resident.token, body: { body: 'Hi', photoUrl } })).status).toBe(400);
-    }
-    // A private attachment put on the public listing would never load there.
-    expect((await call(`/owner/hostels/${hostel.id}/photos`, { token: ownerToken, body: { url: attachment.path } })).status).toBe(400);
+    expect((await app.request(`/uploads/${keyOf(up)}`)).status).toBe(404);
   });
 });
 
@@ -211,8 +241,7 @@ describe('photo metadata is removed on upload', () => {
   async function stored(bytes: Uint8Array, name: string) {
     const res = await upload(ownerToken, bytes, { purpose: 'listing', name });
     expect(res.status).toBe(201);
-    const { key } = (await res.json()) as Uploaded;
-    return new Uint8Array(await (await app.request(`/uploads/${key}`)).arrayBuffer());
+    return new Uint8Array(await (await fetchLink(((await res.json()) as Uploaded).url)).arrayBuffer());
   }
 
   for (const format of ['jpeg', 'png', 'webp'] as const) {

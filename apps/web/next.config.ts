@@ -1,15 +1,17 @@
 import type { NextConfig } from 'next';
 
 const dev = process.env.NODE_ENV !== 'production';
-const api = process.env.API_PUBLIC_URL ?? process.env.API_URL ?? 'http://localhost:4000';
+const api = new URL(process.env.API_PUBLIC_URL ?? process.env.API_URL ?? 'http://localhost:4000').origin;
 
-// Uploaded photos come from the API's origin; listing photos and map tiles from any https host.
+// Images: every photo is an upload served from the API's origin (outside photo links are refused by the API), map
+// tiles come from OpenStreetMap, and Razorpay Checkout may show its own images. Nothing else, so an outside image
+// that slipped into older data can't load or track who views it. Food partner logos are links but never shown.
 // Razorpay Checkout loads a script and opens its own frame. Next.js needs inline scripts, and eval in dev.
 const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ''} https://checkout.razorpay.com`,
   "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: blob: https: ${api}`,
+  `img-src 'self' data: blob: ${api} https://*.tile.openstreetmap.org https://*.razorpay.com`,
   "font-src 'self' data:",
   "connect-src 'self' https://*.razorpay.com https://lumberjack.razorpay.com",
   'frame-src https://api.razorpay.com https://checkout.razorpay.com',

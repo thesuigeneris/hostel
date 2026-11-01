@@ -25,7 +25,7 @@ export function Photo({ src, alt, className, eager }: { src: string | null; alt:
     );
   }
   return (
-    // Plain <img>: photos come from owners' uploads on any host, and next/image would need every host allow-listed.
+    // Plain <img>: uploads are already re-encoded by the API, and its address is only known at run time.
     <img ref={img} src={src} alt={alt} loading={eager ? 'eager' : 'lazy'} decoding="async" onError={() => setFailed(true)} className={className} />
   );
 }

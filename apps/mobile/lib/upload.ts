@@ -19,7 +19,7 @@ export async function pickPhoto(source: 'library' | 'camera' = 'library'): Promi
   return photo;
 }
 
-/** Uploads an issue or community photo to `POST /uploads` as a private attachment and returns the path to attach it by. */
+/** Uploads an issue or community photo to `POST /uploads` as a private attachment and returns the receipt to attach it with. */
 export async function uploadPhoto(photo: Photo): Promise<string> {
   const part = photoPart(photo);
   const body = new FormData();
@@ -32,6 +32,6 @@ export async function uploadPhoto(photo: Photo): Promise<string> {
     body.append('file', part as unknown as Blob);
   }
   body.append('purpose', 'attachment');
-  const res = await api.request<{ path: string }>('/uploads', { body });
-  return res.path;
+  const res = await api.request<{ upload: string }>('/uploads', { body });
+  return res.upload;
 }
