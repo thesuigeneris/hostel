@@ -22,14 +22,15 @@ export default async function AccountPage({ searchParams }: Props) {
   const q = await searchParams;
   const user = await requireUser('/account');
   const client = await api();
-  const isTenant = user.role === 'tenant';
+  // Any role can hold a plan (an owner may live in someone else's hostel), so always load it.
   const [mine, menu, visits, invoices] = await Promise.all([
-    isTenant ? client.me.subscription() : Promise.resolve(null),
-    isTenant ? client.me.menu(3).catch(() => null) : Promise.resolve(null),
+    client.me.subscription(),
+    client.me.menu(3).catch(() => null),
     client.me.visits(),
-    isTenant ? client.me.invoices() : Promise.resolve([]),
+    client.me.invoices(),
   ]);
   const sub = mine?.subscription;
+  const isTenant = user.role === 'tenant' || !!sub || invoices.length > 0;
   const dueBill = invoices.find((i) => i.status === 'due');
 
   return (
