@@ -3,6 +3,7 @@ import type { searchSchema } from '@hostels/shared';
 import { type SQL, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 import { getDb } from '../db';
+import { photoUrl } from '../lib/uploads';
 
 type Search = z.output<typeof searchSchema>;
 
@@ -81,7 +82,7 @@ export async function searchHostels(q: Search): Promise<SearchResult> {
     genderType: r.gender_type as HostelSummary['genderType'],
     foodAvailable: r.food_available as boolean,
     isVerified: r.is_verified as boolean,
-    coverPhotoUrl: (r.cover as string | null) ?? null,
+    coverPhotoUrl: photoUrl((r.cover as string | null) ?? null),
     minRent: r.min_rent === null ? null : Number(r.min_rent),
     bedsAvailable: Number(r.beds_free),
     sharingTypes: r.sharing_types as HostelSummary['sharingTypes'],

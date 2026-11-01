@@ -3,7 +3,7 @@ import { setClock } from '../src/lib/clock';
 import { signPayment } from '../src/lib/razorpay';
 import { hmacHex } from '../src/lib/crypto';
 import { runJobs } from '../src/services/jobs';
-import { activeSubscriber, admin, liveHostel, newOwner, newTenant, roomBeds } from './fixtures';
+import { activeSubscriber, admin, checkoutOrderId, liveHostel, newOwner, newTenant, roomBeds } from './fixtures';
 import { call, login, resetDb } from './helpers';
 
 let ownerToken: string;
@@ -42,7 +42,9 @@ describe('subscribe', () => {
       status: 'due',
       dueDate: '2026-11-10',
     });
-    expect(res.body.invoice.razorpayOrderId).toStartWith('order_stub_');
+    // The payment order is made when the tenant opens checkout, not while the bed is being reserved.
+    expect(res.body.invoice.razorpayOrderId).toBeNull();
+    expect(await checkoutOrderId(token, res.body.invoice.id)).toStartWith('order_stub_');
     expect(await roomBeds(ownerToken, hostel.id, room.id)).toBe(4);
 
     const again = await call(`/hostels/${hostel.id}/subscribe`, { token, body: { roomTypeId: room.id, mealPlan: 'full' } });
@@ -110,7 +112,7 @@ describe('payments', () => {
   test('a bad signature is a 400, never a 500', async () => {
     const { token } = await newTenant();
     const sub = await call(`/hostels/${hostel.id}/subscribe`, { token, body: { roomTypeId: room.id, mealPlan: 'full' } });
-    const orderId = sub.body.invoice.razorpayOrderId;
+    const orderId = await checkoutOrderId(token, sub.body.invoice.id);
     for (const sig of ['short', 'x'.repeat(64), signPayment(orderId, 'pay_other')]) {
       const res = await call(`/payments/${sub.body.invoice.id}/verify`, {
         token,
@@ -124,7 +126,7 @@ describe('payments', () => {
   test('checkout callback and webhook for the same payment activate once', async () => {
     const { token } = await newTenant();
     const sub = await call(`/hostels/${hostel.id}/subscribe`, { token, body: { roomTypeId: room.id, mealPlan: 'full' } });
-    const orderId = sub.body.invoice.razorpayOrderId;
+    const orderId = await checkoutOrderId(token, sub.body.invoice.id);
     const verify = await call(`/payments/${sub.body.invoice.id}/verify`, {
       token,
       body: { razorpayOrderId: orderId, razorpayPaymentId: 'pay_abc', razorpaySignature: signPayment(orderId, 'pay_abc') },
@@ -147,7 +149,8 @@ describe('payments', () => {
   test('webhook alone activates a pending plan', async () => {
     const { token } = await newTenant();
     const sub = await call(`/hostels/${hostel.id}/subscribe`, { token, body: { roomTypeId: room.id, mealPlan: 'full' } });
-    const body = JSON.stringify({ event: 'payment.captured', payload: { payment: { entity: { id: 'pay_w', order_id: sub.body.invoice.razorpayOrderId } } } });
+    const orderId = await checkoutOrderId(token, sub.body.invoice.id);
+    const body = JSON.stringify({ event: 'payment.captured', payload: { payment: { entity: { id: 'pay_w', order_id: orderId } } } });
     await call('/webhooks/razorpay', { body, headers: { 'x-razorpay-signature': hmacHex('test-webhook-secret', body) } });
     expect((await call('/me/subscription', { token })).body.subscription.status).toBe('active');
   });

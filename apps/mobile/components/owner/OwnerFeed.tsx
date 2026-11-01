@@ -22,7 +22,7 @@ function Tiny({ label, onPress, danger }: { label: string; onPress: () => void; 
 export function OwnerFeed({ hostelId, posts, a, onChanged }: { hostelId: string; posts: CommunityPost[]; a: ReturnType<typeof useAction>; onChanged: () => Promise<void> | void }) {
   const [body, setBody] = useState('');
   const [kind, setKind] = useState<PostKind>('announcement');
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<{ upload: string; url: string } | null>(null);
   const [replies, setReplies] = useState<Record<string, string>>({});
 
   const act = (key: string, fn: () => Promise<unknown>, done?: string) =>
@@ -41,25 +41,25 @@ export function OwnerFeed({ hostelId, posts, a, onChanged }: { hostelId: string;
       <Card>
         <Field label="Post to residents" value={body} onChangeText={setBody} multiline maxLength={1000} placeholder="Post an announcement for residents" />
         <Choice value={kind} options={POST_KINDS.map((k) => ({ value: k, label: titleCase(k) }))} onChange={setKind} />
-        {photoUrl ? <Image source={{ uri: photoUrl }} style={{ height: 140, borderRadius: theme.radius.sm }} accessibilityLabel="Attached photo" /> : null}
+        {photo ? <Image source={{ uri: photo.url }} style={{ height: 140, borderRadius: theme.radius.sm }} accessibilityLabel="Attached photo" /> : null}
         <Row>
           <Button
             small
             variant="secondary"
-            title={photoUrl ? 'Change photo' : 'Add a photo'}
+            title={photo ? 'Change photo' : 'Add a photo'}
             busy={a.busy === 'photo'}
-            onPress={() => a.run('photo', async () => { const url = await pickAndUploadPhoto(); if (url) setPhotoUrl(url); })}
+            onPress={() => a.run('photo', async () => { const uploaded = await pickAndUploadPhoto('attachment'); if (uploaded) setPhoto(uploaded); })}
           />
-          {photoUrl ? <Button small variant="ghost" title="Remove photo" onPress={() => setPhotoUrl(null)} /> : null}
+          {photo ? <Button small variant="ghost" title="Remove photo" onPress={() => setPhoto(null)} /> : null}
         </Row>
         <Button
           title="Post"
           busy={a.busy === 'post'}
           disabled={!body.trim()}
           onPress={() => act('post', async () => {
-            await api.resident.post(hostelId, { kind, body, photoUrl });
+            await api.resident.post(hostelId, { kind, body, photo: photo?.upload ?? null });
             setBody('');
-            setPhotoUrl(null);
+            setPhoto(null);
           }, 'Posted')}
         />
       </Card>

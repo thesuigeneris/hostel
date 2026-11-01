@@ -98,7 +98,7 @@ function AdminBilling() {
   );
 }
 
-function RefundCard({ refund: r, onDone }: { refund: AdminPaymentException; onDone: () => Promise<unknown> | void }) {
+function RefundCard({ refund: r, onDone }: { refund: AdminPaymentException; onDone: () => unknown }) {
   const [note, setNote] = useState('');
   const a = useAction();
   return (

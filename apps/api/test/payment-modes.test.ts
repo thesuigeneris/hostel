@@ -9,7 +9,7 @@ import { hmacHex } from '../src/lib/crypto';
 import { env } from '../src/lib/env';
 import { signPayment, STUB_SIGNATURE_SECRET } from '../src/lib/razorpay';
 import { runJobs } from '../src/services/jobs';
-import { activeSubscriber, admin, liveHostel, liveSubscriber, newOwner, newTenant, nextPaymentId, payByCheckout, withRazorpay } from './fixtures';
+import { activeSubscriber, admin, checkoutOrderId, liveHostel, liveSubscriber, newOwner, newTenant, nextPaymentId, payByCheckout, withRazorpay } from './fixtures';
 import { call, resetDb } from './helpers';
 
 let ownerToken: string;
@@ -34,10 +34,12 @@ function webhook(orderId: string, paymentId: string) {
   return call('/webhooks/razorpay', { body, headers: { 'x-razorpay-signature': hmacHex('test-webhook-secret', body) } });
 }
 
+/** Subscribes and opens checkout, as the pay page does: the bed is held and the bill has its payment order. */
 async function subscribe(token: string, mealPlan = 'none', hostelId = hostel.id, roomTypeId = room.id) {
   const res = await call(`/hostels/${hostelId}/subscribe`, { token, body: { roomTypeId, mealPlan, diet: 'veg' } });
   expect(res.status).toBe(201);
-  return res.body as { subscription: { id: string }; invoice: { id: string; razorpayOrderId: string } };
+  const sub = res.body as { subscription: { id: string }; invoice: { id: string } };
+  return { ...sub, orderId: await checkoutOrderId(token, sub.invoice.id) };
 }
 
 const billOf = async (token: string, id: string) => (await call(`/payments/${id}`, { token })).body.invoice;
@@ -75,7 +77,7 @@ describe('payment modes', () => {
 
     const b = await newTenant();
     const subB = await subscribe(b.token);
-    const orderB = subB.invoice.razorpayOrderId;
+    const orderB = subB.orderId;
     const verified = await call(`/payments/${subB.invoice.id}/verify`, {
       token: b.token,
       body: { razorpayOrderId: orderB, razorpayPaymentId: 'pay_stubsigned1', razorpaySignature: signPayment(orderB, 'pay_stubsigned1') },
@@ -84,7 +86,7 @@ describe('payment modes', () => {
 
     const c = await newTenant();
     const subC = await subscribe(c.token);
-    expect((await webhook(subC.invoice.razorpayOrderId, 'pay_hookstub1')).status).toBe(200);
+    expect((await webhook(subC.orderId, 'pay_hookstub1')).status).toBe(200);
     expect(await billOf(c.token, subC.invoice.id)).toMatchObject({ status: 'paid', paymentMode: 'simulated' });
 
     // Razorpay test keys never move money.
@@ -110,7 +112,7 @@ describe('payment modes', () => {
     // An order the stub created stays simulated even when live keys are set before its payment lands.
     const g = await newTenant();
     const subG = await subscribe(g.token);
-    await withRazorpay('live', async () => expect((await webhook(subG.invoice.razorpayOrderId, nextPaymentId())).status).toBe(200));
+    await withRazorpay('live', async () => expect((await webhook(subG.orderId, nextPaymentId())).status).toBe(200));
     expect(await billOf(g.token, subG.invoice.id)).toMatchObject({ status: 'paid', paymentMode: 'simulated' });
   });
 
@@ -151,7 +153,7 @@ describe('payment modes', () => {
         expect(simulate.status).toBe(403);
         expect(simulate.body.error).toBe('forbidden');
         // Anyone can compute a stub signature from the source, so a live instance never accepts one.
-        const order = sub.invoice.razorpayOrderId;
+        const order = sub.orderId;
         const forged = await call(`/payments/${sub.invoice.id}/verify`, {
           token: t.token,
           body: { razorpayOrderId: order, razorpayPaymentId: 'pay_forged1', razorpaySignature: hmacHex(STUB_SIGNATURE_SECRET, `${order}|pay_forged1`) },
@@ -169,7 +171,7 @@ describe('payment modes', () => {
     await withRazorpay('live', async () => {
       const sub = await subscribe(t.token);
       await payByCheckout(t.token, sub.invoice.id, paymentId);
-      for (let i = 0; i < 2; i++) expect((await webhook(sub.invoice.razorpayOrderId, paymentId)).status).toBe(200);
+      for (let i = 0; i < 2; i++) expect((await webhook(sub.orderId, paymentId)).status).toBe(200);
     });
     const me = (await call('/me/subscription', { token: t.token })).body;
     expect(me.invoices).toHaveLength(1);
@@ -291,7 +293,7 @@ describe('migration 0008', () => {
         await tx`ALTER TABLE owner_invoices DROP CONSTRAINT owner_invoices_payment_mode_status`;
         const paid = async (id: string, orderId: string | null, paymentId: string | null) =>
           tx`UPDATE invoices SET status = 'paid', paid_at = now(), razorpay_order_id = ${orderId}, razorpay_payment_id = ${paymentId}, payment_mode = NULL WHERE id = ${id}`;
-        await paid(subs[0]!.invoice.id, subs[0]!.invoice.razorpayOrderId, null);
+        await paid(subs[0]!.invoice.id, subs[0]!.orderId, null);
         await paid(subs[1]!.invoice.id, 'order_RealLooking001', 'pay_stub_abc123');
         await paid(subs[2]!.invoice.id, 'order_seed_abc', 'pay_seed_abc');
         await paid(subs[3]!.invoice.id, 'order_RealLooking002', 'pay_RealLooking002');

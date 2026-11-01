@@ -63,7 +63,11 @@ export async function orderFor(user: User, invoiceId: string) {
   if (p.row.status === 'void') throw new AppError('invalid_state', 'This bill was cancelled');
   let orderId = p.row.razorpayOrderId;
   if (!orderId) {
-    const order = await createOrder({ amountInPaise: amountOf(p) * 100, receipt: p.row.id, notes: { invoiceId: p.row.id } });
+    // Outside any transaction: nothing is locked while Razorpay answers.
+    const order = await createOrder({ amountInPaise: amountOf(p) * 100, receipt: p.row.id, notes: { invoiceId: p.row.id } }).catch((e) => {
+      console.error(`[payments] order for ${p.row.id} failed`, e);
+      throw new AppError('internal', 'The payment service is not responding. Please try again in a minute.', 503);
+    });
     const table = p.kind === 'tenant' ? schema.invoices : schema.ownerInvoices;
     // Two tabs racing: the first order stored wins and both tabs pay that one. Overwriting it would leave the other
     // tab paying an order no bill points at, and that payment could not be matched to anything.

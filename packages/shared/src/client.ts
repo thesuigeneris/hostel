@@ -220,7 +220,8 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
       addRoom: (id: string, input: RoomTypeInput) => request<RoomType>(`/owner/hostels/${id}/rooms`, { body: input }),
       updateRoom: (roomId: string, input: RoomTypeUpdateInput) => request<RoomType>(`/owner/rooms/${roomId}`, { method: 'PATCH', body: input }),
       deleteRoom: (roomId: string) => request<{ ok: true }>(`/owner/rooms/${roomId}`, { method: 'DELETE' }),
-      addPhoto: (id: string, url: string) => request<HostelPhoto>(`/owner/hostels/${id}/photos`, { body: { url } }),
+      /** `photo` is the `upload` receipt from `POST /uploads` with purpose `listing`. */
+      addPhoto: (id: string, photo: string) => request<HostelPhoto>(`/owner/hostels/${id}/photos`, { body: { photo } }),
       deletePhoto: (id: string, photoId: string) => request<{ ok: true }>(`/owner/hostels/${id}/photos/${photoId}`, { method: 'DELETE' }),
       reorderPhotos: (id: string, photoIds: string[]) => request<HostelPhoto[]>(`/owner/hostels/${id}/photos/order`, { method: 'PUT', body: { photoIds } }),
       visits: (status?: VisitStatus) => request<OwnerVisit[]>('/owner/visits', { query: { status } }),

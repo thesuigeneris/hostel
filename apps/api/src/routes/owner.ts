@@ -85,8 +85,8 @@ export const ownerRoutes = new Hono<AppEnv>()
     return c.json({ ok: true as const });
   })
   .post('/owner/hostels/:id/photos', async (c) => {
-    const { url } = await parseBody(c, photoInputSchema);
-    return c.json(await addPhoto(c.get('user'), c.req.param('id'), url), 201);
+    const { photo } = await parseBody(c, photoInputSchema);
+    return c.json(await addPhoto(c.get('user'), c.req.param('id'), photo), 201);
   })
   .delete('/owner/hostels/:id/photos/:photoId', async (c) => {
     await deletePhoto(c.get('user'), c.req.param('id'), c.req.param('photoId'));

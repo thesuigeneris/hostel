@@ -17,7 +17,6 @@ import { getDb, schema, type Tx } from '../db';
 import { clock } from '../lib/clock';
 import { isUniqueViolation } from '../lib/db-errors';
 import { AppError, notFound } from '../lib/errors';
-import { createOrder } from '../lib/razorpay';
 import { isBookable, planFor } from './access';
 
 type SubRow = typeof schema.subscriptions.$inferSelect;
@@ -182,17 +181,10 @@ export async function subscribe(user: User, hostelId: string, input: z.output<ty
         })
         .returning();
       const invoice = await createInvoiceForPeriod(tx, sub!, billingPeriod(today, 0));
-      const order = await createOrder({
-        amountInPaise: invoice!.totalAmount * 100,
-        receipt: invoice!.id,
-        notes: { invoiceId: invoice!.id, subscriptionId: sub!.id },
-      });
-      const [withOrder] = await tx
-        .update(schema.invoices)
-        .set({ razorpayOrderId: order.id })
-        .where(eq(schema.invoices.id, invoice!.id))
-        .returning();
-      return { subscription: toSubscription(sub!), invoice: toInvoice(withOrder!) };
+      // No payment order here: Razorpay can be slow or down, and the room row stays locked until this commits.
+      // The pay page creates the order when the tenant pays (`orderFor`). If that fails or they never pay,
+      // the pending plan expires after PENDING_SUBSCRIPTION_TTL_MINUTES and the bed is released.
+      return { subscription: toSubscription(sub!), invoice: toInvoice(invoice!) };
     });
   } catch (e) {
     if (isUniqueViolation(e, 'subscriptions_one_open_per_user')) {

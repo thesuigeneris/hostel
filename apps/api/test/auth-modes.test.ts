@@ -5,7 +5,7 @@ import { assertResetAllowed } from '../src/db/seed';
 import { setClock } from '../src/lib/clock';
 import { hmacHex } from '../src/lib/crypto';
 import { grantAdmin } from '../src/services/auth';
-import { admin, liveHostel, newOwner, nextPhone } from './fixtures';
+import { admin, checkoutOrderId, liveHostel, newOwner, nextPhone } from './fixtures';
 import { call, login, resetDb } from './helpers';
 
 const GOOD = 'a quiet room near the lake';
@@ -194,7 +194,7 @@ describe('auth modes', () => {
       const session = await call('/auth/demo', { body: { phone } });
       const sub = await call(`/hostels/${hostel.id}/subscribe`, { token: session.body.token, body: { roomTypeId: rooms[0].id, mealPlan: 'full', diet: 'veg' } });
       expect(sub.status).toBe(201);
-      const hook = await webhook(sub.body.invoice.razorpayOrderId);
+      const hook = await webhook(await checkoutOrderId(session.body.token, sub.body.invoice.id));
       expect(hook.status).toBe(400);
       expect(hook.body.error).toBe('signature_invalid');
       expect((await call('/me/subscription', { token: session.body.token })).body.subscription.status).toBe('pending');
@@ -203,7 +203,7 @@ describe('auth modes', () => {
     // Control: the same signed event is accepted on a standard instance, so the refusal above is the demo rule.
     const tenant = await login(nextPhone());
     const sub = await call(`/hostels/${hostel.id}/subscribe`, { token: tenant, body: { roomTypeId: rooms[0].id, mealPlan: 'full', diet: 'veg' } });
-    expect((await webhook(sub.body.invoice.razorpayOrderId)).status).toBe(200);
+    expect((await webhook(await checkoutOrderId(tenant, sub.body.invoice.id))).status).toBe(200);
     expect((await call('/me/subscription', { token: tenant })).body.subscription.status).toBe('active');
   });
 

@@ -1,5 +1,6 @@
-import type { Hostel, RoomType, User } from '@hostels/shared';
+import type { Hostel, HostelPhoto, RoomType, User } from '@hostels/shared';
 import type { schema } from '../db';
+import { photoUrl } from '../lib/uploads';
 
 type Row<T extends { $inferSelect: unknown }> = T['$inferSelect'];
 
@@ -19,6 +20,10 @@ export function toUser(r: Row<typeof schema.users>): User {
 
 export function toHostel(r: Row<typeof schema.hostels>): Hostel {
   return { ...r, createdAt: r.createdAt.toISOString() };
+}
+
+export function toPhoto(r: Row<typeof schema.hostelPhotos>): HostelPhoto {
+  return { ...r, url: photoUrl(r.url) };
 }
 
 export function toRoomType(r: Row<typeof schema.roomTypes>): RoomType {

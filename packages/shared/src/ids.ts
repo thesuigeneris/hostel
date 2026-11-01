@@ -2,6 +2,7 @@ export type IdPrefix =
   | 'usr'
   | 'hst'
   | 'pho'
+  | 'att'
   | 'rmt'
   | 'vis'
   | 'fdp'

@@ -65,6 +65,7 @@ export async function createOrder(opts: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Basic ${credentials}` },
     body: JSON.stringify({ amount: opts.amountInPaise, currency: 'INR', receipt: opts.receipt, notes: opts.notes ?? {} }),
+    signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) throw new Error(`razorpay order failed: ${res.status} ${await res.text()}`);
   return (await res.json()) as RazorpayOrder;

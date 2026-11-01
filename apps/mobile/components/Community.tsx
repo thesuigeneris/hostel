@@ -52,8 +52,8 @@ export function IssueForm({ hostelId, act }: { hostelId: string; act: Act }) {
   async function submit() {
     setBusy(true);
     await act('issue', async () => {
-      const photoUrl = photo ? await uploadPhoto(photo) : null;
-      const issue = await api.resident.reportIssue(hostelId, { category, title, description, photoUrl });
+      const upload = photo ? await uploadPhoto(photo) : null;
+      const issue = await api.resident.reportIssue(hostelId, { category, title, description, photo: upload });
       setTitle('');
       setDescription('');
       setPhoto(null);
@@ -96,8 +96,8 @@ export function Feed({ hostelId, posts, act, busy }: { hostelId: string; posts: 
           disabled={!body.trim()}
           onPress={() =>
             act('post', async () => {
-              const photoUrl = photo ? await uploadPhoto(photo) : null;
-              await r.post(hostelId, { kind, body, photoUrl });
+              const upload = photo ? await uploadPhoto(photo) : null;
+              await r.post(hostelId, { kind, body, photo: upload });
               setBody('');
               setPhoto(null);
             })
