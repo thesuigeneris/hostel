@@ -13,6 +13,7 @@ import {
   hostelIssues,
   issueDetail,
   moderateComment,
+  myIssues,
   moderatePost,
   reportContent,
   reportIssue,
@@ -30,6 +31,8 @@ export const residentRoutes = new Hono<AppEnv>()
   .use('/issues/*', requireAuth())
   .use('/posts/*', requireAuth())
   .use('/comments/*', requireAuth())
+  .use('/me/issues', requireAuth())
+  .get('/me/issues', async (c) => c.json(await myIssues(c.get('user'))))
   .get('/hostels/:id/issues', async (c) => {
     const { status } = parseQuery(c, z.object({ status: z.enum(ISSUE_STATUSES).optional() }));
     return c.json(await hostelIssues(c.get('user'), c.req.param('id'), status));

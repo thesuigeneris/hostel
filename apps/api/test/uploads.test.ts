@@ -184,7 +184,7 @@ describe('issue and community photos are private to the hostel', () => {
     }
 
     // An outsider can't read the issue, can't load the bare file, and can't forge or stretch a link.
-    expect((await call(`/issues/${issue.body.id}`, { token: outsider.token })).body.error).toBe('not_a_resident');
+    expect((await call(`/issues/${issue.body.id}`, { token: outsider.token })).status).toBe(404);
     const link = new URL((await call(`/issues/${issue.body.id}`, { token: resident.token })).body.photoUrl);
     expect((await app.request(link.pathname)).status).toBe(404);
     const forged = new URL(link);

@@ -1,4 +1,4 @@
-import type { Invoice, Subscription, User } from '@hostels/shared';
+import type { Invoice, MoveView, Subscription, User } from '@hostels/shared';
 import {
   addDays,
   billingPeriod,
@@ -229,11 +229,34 @@ export async function openSubscription(userId: string, db: Tx = getDb()) {
   return sub ?? null;
 }
 
+/** The tenant's recent moves with where each goes, newest first. */
+async function moveViews(subscriptionId: string): Promise<MoveView[]> {
+  const db = getDb();
+  const m = schema.moveRequests;
+  const rows = await db
+    .select({ move: m, hostel: schema.hostels, toSharing: schema.roomTypes.sharing })
+    .from(m)
+    .innerJoin(schema.hostels, eq(schema.hostels.id, m.toHostelId))
+    .leftJoin(schema.roomTypes, eq(schema.roomTypes.id, m.toRoomTypeId))
+    .where(eq(m.subscriptionId, subscriptionId))
+    .orderBy(desc(m.createdAt))
+    .limit(5);
+  return Promise.all(
+    rows.map(async ({ move, hostel, toSharing }) => ({
+      ...move,
+      createdAt: move.createdAt.toISOString(),
+      toHostelName: hostel.name,
+      toSharing,
+      toHostelOpen: isBookable(hostel, await planFor(hostel.id, db)),
+    })),
+  );
+}
+
 export async function mySubscription(user: User) {
   const db = getDb();
   const sub = await openSubscription(user.id);
   if (!sub) return null;
-  const [[hostel], [room], invoices, [move]] = await Promise.all([
+  const [[hostel], [room], invoices, moves] = await Promise.all([
     db
       .select({ id: schema.hostels.id, slug: schema.hostels.slug, name: schema.hostels.name, area: schema.hostels.area })
       .from(schema.hostels)
@@ -244,19 +267,20 @@ export async function mySubscription(user: User) {
       .from(schema.invoices)
       .where(and(eq(schema.invoices.subscriptionId, sub.id), inArray(schema.invoices.status, ['due', 'paid'])))
       .orderBy(desc(schema.invoices.periodStart)),
-    db
-      .select()
-      .from(schema.moveRequests)
-      .where(and(eq(schema.moveRequests.subscriptionId, sub.id), eq(schema.moveRequests.status, 'scheduled'))),
+    moveViews(sub.id),
   ]);
   const today = clock.today();
+  const latest = moves[0];
   return {
     subscription: toSubscription(sub),
     hostel: hostel!,
     roomType: room!,
     currentPeriod: periodContaining(sub.startDate, today),
     invoices: invoices.map(toInvoice),
-    scheduledMove: move ? { ...move, createdAt: move.createdAt.toISOString() } : null,
+    scheduledMove: moves.find((m) => m.status === 'scheduled') ?? null,
+    // The latest move, when we cancelled it for them (the destination stopped taking residents): shown for a month so
+    // they know why they're staying put.
+    cancelledMove: latest?.status === 'cancelled' && latest.cancelReason && latest.moveDate >= addDays(today, -30) ? latest : null,
   };
 }
 

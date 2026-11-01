@@ -199,6 +199,8 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
       report: (type: 'post' | 'comment', id: string, reason: string) =>
         request<{ ok: true }>(`/${type === 'post' ? 'posts' : 'comments'}/${id}/report`, { body: { reason } }),
       directory: (hostelId: string) => request<{ name: string; sharing: SharingType | null; since: string }[]>(`/hostels/${hostelId}/directory`),
+      /** Issues I reported at any hostel, newest first; read-only at hostels I've moved out of. */
+      myIssues: () => request<IssueView[]>('/me/issues'),
     },
     payments: {
       page: (invoiceId: string) => request<PaymentPage>(`/payments/${invoiceId}`),

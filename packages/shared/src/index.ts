@@ -4,6 +4,7 @@ export * from './ids';
 export * from './passwords';
 export * from './owner-admin';
 export * from './pricing';
+export * from './resident';
 export * from './schemas';
 export * from './time';
 export * from './types';

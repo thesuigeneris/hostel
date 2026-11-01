@@ -57,6 +57,13 @@
       "when": 1793554965327,
       "tag": "0007_owner_admin",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793558375784,
+      "tag": "0008_resident_fixes",
+      "breakpoints": true
     }
   ]
 }
