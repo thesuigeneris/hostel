@@ -5,12 +5,15 @@ export const theme = {
     surface: '#FFFFFF',
     text: '#1C2421',
     soft: '#4B5550',
-    muted: '#7A837E',
+    // #7A837E was 3.66:1 on bg (fails AA); same fix as the web's ink-muted.
+    muted: '#646D68',
     border: '#E7E1D8',
     brand: '#1F5C46',
     brandDark: '#164434',
     brandSoft: '#E4EFE9',
     food: '#E08A2E',
+    // Amber for text: 5.64:1 on foodSoft. `food` itself is for fills and graphics only.
+    foodInk: '#8F4F0C',
     foodSoft: '#FCEFDF',
     danger: '#B4382F',
     dangerSoft: '#FBE9E7',
