@@ -155,11 +155,10 @@ Decisions:
 - Backfill: paid with no payment id, or stub/seed ids: simulated; any other Razorpay id: test mode (no live account was ever connected); void owner bills the audit log shows waived: waived; pending payouts dropped (none has real money behind it after the backfill; paid payouts stay).
 - Late payments: revive only the first bill of an expired plan, inside its period, at a still-bookable hostel, for a payer with no other open plan, and only if a bed can be taken; otherwise a refund due. A second payment for a paid bill, and payments for void or waived owner bills, are refunds due. Refunds are made by hand in Razorpay and recorded by an admin.
 
-Gates run on `hostels_test_d` and `hostels_e2e_d` (e2e on ports 4104/3104), at the commits named in the rows and again after the final merge (see the end of this section):
-- `bun run typecheck` (4/4 exit 0) and `bunx biome lint .` (clean).
-- Shared tests 30 pass (28 before); web unit tests 2 pass; mobile tests 39 pass; API tests 136 pass (119 before).
-- `e2e:fresh`: 50/50 (48 before).
-- Mutation checks, each reverted on its own and restored: counting every paid bill again (4 tests fail), dropping the `waived` mark (2), ignoring the stub-order rule (1), removing the simulate guard (1), keeping stale pending payouts (1), mis-classifying the backfill (1), the old log-and-throw late-payment path (7), the old order overwrite (1, once the race test was made deterministic with a latch in the mocked Razorpay order call), and removing the bill row lock (1).
+Gates run on disposable databases `hostels_test_d` and `hostels_e2e_d` (e2e on ports 4104/3104):
+- Before merging the backend fixes, at `3e553bf`: API tests 136 pass (119 before); `e2e:fresh` 50/50 (48 before).
+- After merging them (`c17d630`, which also adapts the payment-mode tests to orders now being created at checkout): `bun run typecheck` (4/4 exit 0) and `bunx biome lint .` (clean); shared tests 30 pass (28 before); web unit tests 2 pass; mobile tests 39 pass; API tests 151 pass (134 on the merged base + 17 new); `e2e:fresh` 51/51 (49 on the merged base + 2 new).
+- Mutation checks, each reverted on its own and restored (the first, the late-payment one and the order one repeated after the merge, with the same failures): counting every paid bill again (4 tests fail), dropping the `waived` mark (2), ignoring the stub-order rule (1), removing the simulate guard (1), keeping stale pending payouts (1), mis-classifying the backfill (1), the old log-and-throw late-payment path (7), the old order overwrite (1, once the race test was made deterministic with a latch in the mocked Razorpay order call), and removing the bill row lock (1).
 
 | Req | Requirement | Implementation | Test | Status |
 |---|---|---|---|---|
