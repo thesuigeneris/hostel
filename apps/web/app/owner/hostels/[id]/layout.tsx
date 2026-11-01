@@ -11,6 +11,7 @@ export default async function OwnerHostelLayout({ children, params }: { children
   const h = await ownerHostel(id);
   const eff = h.plan.effective;
   const tabs = [
+    { href: '/dashboard', label: 'Dashboard' },
     { href: '', label: 'Listing' },
     { href: '/rooms', label: 'Rooms' },
     { href: '/residents', label: 'Residents', locked: !hasPlan(eff, 'pro') },
@@ -19,6 +20,7 @@ export default async function OwnerHostelLayout({ children, params }: { children
     { href: '/reviews', label: 'Reviews' },
     { href: '/menu', label: 'Menu', locked: !hasPlan(eff, 'partner') },
     { href: '/kitchen', label: 'Kitchen & subscribers', locked: !hasPlan(eff, 'partner') },
+    { href: '/brand', label: 'Brand kit', locked: !hasPlan(eff, 'partner') || h.partnerStatus !== 'verified' },
     { href: '/plan', label: 'Plan & billing' },
   ];
   return (

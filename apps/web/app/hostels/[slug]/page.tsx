@@ -6,12 +6,26 @@ import { ClientHostelMap } from '@/components/MapLoader';
 import { PhotoGallery } from '@/components/PhotoGallery';
 import { RecordView } from '@/components/RecordView';
 import { SubmitButton } from '@/components/SubmitButton';
-import { Badge, buttonClass, Card, Field, Flash, Input, LinkButton, Stars, Textarea, VerifiedLabel } from '@/components/ui';
-import { currentUser, publicApi, SITE_URL } from '@/lib/api';
-import { dateLabel, GENDER_LABEL, monthLabel, phoneLink, reviewSource, rupees, SHARING_LABEL, timeAgo, weekday, whatsappLink } from '@/lib/format';
-import { flagReviewAction, requestVisitAction } from './actions';
+import { ReviewCard } from '@/components/Reviews';
+import { Badge, buttonClass, Card, Field, Flash, Input, LinkButton, Pagination, Stars, Textarea, VerifiedLabel } from '@/components/ui';
+import { api, currentUser, publicApi, SITE_URL } from '@/lib/api';
+import { dateLabel, GENDER_LABEL, phoneLink, rupees, SHARING_LABEL, timeAgo, weekday, whatsappLink } from '@/lib/format';
+import { requestVisitAction } from './actions';
 
-type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ error?: string; ok?: string }> };
+type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ error?: string; ok?: string; reviews?: string }> };
+
+/** Matches the API's page size for `/hostels/:slug/reviews`. */
+const REVIEWS_PER_PAGE = 20;
+
+/** Median response and fix times read better as "under 1 h" or days than as raw hours. */
+function hoursLabel(h: number | null) {
+  if (h === null) return '—';
+  if (h < 1) return 'under 1 h';
+  return h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} days`;
+}
+
+/** The cheapest bed, or null for a listing whose rooms were all removed. */
+const cheapest = (rooms: { monthlyRent: number }[]) => (rooms.length ? Math.min(...rooms.map((r) => r.monthlyRent)) : null);
 
 async function load(slug: string) {
   try {
@@ -24,8 +38,9 @@ async function load(slug: string) {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const h = await load((await params).slug);
-  const minRent = Math.min(...h.roomTypes.map((r) => r.monthlyRent));
-  const description = `${h.name} in ${h.area}, Hyderabad. ${GENDER_LABEL[h.genderType]} hostel from ${rupees(minRent)}/month${h.isVerified ? ', no advance' : ''}${h.foodAvailable ? ', food available' : ''}.`;
+  const minRent = cheapest(h.roomTypes);
+  const rating = h.ratings.reviewCount ? ` Rated ${h.ratings.rating}/5 by ${h.ratings.reviewCount} ${h.ratings.reviewCount === 1 ? 'resident' : 'residents'}.` : '';
+  const description = `${h.name} in ${h.area}, Hyderabad. ${GENDER_LABEL[h.genderType]} hostel${minRent ? ` from ${rupees(minRent)}/month` : ''}${h.isVerified ? ', no advance' : ''}${h.foodAvailable ? ', food available' : ''}.${rating}`;
   return {
     title: `${h.name}, ${h.area}`,
     description,
@@ -43,14 +58,22 @@ export default async function HostelPage({ params, searchParams }: Props) {
   const { slug } = await params;
   const q = await searchParams;
   const [h, user] = await Promise.all([load(slug), currentUser()]);
-  const [reviews, menu, areas] = await Promise.all([
-    publicApi(30).hostels.reviews(slug).catch(() => []),
+  const reviewPages = Math.max(1, Math.ceil(h.ratings.reviewCount / REVIEWS_PER_PAGE));
+  const reviewPage = Math.min(Math.max(1, Number(q.reviews) || 1), reviewPages);
+  const client = user ? await api() : null;
+  const [reviews, menu, areas, stays, visits] = await Promise.all([
+    publicApi(30).hostels.reviews(slug, reviewPage).catch(() => null),
     h.isVerified ? publicApi(300).hostels.menu(slug).catch(() => null) : Promise.resolve(null),
     publicApi(300).hostels.areas().catch(() => []),
+    client ? client.me.residencies().catch(() => []) : Promise.resolve([]),
+    client ? client.me.visits().catch(() => []) : Promise.resolve([]),
   ]);
+  // Someone who lives (or lived) here gets a way into their hostel; a pending visit request replaces the form.
+  const myStay = stays.find((s) => s.hostel.id === h.id && (s.status === 'active' || s.status === 'ended'));
+  const openVisit = visits.find((v) => v.hostelId === h.id && v.status === 'new');
   const areaSlug = areas.find((a) => a.area === h.area)?.slug;
   const rooms = [...h.roomTypes].sort((a, b) => a.monthlyRent - b.monthlyRent);
-  const minRent = rooms[0]?.monthlyRent ?? 0;
+  const minRent = cheapest(rooms);
   const bedsFree = rooms.reduce((n, r) => n + r.bedsAvailable, 0);
   const cheapestFree = rooms.find((r) => r.bedsAvailable > 0) ?? rooms[0];
   const examplePlan = h.foodAvailable ? 'full' : 'none';
@@ -68,10 +91,21 @@ export default async function HostelPage({ params, searchParams }: Props) {
     telephone: `+91${h.contactPhone}`,
     address: { '@type': 'PostalAddress', streetAddress: h.address, addressLocality: h.area, addressRegion: 'Telangana', addressCountry: 'IN' },
     geo: { '@type': 'GeoCoordinates', latitude: h.lat, longitude: h.lng },
-    priceRange: `₹${minRent}+ per month`,
+    ...(minRent ? { priceRange: `₹${minRent}+ per month` } : {}),
     amenityFeature: h.amenities.map((a) => ({ '@type': 'LocationFeatureSpecification', name: a, value: true })),
     ...(h.ratings.reviewCount
       ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: h.ratings.rating, reviewCount: h.ratings.reviewCount, bestRating: 5 } }
+      : {}),
+    ...(reviews?.length
+      ? {
+          review: reviews.slice(0, 5).map((r) => ({
+            '@type': 'Review',
+            author: { '@type': 'Person', name: r.author },
+            datePublished: r.createdAt.slice(0, 10),
+            reviewBody: r.body,
+            reviewRating: { '@type': 'Rating', ratingValue: r.rating, bestRating: 5 },
+          })),
+        }
       : {}),
   };
   const whatsapp = whatsappLink(h.whatsappPhone ?? h.contactPhone, `Hi, I found ${h.name} on Hostels.`);
@@ -90,6 +124,14 @@ export default async function HostelPage({ params, searchParams }: Props) {
         </ol>
       </nav>
       <Flash error={q.error} ok={q.ok} />
+      {myStay && (
+        <Card className="mb-4 flex flex-wrap items-center justify-between gap-3 border-brand/40 bg-brand-soft/50 p-4">
+          <p className="text-sm text-ink">
+            {myStay.status === 'active' ? 'You live here.' : 'You lived here.'} Residents can report issues, talk to neighbours and review their stay.
+          </p>
+          <LinkButton href={`/stay/${h.id}`} size="sm">{myStay.status === 'active' ? 'Open my hostel' : 'Review your stay'}</LinkButton>
+        </Card>
+      )}
       <PhotoGallery photos={h.photos} name={h.name} />
 
       <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_360px]">
@@ -117,8 +159,13 @@ export default async function HostelPage({ params, searchParams }: Props) {
           <section aria-labelledby="rooms-heading">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 id="rooms-heading" className="text-xl font-semibold">Rooms and prices</h2>
-              <p className="text-sm text-ink-muted">{bedsFree > 0 ? `${bedsFree} ${bedsFree === 1 ? 'bed' : 'beds'} free in total` : 'Full right now'}</p>
+              {rooms.length > 0 && (
+                <p className="text-sm text-ink-muted">{bedsFree > 0 ? `${bedsFree} ${bedsFree === 1 ? 'bed' : 'beds'} free in total` : 'Full right now'}</p>
+              )}
             </div>
+            {rooms.length === 0 && (
+              <p className="mt-2 text-sm text-ink-soft">The hostel hasn&apos;t listed its rooms and rent yet. Call or message them to ask.</p>
+            )}
             <ul className="mt-3 grid gap-3 sm:grid-cols-2">
               {rooms.map((r) => (
                 <li key={r.id}>
@@ -262,52 +309,48 @@ export default async function HostelPage({ params, searchParams }: Props) {
               <p className="mt-2 text-sm text-ink-soft">No reviews yet. Only people who have lived here for at least {REVIEW_MIN_STAY_DAYS} days can review.</p>
             )}
 
+            {!h.transparency && (
+              <p className="mt-4 rounded-xl border border-line bg-surface p-3 text-xs text-ink-soft">
+                Issue record: residents here reported too few issues in the last 90 days to show response and fix times yet.
+              </p>
+            )}
             {h.transparency && (
               <Card className="mt-4 bg-brand-soft/40">
                 <h3 className="font-medium">Issue record, last {h.transparency.windowDays} days</h3>
                 <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                   <div className="flex flex-col-reverse"><dt className="text-ink-muted">issues reported</dt><dd className="text-lg font-semibold tabular-nums">{h.transparency.reported}</dd></div>
                   <div className="flex flex-col-reverse"><dt className="text-ink-muted">resolved</dt><dd className="text-lg font-semibold tabular-nums">{h.transparency.resolvedPct}%</dd></div>
-                  <div className="flex flex-col-reverse"><dt className="text-ink-muted">median first response</dt><dd className="text-lg font-semibold tabular-nums">{h.transparency.medianHoursToFirstResponse ?? '—'} h</dd></div>
-                  <div className="flex flex-col-reverse"><dt className="text-ink-muted">median time to fix</dt><dd className="text-lg font-semibold tabular-nums">{h.transparency.medianHoursToResolve ?? '—'} h</dd></div>
+                  <div className="flex flex-col-reverse"><dt className="text-ink-muted">median first response</dt><dd className="text-lg font-semibold tabular-nums">{hoursLabel(h.transparency.medianHoursToFirstResponse)}</dd></div>
+                  <div className="flex flex-col-reverse"><dt className="text-ink-muted">median time to fix</dt><dd className="text-lg font-semibold tabular-nums">{hoursLabel(h.transparency.medianHoursToResolve)}</dd></div>
                 </dl>
                 <p className="mt-3 text-xs text-ink-muted">Reported by residents in the Hostels app. Issue details stay private to residents and the hostel.</p>
               </Card>
             )}
 
-            <ul className="mt-4 space-y-3">
-              {reviews.map((r) => (
-                <li key={r.id}>
-                  <Card className="p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="font-medium">{r.author}</span>
-                        <Badge tone={reviewSource(r.verifiedVia).strong ? 'green' : 'gray'}>{reviewSource(r.verifiedVia).label}</Badge>
-                        {r.stay && <span className="text-xs text-ink-muted">Lived here {monthLabel(r.stay.from)} – {r.stay.to ? monthLabel(r.stay.to) : 'now'}</span>}
-                      </div>
-                      <Stars value={r.rating} />
-                    </div>
-                    <p className="mt-2 text-sm text-ink-soft">{r.body}</p>
-                    {r.ownerReply && <div className="mt-3 rounded-xl bg-bg p-3 text-sm"><span className="font-medium">Reply from the hostel:</span> {r.ownerReply}</div>}
-                    {user && (
-                      <form action={flagReviewAction} className="mt-2">
-                        <input type="hidden" name="slug" value={h.slug} />
-                        <input type="hidden" name="reviewId" value={r.id} />
-                        <input type="hidden" name="reason" value="Reported from the hostel page" />
-                        <button type="submit" className="min-h-6 text-xs text-ink-muted underline-offset-2 hover:text-danger hover:underline">Report this review</button>
-                      </form>
-                    )}
-                  </Card>
-                </li>
-              ))}
-            </ul>
+            {reviews === null && <p className="mt-4 text-sm text-danger">Reviews could not be loaded right now. Refresh to try again.</p>}
+            {reviews && reviews.length > 0 && (
+              <ul className="mt-4 space-y-3">
+                {reviews.map((r) => (
+                  <li key={r.id}>
+                    <ReviewCard r={r} slug={h.slug} canFlag={!!user} />
+                  </li>
+                ))}
+              </ul>
+            )}
+            <Pagination page={reviewPage} pages={reviewPages} href={(p) => `/hostels/${h.slug}${p > 1 ? `?reviews=${p}` : ''}#reviews`} />
           </section>
         </div>
 
         <aside aria-label="Price and contact" className="space-y-4 lg:sticky lg:top-24 lg:self-start">
           <Card>
-            <div className="text-sm text-ink-muted">From</div>
-            <div className="text-3xl font-semibold tabular-nums">{rupees(minRent)}<span className="text-base font-normal text-ink-muted"> /month</span></div>
+            {minRent ? (
+              <>
+                <div className="text-sm text-ink-muted">From</div>
+                <div className="text-3xl font-semibold tabular-nums">{rupees(minRent)}<span className="text-base font-normal text-ink-muted"> /month</span></div>
+              </>
+            ) : (
+              <p className="text-sm text-ink-soft">Rooms and rent are not listed yet. Call the hostel to ask.</p>
+            )}
             {h.isVerified ? (
               <>
                 {example && cheapestFree && (
@@ -336,6 +379,11 @@ export default async function HostelPage({ params, searchParams }: Props) {
                   <LinkButton href={`/subscribe/${h.slug}`} size="lg" className="mt-4 w-full">Subscribe</LinkButton>
                 )}
               </>
+            ) : openVisit ? (
+              <div id="visit" className="mt-4 rounded-xl bg-brand-soft p-3 text-sm">
+                <p className="font-medium text-ink">Visit requested for {dateLabel(openVisit.preferredDate)}</p>
+                <p className="mt-1 text-ink-soft">The hostel will call you to confirm. You can withdraw it from <Link href="/account">your account</Link>.</p>
+              </div>
             ) : (
               <form id="visit" action={requestVisitAction} className="mt-4 space-y-3 border-t border-line pt-4">
                 <input type="hidden" name="hostelId" value={h.id} />
@@ -363,7 +411,9 @@ export default async function HostelPage({ params, searchParams }: Props) {
       <div data-sticky-actions className="sticky bottom-0 z-sticky -mx-4 mt-10 border-t border-line bg-surface/95 px-4 py-3 shadow-overlay backdrop-blur lg:hidden">
         <div className="mx-auto flex max-w-content items-center gap-3">
           <div className="min-w-0 flex-1">
-            <div className="text-lg font-semibold tabular-nums leading-tight">{rupees(minRent)}<span className="text-sm font-normal text-ink-muted"> /month</span></div>
+            <div className="text-lg font-semibold tabular-nums leading-tight">
+              {minRent ? <>{rupees(minRent)}<span className="text-sm font-normal text-ink-muted"> /month</span></> : 'Rent not listed'}
+            </div>
             <div className="truncate text-xs text-ink-muted">{h.isVerified ? 'No advance · one monthly bill' : bedsFree > 0 ? `${bedsFree} beds free` : 'Full right now'}</div>
           </div>
           <a href={phoneLink(h.contactPhone)} className={buttonClass('secondary', 'md')}>Call</a>
@@ -372,7 +422,7 @@ export default async function HostelPage({ params, searchParams }: Props) {
           ) : h.isVerified ? (
             <Link href={`/subscribe/${h.slug}`} className={buttonClass('primary', 'md')}>Subscribe</Link>
           ) : (
-            <a href="#visit" className={buttonClass('primary', 'md')}>Request visit</a>
+            <a href="#visit" className={buttonClass('primary', 'md')}>{openVisit ? 'Visit requested' : 'Request visit'}</a>
           )}
         </div>
       </div>

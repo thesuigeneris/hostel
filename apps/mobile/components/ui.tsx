@@ -135,6 +135,17 @@ export function Empty({ title, children }: { title: string; children?: ReactNode
   );
 }
 
+/** A screen that failed to load: the reason and a way to try again. */
+export function ErrorState({ message, onRetry, title = "Couldn't load this" }: { message: string | null | undefined; onRetry?: () => void; title?: string }) {
+  return (
+    <View style={[styles.empty, { borderColor: c.dangerSoft, gap: sp.sm }]}>
+      <Text style={{ fontWeight: '600', color: c.text, textAlign: 'center' }}>{title}</Text>
+      {message ? <Text accessibilityRole="alert" style={{ color: c.danger, textAlign: 'center' }}>{message}</Text> : null}
+      {onRetry && <Button small variant="secondary" title="Try again" onPress={onRetry} />}
+    </View>
+  );
+}
+
 export function Stars({ value }: { value: number | null }) {
   if (value === null) return <Text style={{ color: c.muted, fontSize: 13 }}>No reviews yet</Text>;
   const full = Math.round(value);

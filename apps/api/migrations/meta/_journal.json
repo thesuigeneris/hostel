@@ -50,6 +50,13 @@
       "when": 1793553216672,
       "tag": "0006_admin_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793554965327,
+      "tag": "0007_owner_admin",
+      "breakpoints": true
     }
   ]
 }

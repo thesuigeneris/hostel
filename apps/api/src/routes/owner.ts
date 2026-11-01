@@ -41,6 +41,7 @@ import {
   updateRoomType,
 } from '../services/listings';
 import { toHostel } from '../services/mappers';
+import { brandKit, ownerPartnerInfo } from '../services/partners';
 import { ownerPayouts } from '../services/payouts';
 import { changePlan, getPlan } from '../services/plans';
 import { addResident, endResident, hostelReviews, recordRent, rentSheet, replyToReview, roster } from '../services/residents';
@@ -65,6 +66,12 @@ export const ownerRoutes = new Hono<AppEnv>()
   )
   .post('/owner/hostels/:id/submit', async (c) => c.json(await submitHostel(c.get('user'), c.req.param('id'))))
   .post('/owner/hostels/:id/partner', async (c) => c.json(await applyForPartner(c.get('user'), c.req.param('id'))))
+  .get('/owner/hostels/:id/partner', async (c) => c.json(await ownerPartnerInfo(c.get('user'), c.req.param('id'))))
+  .get('/owner/hostels/:id/brand-kit', async (c) => c.json(await brandKit(c.get('user'), c.req.param('id'))))
+  .get('/owner/hostels/:id/insights', async (c) => {
+    const { month } = parseQuery(c, z.object({ month: monthSchema.optional() }));
+    return c.json(await ownerInsights(c.get('user'), c.req.param('id'), month));
+  })
 
   // Rooms and photos.
   .post('/owner/hostels/:id/rooms', async (c) =>
@@ -143,7 +150,6 @@ export const ownerRoutes = new Hono<AppEnv>()
 
   // Issues, reviews and reports across the owner's hostels.
   .get('/owner/issues', async (c) => c.json(await ownerIssues(c.get('user'))))
-  .get('/owner/hostels/:id/insights', async (c) => c.json(await ownerInsights(c.get('user'), c.req.param('id'))))
   .get('/owner/reports', async (c) => c.json(await openReports({ hostelIds: await hostelIdsOwnedBy(c.get('user').id) })))
   .get('/owner/hostels/:id/reviews', async (c) => {
     const h = await ownedHostel(c.get('user'), c.req.param('id'));
