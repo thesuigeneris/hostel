@@ -2,6 +2,7 @@ import { newId } from '@hostels/shared';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { AppError, notFound } from '../lib/errors';
+import { stripMetadata } from '../lib/images';
 import { sniffImage, storage } from '../lib/storage';
 import { isPrivateKey, isUploadKey, photoUrl, signedLinkSecondsLeft, type UploadPurpose, uploadPath } from '../lib/uploads';
 import { type AppEnv, requireAuth } from '../middleware/auth';
@@ -31,8 +32,11 @@ export const uploadRoutes = new Hono<AppEnv>()
       const bytes = new Uint8Array(await file.arrayBuffer());
       const ext = sniffImage(bytes);
       if (!ext) throw new AppError('validation', 'Only JPEG, PNG or WebP photos are accepted', 400);
+      // Phone photos carry GPS and device details; only the pixels are kept.
+      const clean = await stripMetadata(bytes, ext);
+      if (!clean) throw new AppError('validation', 'This photo could not be read; try another one', 400);
       const key = `${newId(PURPOSES[purpose])}.${ext}`;
-      await storage.put(key, bytes);
+      await storage.put(key, clean);
       // `path` is what to send back when attaching the photo; `url` is for showing it right away.
       return c.json({ key, path: uploadPath(key), url: photoUrl(uploadPath(key)) }, 201);
     },

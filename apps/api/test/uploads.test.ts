@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { newId } from '@hostels/shared';
 import { eq } from 'drizzle-orm';
+import sharp from 'sharp';
 import { getDb, schema } from '../src/db';
 import { setClock } from '../src/lib/clock';
 import { activeSubscriber, admin, liveHostel, newOwner, newTenant } from './fixtures';
@@ -177,5 +178,73 @@ describe('issue and community photos are private to the hostel', () => {
     }
     // A private attachment put on the public listing would never load there.
     expect((await call(`/owner/hostels/${hostel.id}/photos`, { token: ownerToken, body: { url: attachment.path } })).status).toBe(400);
+  });
+});
+
+describe('photo metadata is removed on upload', () => {
+  const MARKER = 'SECRET-MARKER';
+  const ascii = (s: string) => new TextEncoder().encode(s);
+  const contains = (bytes: Uint8Array, s: string) => Buffer.from(bytes).includes(s);
+
+  /** A 40×20 photo as a phone saves it: EXIF with GPS position and an owner tag, turned sideways by the orientation tag. */
+  const phonePhoto = async (format: 'jpeg' | 'png' | 'webp') =>
+    new Uint8Array(
+      await sharp({ create: { width: 40, height: 20, channels: 3, background: '#c33' } })
+        [format]()
+        .withExif({ IFD0: { Artist: MARKER }, IFD3: { GPSLatitudeRef: 'N', GPSLatitude: '17/1 26/1 1234/100', GPSLongitudeRef: 'E', GPSLongitude: '78/1 21/1 0/1' } })
+        .withMetadata({ orientation: 6 })
+        .toBuffer(),
+    );
+
+  /** Inserts a PNG chunk (e.g. tEXt) before IEND, with its CRC. */
+  function withPngChunk(png: Uint8Array, type: string, data: Uint8Array) {
+    const chunk = new Uint8Array(12 + data.length);
+    const view = new DataView(chunk.buffer);
+    view.setUint32(0, data.length);
+    chunk.set(ascii(type), 4);
+    chunk.set(data, 8);
+    view.setUint32(8 + data.length, Bun.hash.crc32(chunk.subarray(4, 8 + data.length)));
+    const iend = png.length - 12;
+    return new Uint8Array([...png.subarray(0, iend), ...chunk, ...png.subarray(iend)]);
+  }
+
+  async function stored(bytes: Uint8Array, name: string) {
+    const res = await upload(ownerToken, bytes, { purpose: 'listing', name });
+    expect(res.status).toBe(201);
+    const { key } = (await res.json()) as Uploaded;
+    return new Uint8Array(await (await app.request(`/uploads/${key}`)).arrayBuffer());
+  }
+
+  for (const format of ['jpeg', 'png', 'webp'] as const) {
+    test(`${format}: EXIF and GPS are gone and the photo keeps its upright orientation`, async () => {
+      const original = await phonePhoto(format);
+      const before = await sharp(original).metadata();
+      expect(before).toMatchObject({ width: 40, height: 20, orientation: 6 });
+      expect(before.exif?.length).toBeGreaterThan(0);
+      expect(contains(original, MARKER)).toBe(true);
+
+      const kept = await stored(original, `p.${format}`);
+      const after = await sharp(kept).metadata();
+      expect(after.format).toBe(format);
+      expect(after).toMatchObject({ width: 20, height: 40 });
+      expect(after.orientation).toBeUndefined();
+      expect(after.exif).toBeUndefined();
+      expect(after.xmp).toBeUndefined();
+      expect(after.icc).toBeUndefined();
+      expect(contains(kept, MARKER)).toBe(false);
+    });
+  }
+
+  test('png text chunks and bytes hidden after a jpeg go too; a broken image is refused', async () => {
+    const png = withPngChunk(await phonePhoto('png'), 'tEXt', ascii(`Comment\0${MARKER}`));
+    expect((await sharp(png).metadata()).width).toBe(40);
+    expect(contains(await stored(png, 'p.png'), MARKER)).toBe(false);
+
+    const jpeg = new Uint8Array([...(await phonePhoto('jpeg')), ...ascii(`<script>${MARKER}</script>`)]);
+    expect(contains(await stored(jpeg, 'p.jpg'), MARKER)).toBe(false);
+
+    const broken = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+    const res = await upload(ownerToken, broken, { name: 'p.png' });
+    expect(res.status).toBe(400);
   });
 });
