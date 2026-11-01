@@ -60,7 +60,10 @@ describe('role guards', () => {
   });
 
   test('tenant routes', async () => {
-    expect((await call('/me/subscription', { token: tokens.owner })).status).toBe(403);
+    // Starting a plan is tenant-only; reading one is for anyone signed in.
+    expect((await call('/hostels/x/subscribe', { token: tokens.owner, body: {} })).status).toBe(403);
+    const none = await call('/me/subscription', { token: tokens.owner });
+    expect(none).toEqual({ status: 200, body: null });
     const sub = await call('/me/subscription', { token: tokens.tenant });
     expect(sub.status).toBe(200);
     expect(sub.body.subscription.status).toBe('active');

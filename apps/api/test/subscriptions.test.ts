@@ -84,9 +84,10 @@ describe('subscribe', () => {
 });
 
 describe('cancel', () => {
-  test('needs a signed-in tenant with a plan', async () => {
+  test('needs a signed-in user with a plan', async () => {
     expect((await call('/me/subscription/cancel', { method: 'POST' })).status).toBe(401);
-    expect((await cancel(ownerToken)).status).toBe(403);
+    // Any role may hold a plan, so an owner without one gets 404, not 403.
+    expect((await cancel(ownerToken)).status).toBe(404);
     const { token } = await newTenant();
     expect((await cancel(token)).status).toBe(404);
   });
