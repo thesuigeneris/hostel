@@ -31,7 +31,9 @@ async function sweep(page: Page, paths: string[]) {
 test('resident workspace: accessible and fits every width', async ({ browser }) => {
   const page = await signIn(browser, DEMO_TENANT);
   const stays = await apiGet<{ hostel: { id: string } }[]>(DEMO_TENANT, '/me/residencies');
-  const paths = ['/account', '/stay', ...stays.slice(0, 1).map((s) => `/stay/${s.hostel.id}`), ...stays.slice(0, 1).map((s) => `/stay/${s.hostel.id}?tab=issues`)];
+  const home = stays[0]!.hostel.id;
+  const issues = await apiGet<{ id: string }[]>(DEMO_TENANT, `/hostels/${home}/issues`);
+  const paths = ['/account', '/stay', `/stay/${home}`, `/stay/${home}?tab=issues`, `/stay/${home}?tab=review`, `/issues/${issues[0]!.id}`];
   expect(await sweep(page, paths)).toEqual([]);
 });
 
@@ -39,13 +41,13 @@ test('owner workspace: accessible and fits every width', async ({ browser }) => 
   const page = await signIn(browser, DEMO_OWNER);
   const hostels = await apiGet<{ id: string }[]>(DEMO_OWNER, '/owner/hostels');
   const id = hostels[0]!.id;
-  const tabs = ['', '/rooms', '/residents', '/rent', '/community', '/reviews', '/menu', '/kitchen', '/plan'].map((t) => `/owner/hostels/${id}${t}`);
+  const tabs = ['/dashboard', '', '/rooms', '/residents', '/rent', '/community', '/reviews', '/menu', '/kitchen', '/brand', '/plan'].map((t) => `/owner/hostels/${id}${t}`);
   expect(await sweep(page, ['/owner', '/owner/visits', '/owner/issues', '/owner/payouts', '/owner/hostels/new', ...tabs])).toEqual([]);
 });
 
 test('admin workspace: accessible and fits every width', async ({ browser }) => {
   const page = await signIn(browser, ADMIN);
-  const paths = ['/admin', '/admin/listings', '/admin/partners', '/admin/billing', '/admin/payouts', '/admin/issues', '/admin/moderation', '/admin/food'];
+  const paths = ['/admin', '/admin/listings', '/admin/partners', '/admin/billing', '/admin/payouts', '/admin/issues', '/admin/moderation', '/admin/food', '/admin/audit'];
   expect(await sweep(page, paths)).toEqual([]);
 });
 

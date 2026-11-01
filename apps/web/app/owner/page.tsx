@@ -55,7 +55,8 @@ export default async function OwnerHome() {
                 {h.status === 'live' && insightFor.get(h.id) && <InsightsRow hostelId={h.id} insights={insightFor.get(h.id)!} />}
                 {h.status === 'rejected' && h.rejectionReason && <p className="mt-2 text-sm text-danger">Not approved: {h.rejectionReason}</p>}
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <LinkButton href={`/owner/hostels/${h.id}`} size="sm" variant="secondary">Manage</LinkButton>
+                  <LinkButton href={`/owner/hostels/${h.id}/dashboard`} size="sm" variant="secondary">Dashboard</LinkButton>
+                  <LinkButton href={`/owner/hostels/${h.id}`} size="sm" variant="ghost">Edit listing</LinkButton>
                   {h.status === 'live' && <LinkButton href={`/hostels/${h.slug}`} size="sm" variant="ghost">View listing</LinkButton>}
                 </div>
               </Card>

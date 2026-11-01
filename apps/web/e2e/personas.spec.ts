@@ -73,7 +73,10 @@ test('1. owner lists a hostel; admin approves it and verifies the partner', asyn
   await owner2.context().close();
 
   await admin.goto('/admin/partners');
-  await admin.locator('div.rounded-2xl', { hasText: HOSTEL }).last().getByRole('button', { name: 'Verify' }).click();
+  const application = admin.locator('div.rounded-2xl', { hasText: HOSTEL }).last();
+  // Verifying needs every brand standard ticked after the in-person visit.
+  for (const box of await application.getByRole('checkbox').all()) await box.check();
+  await application.getByRole('button', { name: 'Verify' }).click();
   await expect(admin.getByText('Partner verified')).toBeVisible();
   await admin.context().close();
 
@@ -208,7 +211,7 @@ test('5. resident reviews the hostel; the owner replies publicly', async ({ brow
   const review = visitor.locator('div.rounded-2xl', { hasText: body });
   await expect(review).toBeVisible();
   await expect(review.getByText(reply)).toBeVisible();
-  await expect(review.getByText('Reply from the hostel:')).toBeVisible();
+  await expect(review.getByText(/Reply from the hostel/)).toBeVisible();
   await visitor.context().close();
 });
 
