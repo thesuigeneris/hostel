@@ -49,7 +49,7 @@ export function uploadKeyOf(stored: string): string | null {
 
 // --- receipts -----------------------------------------------------------------
 
-const receiptKey = () => hmacHex(env.otpPepper, 'hostels:upload-receipts');
+const receiptKey = () => hmacHex(env.uploadSigningSecret, 'hostels:upload-receipts');
 const receiptSignature = (userId: string, key: string) => hmacHex(receiptKey(), `${userId}|${key}`).slice(0, 32);
 
 /** What `POST /uploads` hands back to the uploader, to attach the photo with. */
@@ -84,7 +84,7 @@ const WINDOW_SECONDS = 30 * 60;
 /** Lifetimes are rounded to 30-minute windows so a page reload within a window reuses the browser's cached copy. */
 const MIN_WINDOWS = 2;
 
-const linkKey = () => hmacHex(env.otpPepper, 'hostels:upload-links');
+const linkKey = () => hmacHex(env.uploadSigningSecret, 'hostels:upload-links');
 const linkSignature = (key: string, exp: number) => hmacHex(linkKey(), `${key}|${exp}`).slice(0, 32);
 
 /**
