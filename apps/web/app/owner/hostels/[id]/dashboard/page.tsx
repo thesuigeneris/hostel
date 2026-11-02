@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { SubmitButton } from '@/components/SubmitButton';
 import { Card, Field, Input, LinkButton, Stat } from '@/components/ui';
 import { api } from '@/lib/api';
-import { monthLabel, rupees, SHARING_LABEL, titleCase } from '@/lib/format';
+import { monthLabel, notCountedLabel, rupees, SHARING_LABEL, titleCase } from '@/lib/format';
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ month?: string }> };
 
@@ -56,9 +56,12 @@ export default async function OwnerDashboard({ params, searchParams }: Props) {
                 label="Paid online"
                 value={rupees(d.revenue.subscriptionNet)}
                 hint={
-                  d.revenue.subscriptionGross
-                    ? `${rupees(d.revenue.subscriptionGross)} less ${d.revenue.platformFeePct}% fee (${rupees(d.revenue.platformFee)})`
-                    : 'Subscription bills paid this month, after the platform fee'
+                  <>
+                    {d.revenue.subscriptionGross
+                      ? `${rupees(d.revenue.subscriptionGross)} less ${d.revenue.platformFeePct}% fee (${rupees(d.revenue.platformFee)})`
+                      : 'Subscription bills paid this month, after the platform fee'}
+                    {notCountedLabel(d.revenue.notCounted) && <span className="block">{notCountedLabel(d.revenue.notCounted)}</span>}
+                  </>
                 }
               />
             </div>

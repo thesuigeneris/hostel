@@ -121,11 +121,15 @@ Login works without SMS (phone + password). On a production standard instance, s
 
 If SMS isn't set up, make your first admin from the server shell after they sign up: `bun run admin:grant <phone>`.
 
+### Production settings
+
+With `NODE_ENV=production` the API checks its settings before it listens and refuses to start, listing every problem at once, when a secret is missing, too short or a development value, a public link isn't https (localhost is allowed, to try the production build on your machine), keys that come in pairs are half set, real Razorpay keys have no webhook secret, or an admin phone is invalid. The rules are in `apps/api/src/lib/config-check.ts`.
+
 Before real users, set these in `apps/api/.env` (the API refuses stub OTP and stub payments when `NODE_ENV=production`):
 
 - `MSG91_AUTH_KEY` and `MSG91_TEMPLATE_ID` for OTP texts (optional: without them people use passwords)
-- `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET`, with the webhook pointed at `https://<api-host>/webhooks/razorpay`
-- `OTP_PEPPER` to a long random value, `ADMIN_PHONES` to your team's numbers. It also signs private photo links and upload receipts, so changing it breaks links already handed out (they last at most 90 minutes) and photos uploaded but not yet attached.
+- `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET`, with the webhook pointed at `https://<api-host>/webhooks/razorpay`. Every bill records how it was paid: only payments taken with live keys (`rzp_live_…`) count as money in payouts and revenue; `rzp_test_…` keys are recorded as test mode and simulated payments as simulated. The API logs the mode at start (`payments: …`) and reports it as `payments` at `/`. Use different webhook secrets for Razorpay test and live mode. Payments that arrive after their bill closed are listed under **Payments to refund** on the admin billing page: refund them in the Razorpay dashboard, then mark them refunded there.
+- `OTP_PEPPER` and `UPLOAD_SIGNING_SECRET` to two different long random values (at least 32 characters each, e.g. `openssl rand -hex 32`), and `ADMIN_PHONES` to your team's numbers. `UPLOAD_SIGNING_SECRET` signs private photo links and upload receipts, so changing it breaks links already handed out (they last at most 90 minutes) and photos uploaded but not yet attached; changing `OTP_PEPPER` only voids codes already sent.
 - `API_PUBLIC_URL`, `WEB_URL` and `CORS_ORIGINS` to the real hostnames, all on HTTPS. `API_PUBLIC_URL` is where browsers and the app load photos from. Photo links are built for each response, so changing it needs no data change (set it to your computer's LAN address to load photos in the app on a phone). The website also reads it when it is built, for the images its Content Security Policy allows, so rebuild the website after changing it.
 
 See [security-review.md](security-review.md) for what was checked and what is still open.

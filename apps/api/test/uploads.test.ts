@@ -95,6 +95,28 @@ describe('photos are your own uploads, made for the purpose', () => {
     expect((await call(`/hostels/${hostel.slug}`)).body.photos).toHaveLength(2);
   });
 
+  test('receipts are signed with their own secret: rotating the OTP pepper keeps them, rotating the signing secret voids them', async () => {
+    const saved = { pepper: process.env.OTP_PEPPER, signing: process.env.UPLOAD_SIGNING_SECRET };
+    const restore = (name: 'OTP_PEPPER' | 'UPLOAD_SIGNING_SECRET', value: string | undefined) => {
+      if (value === undefined) Reflect.deleteProperty(process.env, name);
+      else process.env[name] = value;
+    };
+    try {
+      const first = await uploadPhoto(ownerToken, 'listing');
+      process.env.OTP_PEPPER = 'rotated-otp-pepper-'.padEnd(40, 'x');
+      expect((await addPhoto(ownerToken, first.upload)).status).toBe(201);
+
+      const second = await uploadPhoto(ownerToken, 'listing');
+      process.env.UPLOAD_SIGNING_SECRET = 'rotated-signing-secret-'.padEnd(40, 'y');
+      const refused = await addPhoto(ownerToken, second.upload);
+      expect(refused.status).toBe(400);
+      expect(refused.body.message).toBe('Upload the photo again, then attach it');
+    } finally {
+      restore('OTP_PEPPER', saved.pepper);
+      restore('UPLOAD_SIGNING_SECRET', saved.signing);
+    }
+  });
+
   test("a resident can only attach their own private uploads, never someone else's or a public one", async () => {
     const [resident, neighbour] = await Promise.all([newTenant('Asha'), newTenant('Bina')]);
     await activeSubscriber(resident.token, hostel.id, room.id);

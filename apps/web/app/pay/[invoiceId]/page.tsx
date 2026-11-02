@@ -6,7 +6,7 @@ import { RazorpayButton } from '@/components/RazorpayButton';
 import { SubmitButton } from '@/components/SubmitButton';
 import { Card, Flash, LinkButton, PageHeader, StatusBadge } from '@/components/ui';
 import { api, requireUser } from '@/lib/api';
-import { dateLabel, rupees } from '@/lib/format';
+import { dateLabel, refundMessage, rupees } from '@/lib/format';
 
 type Props = { params: Promise<{ invoiceId: string }>; searchParams: Promise<{ error?: string; ok?: string }> };
 
@@ -21,6 +21,7 @@ export default async function PayPage({ params, searchParams }: Props) {
     throw e;
   });
   const tenantBill = page.kind === 'tenant' ? (page.invoice as Invoice) : null;
+  const waived = page.status === 'void' && page.invoice.paymentMode === 'waived';
   const doneHref = page.kind === 'tenant' ? '/account' : `/owner/hostels/${page.invoice.hostelId}/plan`;
 
   return (
@@ -32,7 +33,7 @@ export default async function PayPage({ params, searchParams }: Props) {
           <span className="text-sm text-ink-muted">
             {dateLabel(page.invoice.periodStart)} – {dateLabel(page.invoice.periodEnd)}
           </span>
-          <StatusBadge kind="invoice" status={page.invoice.isOverdue ? 'overdue' : page.status} />
+          <StatusBadge kind="invoice" status={page.invoice.isOverdue ? 'overdue' : waived ? 'waived' : page.status} />
         </div>
         {tenantBill && (
           <dl className="mt-4 space-y-2 text-sm">
@@ -49,11 +50,25 @@ export default async function PayPage({ params, searchParams }: Props) {
         </div>
         <div className="mt-1 text-right text-xs text-ink-muted">Due {dateLabel(page.invoice.dueDate)}</div>
 
+        {page.refund && (
+          <section aria-labelledby="refund-heading" className="mt-6 rounded-xl border border-food/50 bg-food-soft p-4 text-sm text-ink">
+            <h2 id="refund-heading" className="font-medium">
+              {page.refund.status === 'refunded' ? 'Refunded' : page.refund.paymentMode === 'simulated' ? 'Payment not used' : 'Your payment will be refunded'}
+            </h2>
+            <p className="mt-1">{refundMessage(page.refund)}</p>
+            <p className="mt-1 text-xs text-ink-muted">Payment reference {page.refund.razorpayPaymentId}</p>
+          </section>
+        )}
+
         <div className="mt-6">
           {page.status === 'paid' ? (
             <LinkButton href={doneHref} size="lg" className="w-full">Done</LinkButton>
           ) : page.status === 'void' ? (
-            <p className="text-sm text-ink-soft">This bill was replaced by a newer one. Nothing to pay here.</p>
+            page.refund ? (
+              <LinkButton href={doneHref} size="lg" variant="secondary" className="w-full">Done</LinkButton>
+            ) : (
+              <p className="text-sm text-ink-soft">{waived ? 'This bill was waived.' : 'This bill was cancelled.'} Nothing to pay here.</p>
+            )
           ) : page.stub ? (
             <form action={simulatePaymentAction}>
               <input type="hidden" name="invoiceId" value={invoiceId} />

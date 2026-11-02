@@ -61,8 +61,15 @@
     {
       "idx": 8,
       "version": "7",
-      "when": 1793558375784,
-      "tag": "0008_resident_fixes",
+      "when": 1793556737336,
+      "tag": "0008_payment_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793590295650,
+      "tag": "0009_resident_fixes",
       "breakpoints": true
     }
   ]

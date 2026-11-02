@@ -1,13 +1,15 @@
 import { Empty, PageHeader, StatusBadge, Table, Td } from '@/components/ui';
 import { api } from '@/lib/api';
-import { dateLabel, monthLabel, rupees } from '@/lib/format';
+import { dateLabel, monthLabel, notCountedLabel, rupees } from '@/lib/format';
 
 export default async function PayoutsPage() {
   const data = await (await api()).owner.payouts();
+  const leftOut = notCountedLabel(data.thisMonth.notCounted);
   return (
     <>
       <PageHeader title="Payouts" subtitle="Rent and food paid online by your subscribers, minus the platform fee. Paid out monthly." />
       <h2 className="mb-3 text-lg font-semibold">So far in {monthLabel(data.thisMonth.month)}</h2>
+      {leftOut && <p className="mb-3 text-sm text-ink-soft">{leftOut}, so it is not paid out.</p>}
       {data.thisMonth.hostels.length === 0 ? <Empty title="No online payments yet this month" /> : (
         <Table head={['Hostel', 'Collected', 'Platform fee', 'You get']}>
           {data.thisMonth.hostels.map((h) => (

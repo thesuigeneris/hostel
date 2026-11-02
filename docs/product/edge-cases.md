@@ -42,9 +42,9 @@ only when a test proves it (and, for a bug, fails without the fix).
 
 | ID | Case | Must happen | Status |
 |---|---|---|---|
-| M1 | Seeker pays at minute 29; the webhook lands at minute 31, after the pending plan expired and the bill was voided. | Money is never lost silently: if the bed is still free, revive the plan and mark the bill paid; otherwise record a refund-needed entry an admin sees and can mark refunded. | **Found**: only `console.error` (`payments.ts`) |
-| M2 | Pay the same bill from two tabs, or callback and webhook together. | Paid once; the second sees "already paid". | Verify |
-| M3 | Simulated or waived payments. | Never counted as revenue, payouts or owner earnings. | Fix in progress (M7) |
+| M1 | Seeker pays at minute 29; the webhook lands at minute 31, after the pending plan expired and the bill was voided. | Money is never lost silently: if the bed is still free, revive the plan and mark the bill paid; otherwise record a refund-needed entry an admin sees and can mark refunded. | **Fixed** (PRP-04): `markOrderPaid` revives the plan or records a `payment_exceptions` row; `test/late-payments.test.ts`, `e2e/payments.spec.ts` |
+| M2 | Pay the same bill from two tabs, or callback and webhook together. | Paid once; the second sees "already paid". | **Verified** (PRP-04): two tabs now get the same order (before, the second tab overwrote it, so the first paid an order no bill pointed at); a second payment for a paid bill is recorded as a refund due. `late-payments.test.ts` › two tabs…, › a second payment…; `billing.test.ts` › checkout callback and webhook… |
+| M3 | Simulated or waived payments. | Never counted as revenue, payouts or owner earnings. | **Fixed** (PRP-04): `payment_mode`; only `razorpay_live` counts. `test/payment-modes.test.ts`, `e2e/payments.spec.ts` |
 | M4 | Skip meals in the last period of a cancelled plan. | No bill will ever carry that credit, so the skip still counts for headcount, earns ₹0, and the screen says why. | **Found**: credit silently lost (`food.ts`, `billing.ts`) |
 | M5 | Plan starting on the 29th, 30th or 31st; February in a leap year. | Periods are continuous with no gaps or overlaps (e.g. start 31 Jan → 31 Jan–27 Feb, 28 Feb–30 Mar). Bills appear 5 days ahead. | Verify |
 | M6 | Skip cut-offs at 21:59 / 22:00 IST the night before (breakfast), 08:59 / 09:00 (lunch), 14:59 / 15:00 (dinner), with the server clock in UTC. | Exactly at the cut-off is too late. The UI shows the cut-off in IST. | Verify |
@@ -80,7 +80,7 @@ only when a test proves it (and, for a bug, fails without the fix).
 | O5 | Headcount at a hostel on a platform with thousands of subscribers. | Filtered in SQL by hostel (including moves in), not by loading every active subscription. | **Found**: loads all active subscriptions (`food.ts`) |
 | O6 | Owner with zero hostels, one draft, a rejected listing, a suspended plan. | Each dashboard state has a next step; nothing blank. | Verify |
 | O7 | Admin acts on an owner's hostel through the owner routes. | Allowed, and written to the audit log with the admin as the actor. | Verify |
-| O8 | Admin waives a bill that the owner pays at the same moment. | One outcome; never "paid" and "waived" together. | Verify |
+| O8 | Admin waives a bill that the owner pays at the same moment. | One outcome; never "paid" and "waived" together. | **Verified** for waive-then-pay (PRP-04): the bill stays waived and the payment becomes a refund due (`late-payments.test.ts` › owner bills…); a check constraint forbids a paid bill marked waived |
 
 ## 6. Cross-cutting
 

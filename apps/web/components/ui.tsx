@@ -58,7 +58,8 @@ const STATUS_LABELS = {
   partner: { none: 'Not a partner', applied: 'Applied', verified: 'Verified', rejected: 'Not approved' },
   visit: { new: 'Requested', contacted: 'Hostel contacted', closed: 'Closed' },
   subscription: { pending: 'Awaiting payment', active: 'Active', cancelled: 'Cancelled', ended: 'Ended', expired: 'Expired, not paid' },
-  invoice: { due: 'Due', paid: 'Paid', void: 'Void', overdue: 'Overdue', unpaid: 'Due' },
+  invoice: { due: 'Due', paid: 'Paid', void: 'Cancelled', waived: 'Waived', overdue: 'Overdue', unpaid: 'Due' },
+  refund: { refund_due: 'Refund due', refunded: 'Refunded' },
   move: { scheduled: 'Scheduled', completed: 'Done', cancelled: 'Cancelled' },
   payout: { pending: 'Pending', paid: 'Paid' },
   residency: { invited: 'Invited', active: 'Living here', ended: 'Moved out', declined: 'Declined' },
@@ -72,6 +73,7 @@ export function StatusBadge({ status, kind }: { status: string; kind?: StatusKin
   const tone: Record<string, keyof typeof BADGES> = {
     live: 'green', verified: 'green', active: 'green', paid: 'green', resolved: 'green', closed: 'gray', contacted: 'green', completed: 'green',
     pending: 'food', applied: 'food', due: 'food', unpaid: 'food', invited: 'food', acknowledged: 'food', in_progress: 'food', scheduled: 'food', new: 'food',
+    refund_due: 'red', refunded: 'gray', waived: 'gray',
     rejected: 'red', void: 'gray', expired: 'gray', cancelled: 'gray', ended: 'gray', declined: 'gray', draft: 'gray', open: 'red', overdue: 'red', none: 'gray',
   };
   const labels: Record<string, string> | undefined = kind ? STATUS_LABELS[kind] : undefined;

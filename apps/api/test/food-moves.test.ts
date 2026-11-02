@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { setClock } from '../src/lib/clock';
 import { runJobs } from '../src/services/jobs';
-import { activeSubscriber, admin, liveHostel, newOwner, newTenant, roomBeds } from './fixtures';
+import { activeSubscriber, admin, liveHostel, liveSubscriber, newOwner, newTenant, roomBeds } from './fixtures';
 import { call, resetDb } from './helpers';
 
 let ownerToken: string;
@@ -183,11 +183,13 @@ describe('moves', () => {
 });
 
 describe('payouts', () => {
-  test('gross of paid bills by paid month, fee %, idempotent, mark paid', async () => {
+  test('gross of bills paid with real money by paid month, fee %, idempotent, mark paid', async () => {
     const a = await newTenant();
     const b = await newTenant();
-    await activeSubscriber(a.token, hostel.id, room.id, 'full'); // 16000
-    await activeSubscriber(b.token, hostel.id, room.id, 'none'); // 10000
+    const demo = await newTenant();
+    await liveSubscriber(a.token, hostel.id, room.id, 'full'); // 16000
+    await liveSubscriber(b.token, hostel.id, room.id, 'none'); // 10000
+    await activeSubscriber(demo.token, hostel.id, room.id, 'full'); // 16000 simulated: never paid out
     expect((await call('/admin/payouts/generate', { token: adminToken, body: { month: '2026-11' } })).body.error).toBe('invalid_state');
 
     setClock('2026-12-02T06:00:00Z');

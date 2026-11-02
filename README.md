@@ -74,6 +74,7 @@ To see what is live, check the API's startup lines or `GET /`:
 | `DEMO_LOGIN` | on outside production | Demo accounts (everyone the seed creates) in development. Ignored on a production standard instance, where demo accounts can never sign in. |
 | `ADMIN_PHONES` | none (`.env.example` sets the demo admin `9000000001`) | Comma-separated 10-digit phones that become admin after an **OTP-verified** login. A password sign-up never becomes admin this way. Removing a phone takes admin away on its next request (it drops to owner). Without SMS, grant admin on the server with `bun run admin:grant <phone>` (in `apps/api`). |
 | `OTP_PEPPER` | `dev-otp-pepper` | Secret mixed into stored OTP hashes. Set a long random value anywhere but your laptop. |
+| `UPLOAD_SIGNING_SECRET` | `dev-upload-signing-secret` | Signs upload receipts and private photo links. A different long random value from `OTP_PEPPER`. With `NODE_ENV=production` the API won't start on either development value; see [Production settings](docs/RUN.md#production-settings). |
 | `CORS_ORIGINS` | `http://localhost:3000,http://localhost:8081` | Browser origins allowed to call the API directly, such as the Expo web preview. The website calls the API from its server, so it needs no entry. |
 | `API_PUBLIC_URL` | `http://localhost:<PORT>` | Public base URL of the API. Used in links to uploaded photos. |
 | `WEB_URL` | `http://localhost:3000` | Website URL. Not read by the API yet. |

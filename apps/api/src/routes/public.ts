@@ -5,8 +5,8 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb, pingDb, schema } from '../db';
 import { notFound } from '../lib/errors';
-import { isMsg91Configured } from '../lib/msg91';
-import { isRazorpayConfigured } from '../lib/razorpay';
+import { otpMode } from '../lib/msg91';
+import { instancePaymentMode, isRazorpayConfigured } from '../lib/razorpay';
 import { parseQuery } from '../lib/validate';
 import type { AppEnv } from '../middleware/auth';
 import { listFoodPartners, publicMenu } from '../services/food';
@@ -29,13 +29,15 @@ async function liveHostel(slug: string) {
 export const publicRoutes = new Hono<AppEnv>()
   .get('/', async (c) => {
     const razorpay = isRazorpayConfigured() ? 'live' : 'stub';
-    const msg91 = isMsg91Configured() ? 'live' : 'stub';
+    // `off` (production without SMS) is not dev mode: people log in with a password and no fixed code works.
+    const msg91 = otpMode();
     const health: Health = {
       ok: true,
       service: 'hostels-api',
       version: API_VERSION,
       db: (await pingDb()) ? 'up' : 'down',
       razorpay,
+      payments: instancePaymentMode(),
       msg91,
       devMode: razorpay === 'stub' || msg91 === 'stub',
     };

@@ -37,6 +37,9 @@ export async function saveChecklistAction(form: FormData) {
 export async function voidOwnerBillAction(form: FormData) {
   await run(back(form, '/admin/billing'), async () => (await api()).admin.voidOwnerInvoice(str(form, 'id'), str(form, 'reason')), { ok: 'Bill waived' });
 }
+export async function markRefundedAction(form: FormData) {
+  await run(back(form, '/admin/billing'), async () => (await api()).admin.markRefunded(str(form, 'id'), str(form, 'note')), { ok: 'Marked as refunded' });
+}
 export async function rejectPartnerAction(form: FormData) {
   await run(back(form), async () => publicChange((await api()).admin.rejectPartner(str(form, 'hostelId'), str(form, 'reason'))), { ok: 'Application declined' });
 }

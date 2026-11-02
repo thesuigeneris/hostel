@@ -79,6 +79,9 @@ export type OwnerPartnerInfo = {
 
 export const ownerInvoiceVoidSchema = z.object({ reason: z.string().trim().min(3).max(300) });
 
+/** Marking a payment exception refunded records how (for example the Razorpay refund id). */
+export const paymentRefundSchema = z.object({ note: z.string().trim().min(3).max(300) });
+
 export type AdminOwnerPlan = {
   id: string;
   hostelId: string;
@@ -113,6 +116,7 @@ export const AUDIT_ACTIONS = [
   'review.hide',
   'review.unhide',
   'owner_invoice.void',
+  'payment.refunded',
   'jobs.run',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

@@ -25,6 +25,36 @@ export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number];
 export const INVOICE_STATUSES = ['due', 'paid', 'void'] as const;
 export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
 
+/**
+ * How a bill was settled; null while it is due, or when it was voided by the system (a plan change, a cancelled stay).
+ * - `razorpay_live`: Razorpay with live keys (`rzp_live_`). The only real money.
+ * - `razorpay_test`: Razorpay with test keys (`rzp_test_`). Moves no money.
+ * - `simulated`: the "Simulate payment" button, or a stub-signed checkout, on a dev or demo instance.
+ * - `waived`: an admin waived an owner bill. The bill is void; nothing was paid.
+ */
+export const PAYMENT_MODES = ['razorpay_live', 'razorpay_test', 'simulated', 'waived'] as const;
+export type PaymentMode = (typeof PAYMENT_MODES)[number];
+/** The modes that are real money. Payouts, revenue and owner insights count only these. */
+export const REAL_MONEY_MODES = ['razorpay_live'] as const satisfies readonly PaymentMode[];
+/** Bills paid in a period that money figures leave out because no real money moved, in rupees. */
+export type NotCounted = { simulated: number; test: number };
+
+/**
+ * Why a payment could not be applied to its bill, so it has to be refunded. Recorded instead of losing the money when
+ * a payment lands after its bill stopped being payable (the bed hold expired, the plan changed, an admin waived it).
+ */
+export const PAYMENT_EXCEPTION_REASONS = [
+  'bed_taken',
+  'has_other_plan',
+  'hostel_unavailable',
+  'bill_cancelled',
+  'bill_waived',
+  'duplicate_payment',
+] as const;
+export type PaymentExceptionReason = (typeof PAYMENT_EXCEPTION_REASONS)[number];
+export const PAYMENT_EXCEPTION_STATUSES = ['refund_due', 'refunded'] as const;
+export type PaymentExceptionStatus = (typeof PAYMENT_EXCEPTION_STATUSES)[number];
+
 export const MOVE_STATUSES = ['scheduled', 'completed', 'cancelled'] as const;
 export type MoveStatus = (typeof MOVE_STATUSES)[number];
 
@@ -244,6 +274,7 @@ export type Invoice = {
   razorpayOrderId: string | null;
   razorpayPaymentId: string | null;
   paidAt: string | null;
+  paymentMode: PaymentMode | null;
   /** Derived on read. */
   isOverdue: boolean;
 };
@@ -295,8 +326,12 @@ export type Health = {
   service: 'hostels-api';
   version: string;
   db: 'up' | 'down';
+  /** `live` means Razorpay keys are configured (test or live keys); `payments` says which. */
   razorpay: 'live' | 'stub';
-  msg91: 'live' | 'stub';
+  /** How payments taken now are recorded. Only `razorpay_live` is real money. */
+  payments: Exclude<PaymentMode, 'waived'>;
+  /** How OTP login works: real texts, the fixed development code, or off (phone + password only). */
+  msg91: 'live' | 'stub' | 'off';
   devMode: boolean;
 };
 
@@ -490,6 +525,7 @@ export type OwnerInvoice = {
   razorpayOrderId: string | null;
   razorpayPaymentId: string | null;
   paidAt: string | null;
+  paymentMode: PaymentMode | null;
   createdAt: string;
   isOverdue: boolean;
 };
@@ -523,6 +559,31 @@ export type PaymentPage = {
   invoice: Invoice | OwnerInvoice;
   keyId: string;
   stub: boolean;
+  /** A payment for this bill that arrived when it could no longer be applied, and is (or was) refunded. */
+  refund: PaymentException | null;
+};
+
+/** A payment we received but could not apply to its bill: a refund is owed until an admin marks it refunded. */
+export type PaymentException = {
+  id: string;
+  billKind: 'tenant' | 'owner';
+  billId: string;
+  /** The person who paid: the tenant, or the owner for a plan bill. */
+  userId: string;
+  amount: number;
+  paymentMode: Exclude<PaymentMode, 'waived'>;
+  reason: PaymentExceptionReason;
+  status: PaymentExceptionStatus;
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  createdAt: string;
+  refundedAt: string | null;
+  refundNote: string | null;
+};
+
+export type AdminPaymentException = PaymentException & {
+  hostelName: string;
+  payer: { id: string; name: string; phone: string };
 };
 
 export type CheckoutOrder = { invoiceId: string; orderId: string; amount: number; currency: 'INR'; keyId: string; stub: boolean };
@@ -553,7 +614,27 @@ export type Subscriber = {
 export type PayoutView = Payout & { hostelName: string };
 export type OwnerPayouts = {
   history: PayoutView[];
-  thisMonth: { month: string; hostels: { hostelId: string; hostelName: string; grossAmount: number; platformFee: number; netAmount: number }[] };
+  thisMonth: {
+    month: string;
+    /** Real money only (Razorpay live). */
+    hostels: { hostelId: string; hostelName: string; grossAmount: number; platformFee: number; netAmount: number }[];
+    /** Subscriber bills paid this month without real money, which payouts leave out. */
+    notCounted: NotCounted;
+  };
+};
+
+/** What the platform took in for a month: real money only, with what was left out shown separately. */
+export type PlatformRevenue = {
+  /** The IST month covered, `YYYY-MM`. */
+  month: string;
+  /** Tenant bills (rent + food − credits) paid with real money in the month. */
+  subscriptionGross: number;
+  /** Our fee on those bills, at each hostel's fee %. */
+  platformFees: number;
+  /** Owner plan bills paid with real money in the month. */
+  ownerPlans: number;
+  /** Bills paid in the month without real money (simulated, or Razorpay test mode). Never in the figures above. */
+  notCounted: { tenant: NotCounted; owner: NotCounted };
 };
 export type Area = { area: string; count: number; slug: string };
 export type AdminStats = {
@@ -567,14 +648,10 @@ export type AdminStats = {
   overdueOwnerBills: number;
   suspendedHostels: number;
   escalatedIssues: number;
-  /** Monthly recurring revenue in rupees, from what is in force today. */
-  revenue: {
-    /** Rent + food of active subscriptions (the gross we bill tenants each month). */
-    subscriptionGross: number;
-    /** Our platform fee on that gross, at each hostel's fee %. */
-    platformFees: number;
-    /** Owner software plans that are paying (not in trial, not suspended). */
-    ownerPlans: number;
+  /** Payments received that could not be applied and still have to be refunded. */
+  refundsDue: number;
+  /** This month so far, in rupees, counting real money only. */
+  revenue: PlatformRevenue & {
     /** Pro and Partner hostels still in their free trial. */
     trialHostels: number;
   };
@@ -610,12 +687,17 @@ export type OwnerInsights = {
     activeSubscribers: number;
     rooms: { roomTypeId: string; sharing: SharingType; totalBeds: number; bedsAvailable: number; monthlyRent: number }[];
   } | null;
-  /** Subscription money is what tenants paid online this month; rent is the owner's own ledger. */
+  /**
+   * Subscription money is what tenants paid online this month with real money (what payouts are made from); rent is the
+   * owner's own ledger.
+   */
   revenue: {
     subscriptionGross: number;
     platformFeePct: number;
     platformFee: number;
     subscriptionNet: number;
+    /** Subscription bills paid this month without real money (simulated or Razorpay test mode), left out above. */
+    notCounted: NotCounted;
     rentDue: number;
     rentCollected: number;
     planBillDue: number;

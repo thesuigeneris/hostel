@@ -30,6 +30,12 @@ export const DEFAULT_PLATFORM_FEE_PCT = 10;
 export const INVOICE_LEAD_DAYS = 5;
 export const OVERDUE_GRACE_DAYS = 7;
 export const PENDING_SUBSCRIPTION_TTL_MINUTES = 30;
+/**
+ * What a payer is told when a payment arrives too late to use (the bed hold expired and the bed went, the bill was
+ * waived): the refund reaches them within this many days. Not in the specs; confirm with the owner (open question in
+ * PRPs/00-completion-map.md).
+ */
+export const REFUND_WITHIN_DAYS = 7;
 
 export function planIncludesMeal(plan: MealPlan, meal: Meal): boolean {
   return FOOD_PLANS[plan].meals.includes(meal);

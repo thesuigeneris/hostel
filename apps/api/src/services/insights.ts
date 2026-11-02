@@ -1,11 +1,11 @@
 import type { IssueCategory, OwnerInsights, User } from '@hostels/shared';
-import { addDays, computePayout, FOOD_PLANS, istInstant, OWNER_PLANS, TRANSPARENCY_WINDOW_DAYS } from '@hostels/shared';
-import { and, asc, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
+import { addDays, computePayout, istInstant, TRANSPARENCY_WINDOW_DAYS } from '@hostels/shared';
+import { and, asc, eq, gte, isNull, lt, sql } from 'drizzle-orm';
 import { getDb, schema } from '../db';
 import { clock } from '../lib/clock';
 import { ownedHostel, planFor } from './access';
 import { ratingsFor } from './listings';
-import { monthBounds } from './payouts';
+import { monthBounds, realTenantMoney, tenantNotCounted } from './money';
 import { rentSheet } from './residents';
 
 const INSIGHT_DAYS = 30;
@@ -103,7 +103,7 @@ export async function ownerInsights(user: User, hostelId: string, month = clock.
   let revenue: OwnerInsights['revenue'] = null;
   if (!locked) {
     const { from, to } = monthBounds(month);
-    const [[subscribers], [gross], [planDue], rent] = await Promise.all([
+    const [[subscribers], [gross], [planDue], rent, leftOut] = await Promise.all([
       db
         .select({ n: sql<number>`count(*)::int` })
         .from(schema.subscriptions)
@@ -111,12 +111,13 @@ export async function ownerInsights(user: User, hostelId: string, month = clock.
       db
         .select({ n: sql<number>`coalesce(sum(${schema.invoices.totalAmount}), 0)::int` })
         .from(schema.invoices)
-        .where(and(eq(schema.invoices.hostelId, h.id), eq(schema.invoices.status, 'paid'), gte(schema.invoices.paidAt, from), lt(schema.invoices.paidAt, to))),
+        .where(and(eq(schema.invoices.hostelId, h.id), realTenantMoney(), gte(schema.invoices.paidAt, from), lt(schema.invoices.paidAt, to))),
       db
         .select({ n: sql<number>`coalesce(sum(${schema.ownerInvoices.amount}), 0)::int` })
         .from(schema.ownerInvoices)
         .where(and(eq(schema.ownerInvoices.hostelId, h.id), eq(schema.ownerInvoices.status, 'due'))),
       rentSheet(user, h.id, month),
+      tenantNotCounted(month, [h.id]),
     ]);
     occupancy = {
       totalBeds,
@@ -133,6 +134,7 @@ export async function ownerInsights(user: User, hostelId: string, month = clock.
       platformFeePct: h.platformFeePct,
       platformFee: payout.platformFee,
       subscriptionNet: payout.netAmount,
+      notCounted: leftOut,
       rentDue: rent.totals.due,
       rentCollected: rent.totals.collected,
       planBillDue: planDue?.n ?? 0,
@@ -167,34 +169,4 @@ export async function ownerInsights(user: User, hostelId: string, month = clock.
     reviews: { rating: ratings.rating, count: ratings.reviewCount, awaitingReply: unreplied?.n ?? 0 },
     visits: { new: visitsByStatus.new ?? 0, contacted: visitsByStatus.contacted ?? 0 },
   };
-}
-
-/** Monthly recurring revenue from what is in force today. */
-export async function revenueSummary() {
-  const db = getDb();
-  const today = clock.today();
-  const subs = await db
-    .select({ rent: schema.roomTypes.monthlyRent, mealPlan: schema.subscriptions.mealPlan, feePct: schema.hostels.platformFeePct })
-    .from(schema.subscriptions)
-    .innerJoin(schema.roomTypes, eq(schema.roomTypes.id, schema.subscriptions.roomTypeId))
-    .innerJoin(schema.hostels, eq(schema.hostels.id, schema.subscriptions.hostelId))
-    .where(eq(schema.subscriptions.status, 'active'));
-  let subscriptionGross = 0;
-  let platformFees = 0;
-  for (const s of subs) {
-    const gross = s.rent + FOOD_PLANS[s.mealPlan].price;
-    subscriptionGross += gross;
-    platformFees += Math.round((gross * s.feePct) / 100);
-  }
-  const plans = await db
-    .select({ plan: schema.ownerPlans.plan, trialEndsOn: schema.ownerPlans.trialEndsOn })
-    .from(schema.ownerPlans)
-    .where(and(inArray(schema.ownerPlans.plan, ['pro', 'partner']), eq(schema.ownerPlans.suspended, false)));
-  let ownerPlans = 0;
-  let trialHostels = 0;
-  for (const p of plans) {
-    if (p.trialEndsOn && p.trialEndsOn >= today) trialHostels++;
-    else ownerPlans += OWNER_PLANS[p.plan].price;
-  }
-  return { subscriptionGross, platformFees, ownerPlans, trialHostels };
 }
