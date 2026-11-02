@@ -325,7 +325,8 @@ export type Health = {
   razorpay: 'live' | 'stub';
   /** How payments taken now are recorded. Only `razorpay_live` is real money. */
   payments: Exclude<PaymentMode, 'waived'>;
-  msg91: 'live' | 'stub';
+  /** How OTP login works: real texts, the fixed development code, or off (phone + password only). */
+  msg91: 'live' | 'stub' | 'off';
   devMode: boolean;
 };
 
