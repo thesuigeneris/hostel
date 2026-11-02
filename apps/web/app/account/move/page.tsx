@@ -24,7 +24,10 @@ export default async function MovePage({ searchParams }: Props) {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
-      <PageHeader title="Move hostel or room" subtitle="Your bed at the new place is held as soon as you schedule. Bills after the move date use the new rent." />
+      <PageHeader
+        title="Move hostel or room"
+        subtitle="Your bed at the new place is held as soon as you schedule. Bills for periods starting on or after the move date use the new rent. No fee."
+      />
       <Flash error={q.error} />
       <Card>
         <form className="flex items-end gap-2">
@@ -58,9 +61,12 @@ export default async function MovePage({ searchParams }: Props) {
             <Field label="Move date" hint="Tomorrow or later.">
               <Input type="date" name="moveDate" min={earliest} defaultValue={earliest} required />
             </Field>
+            <p className="text-xs text-ink-muted">
+              If that hostel stops taking residents before your move date, we cancel the move, release the bed and you stay where you are.
+            </p>
             <div className="flex gap-2">
-              <SubmitButton>Schedule move</SubmitButton>
-              <LinkButton href="/account" variant="ghost">Cancel</LinkButton>
+              <SubmitButton pendingText="Scheduling…">Schedule move</SubmitButton>
+              <LinkButton href="/account" variant="ghost">Back</LinkButton>
             </div>
           </form>
         )}

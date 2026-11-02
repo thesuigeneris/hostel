@@ -36,7 +36,11 @@ export function Card({ children, style, tone }: { children: ReactNode; style?: V
 }
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'food' | 'danger';
-export function Button({ title, onPress, variant = 'primary', disabled, busy, small, style }: { title: string; onPress: () => void; variant?: Variant; disabled?: boolean; busy?: boolean; small?: boolean; style?: ViewStyle }) {
+/**
+ * `label` is the screen-reader name when the visible title needs context ("Skip (save ₹80): lunch on Tue 10 Nov").
+ * Small buttons are 34 pt tall and reach out 5 pt each way, so the touch target is 44 pt.
+ */
+export function Button({ title, onPress, variant = 'primary', disabled, busy, small, style, label }: { title: string; onPress: () => void; variant?: Variant; disabled?: boolean; busy?: boolean; small?: boolean; style?: ViewStyle; label?: string }) {
   const v = {
     primary: { bg: c.brand, fg: c.white, border: c.brand },
     secondary: { bg: c.surface, fg: c.text, border: c.border },
@@ -47,6 +51,9 @@ export function Button({ title, onPress, variant = 'primary', disabled, busy, sm
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label ?? title}
+      accessibilityState={{ disabled: !!(disabled || busy), busy: !!busy }}
+      hitSlop={small ? 5 : undefined}
       onPress={onPress}
       disabled={disabled || busy}
       style={({ pressed }) => [
@@ -96,7 +103,7 @@ export function StatusBadge({ status }: { status: string }) {
 
 export function Chip({ label, active, onPress }: { label: string; active?: boolean; onPress: () => void }) {
   return (
-    <Pressable accessibilityRole="button" accessibilityState={{ selected: !!active }} onPress={onPress} style={[styles.chip, active && { backgroundColor: c.brand, borderColor: c.brand }]}>
+    <Pressable accessibilityRole="button" accessibilityState={{ selected: !!active }} hitSlop={6} onPress={onPress} style={[styles.chip, active && { backgroundColor: c.brand, borderColor: c.brand }]}>
       <Text style={{ color: active ? c.white : c.soft, fontSize: 13, fontWeight: '500' }}>{label}</Text>
     </Pressable>
   );

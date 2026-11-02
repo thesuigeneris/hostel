@@ -13,7 +13,8 @@ import { titleCase, timeAgo } from '@/lib/format';
 import { SubmitButton } from './SubmitButton';
 import { Back, Badge, Card, Empty, Field, Input, Select, StatusBadge, Textarea } from './ui';
 
-const tiny = 'text-xs text-ink-muted hover:text-brand';
+// Small text buttons still get a 24 px target (WCAG 2.2 target size).
+const tiny = 'inline-flex min-h-6 items-center rounded text-xs text-ink-muted hover:text-brand';
 const REPORT_REASONS = ['Rude or abusive', 'Spam or scam', 'Shares personal data', 'Something else'];
 
 export function IssueList({ issues, emptyText = 'No issues reported. Nice.' }: { issues: IssueView[]; emptyText?: string }) {
@@ -59,8 +60,8 @@ export function IssueForm({ hostelId, back }: { hostelId: string; back: string }
           </Field>
           <Field label="What's wrong?"><Input name="title" required minLength={4} maxLength={120} placeholder="Geyser on 2nd floor not working" /></Field>
         </div>
-        <Field label="Details"><Textarea name="description" maxLength={2000} placeholder="Since when, which room, anything that helps" /></Field>
-        <Field label="Photo" hint="Optional. JPEG, PNG or WebP up to 5 MB."><input type="file" name="photo" accept="image/jpeg,image/png,image/webp" className="text-sm" /></Field>
+        <Field label="Details" optional hint="Up to 2,000 characters."><Textarea name="description" maxLength={2000} placeholder="Since when, which room, anything that helps" /></Field>
+        <Field label="Photo" hint="Optional. JPEG, PNG or WebP up to 5 MB. Only residents, the hostel and our team can see it."><input type="file" name="photo" accept="image/jpeg,image/png,image/webp" className="text-sm" /></Field>
         <SubmitButton pendingText="Sending…">Report issue</SubmitButton>
       </form>
     </Card>
@@ -75,7 +76,15 @@ export function Feed({ hostelId, posts, back, isOwner = false }: { hostelId: str
         <form action={postAction} className="space-y-3">
           <Back to={back} />
           <input type="hidden" name="hostelId" value={hostelId} />
-          <Textarea name="body" aria-label="Message" required maxLength={1000} placeholder={isOwner ? 'Post an announcement for residents' : 'Ask your neighbours, share something, plan a movie night…'} />
+          <Textarea
+            name="body"
+            aria-label="Message"
+            aria-describedby="post-hint"
+            required
+            maxLength={1000}
+            placeholder={isOwner ? 'Post an announcement for residents' : 'Ask your neighbours, share something, plan a movie night…'}
+          />
+          <p id="post-hint" className="text-xs text-ink-muted">Up to 1,000 characters. Only residents and the hostel see the board; photos stay private to them.</p>
           <div className="flex flex-wrap items-center gap-3">
             <Select name="kind" aria-label="Post type" defaultValue={isOwner ? 'announcement' : 'general'} className="w-auto">
               {kinds.map((k) => <option key={k} value={k}>{titleCase(k)}</option>)}
@@ -114,7 +123,13 @@ export function Feed({ hostelId, posts, back, isOwner = false }: { hostelId: str
               </button>
             </form>
             {(p.mine || isOwner) && (
-              <form action={deletePostAction}><Back to={back} /><input type="hidden" name="postId" value={p.id} /><button type="submit" className={tiny}>Delete</button></form>
+              <form action={deletePostAction}>
+                <Back to={back} />
+                <input type="hidden" name="postId" value={p.id} />
+                <SubmitButton variant="ghost" size="xs" confirm="Delete this post? It is removed for everyone." pendingText="Deleting…">
+                  Delete
+                </SubmitButton>
+              </form>
             )}
             {!p.mine && (
               <details>
@@ -146,7 +161,13 @@ export function Feed({ hostelId, posts, back, isOwner = false }: { hostelId: str
                   <span className="text-xs text-ink-muted">{timeAgo(c.createdAt)}</span>
                   <span className="ml-2 inline-flex gap-2">
                     {(c.mine || isOwner) && (
-                      <form action={deletePostAction} className="inline"><Back to={back} /><input type="hidden" name="commentId" value={c.id} /><button type="submit" className={tiny}>Delete</button></form>
+                      <form action={deletePostAction} className="inline">
+                        <Back to={back} />
+                        <input type="hidden" name="commentId" value={c.id} />
+                        <SubmitButton variant="ghost" size="xs" confirm="Delete this reply?" pendingText="Deleting…">
+                          Delete
+                        </SubmitButton>
+                      </form>
                     )}
                     {!c.mine && (
                       <form action={reportContentAction} className="inline"><Back to={back} /><input type="hidden" name="type" value="comment" /><input type="hidden" name="id" value={c.id} /><button type="submit" className={tiny}>Report</button></form>
@@ -162,8 +183,8 @@ export function Feed({ hostelId, posts, back, isOwner = false }: { hostelId: str
           <form action={commentAction} className="mt-3 flex gap-2">
             <Back to={back} />
             <input type="hidden" name="postId" value={p.id} />
-            <Input name="body" required maxLength={500} placeholder="Reply" className="h-9" />
-            <SubmitButton size="sm" variant="secondary">Reply</SubmitButton>
+            <Input name="body" required maxLength={500} placeholder="Reply" aria-label={`Reply to ${p.author}`} className="h-9" />
+            <SubmitButton size="sm" variant="secondary" pendingText="Sending…">Reply</SubmitButton>
           </form>
         </Card>
       ))}

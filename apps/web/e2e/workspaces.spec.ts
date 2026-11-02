@@ -33,7 +33,16 @@ test('resident workspace: accessible and fits every width', async ({ browser }) 
   const stays = await apiGet<{ hostel: { id: string } }[]>(DEMO_TENANT, '/me/residencies');
   const home = stays[0]!.hostel.id;
   const issues = await apiGet<{ id: string }[]>(DEMO_TENANT, `/hostels/${home}/issues`);
-  const paths = ['/account', '/stay', `/stay/${home}`, `/stay/${home}?tab=issues`, `/stay/${home}?tab=review`, `/issues/${issues[0]!.id}`];
+  const paths = [
+    '/account',
+    '/account/move',
+    '/stay',
+    `/stay/${home}`,
+    `/stay/${home}?tab=issues`,
+    `/stay/${home}?tab=neighbours`,
+    `/stay/${home}?tab=review`,
+    ...issues.map((i) => `/issues/${i.id}`),
+  ];
   expect(await sweep(page, paths)).toEqual([]);
 });
 

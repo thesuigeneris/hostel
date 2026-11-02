@@ -1,4 +1,4 @@
-import { dateLabel, FOOD_PLANS, GENDER_LABEL, type HostelDetail, istDate, MEALS, type MenuWeek, monthLabel, type MyResidency, type Review, reviewSource, rupees, SHARING_LABEL, weekday } from '@hostels/shared';
+import { dateLabel, EDITED_AFTER_REPLY, FOOD_PLANS, GENDER_LABEL, type HostelDetail, istDate, MEALS, type MenuWeek, monthLabel, type MyResidency, type Review, reviewEdits, reviewSource, rupees, SHARING_LABEL, weekday } from '@hostels/shared';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Linking, Pressable, Text, View } from 'react-native';
@@ -237,6 +237,8 @@ export default function HostelScreen() {
               {r.ownerReply && (
                 <View style={{ backgroundColor: theme.colors.bg, borderRadius: theme.radius.sm, padding: theme.spacing.md }}>
                   <P><Text style={{ fontWeight: '600', color: theme.colors.text }}>Reply from the hostel:</Text> {r.ownerReply}</P>
+                  {/* The reply answers an earlier version of the review; say so, so it isn't read out of context. */}
+                  {reviewEdits(r).editedAfterReply && <P muted>{EDITED_AFTER_REPLY}.</P>}
                 </View>
               )}
               {user && (

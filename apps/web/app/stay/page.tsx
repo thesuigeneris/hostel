@@ -25,11 +25,29 @@ export default async function StayPage({ searchParams }: Props) {
 
       {invites.map((s) => (
         <Card key={s.id} className="mb-4 border-brand bg-brand-soft/40">
-          <div className="font-medium">{s.hostel.name} added you as a resident</div>
-          <p className="mt-1 text-sm text-ink-soft">Since {dateLabel(s.startDate)}. Accept to join the hostel community and report issues.</p>
-          <div className="mt-3 flex gap-2">
-            <form action={respondInviteAction}><input type="hidden" name="id" value={s.id} /><input type="hidden" name="accept" value="1" /><SubmitButton size="sm">Accept</SubmitButton></form>
-            <form action={respondInviteAction}><input type="hidden" name="id" value={s.id} /><SubmitButton size="sm" variant="ghost">Not me</SubmitButton></form>
+          <h2 className="font-medium">{s.hostel.name} added you as a resident</h2>
+          <p className="mt-1 text-sm text-ink-soft">
+            Since {dateLabel(s.startDate)}, in {s.hostel.area}. Accept to join the hostel community and report issues. You can review the hostel
+            after two weeks here.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <form action={respondInviteAction}>
+              <input type="hidden" name="id" value={s.id} />
+              <input type="hidden" name="accept" value="1" />
+              <SubmitButton size="sm" pendingText="Accepting…" aria-label={`Accept: join ${s.hostel.name}`}>Accept</SubmitButton>
+            </form>
+            <form action={respondInviteAction}>
+              <input type="hidden" name="id" value={s.id} />
+              <SubmitButton
+                size="sm"
+                variant="ghost"
+                pendingText="Declining…"
+                confirm={`Decline the invite from ${s.hostel.name}? They would have to add you again.`}
+                aria-label={`Not me: decline the invite from ${s.hostel.name}`}
+              >
+                Not me
+              </SubmitButton>
+            </form>
           </div>
         </Card>
       ))}
@@ -55,7 +73,17 @@ export default async function StayPage({ searchParams }: Props) {
               <LinkButton href={`/stay/${s.hostel.id}?tab=issues`} variant="secondary" size="sm">Report an issue</LinkButton>
               {s.canReview && <LinkButton href={`/stay/${s.hostel.id}?tab=review`} variant="secondary" size="sm">{s.hasReview ? 'Edit review' : 'Write a review'}</LinkButton>}
               {s.source === 'owner' ? (
-                <form action={moveOutAction}><input type="hidden" name="id" value={s.id} /><SubmitButton size="sm" variant="ghost" confirm="Mark yourself as moved out?">I moved out</SubmitButton></form>
+                <form action={moveOutAction}>
+                  <input type="hidden" name="id" value={s.id} />
+                  <SubmitButton
+                    size="sm"
+                    variant="ghost"
+                    pendingText="Saving…"
+                    confirm={`Mark yourself as moved out of ${s.hostel.name}? You leave its community board. You can still review your stay and read issues you reported.`}
+                  >
+                    I've moved out
+                  </SubmitButton>
+                </form>
               ) : (
                 <LinkButton href="/account" variant="ghost" size="sm">Move or cancel plan</LinkButton>
               )}
@@ -75,9 +103,17 @@ export default async function StayPage({ searchParams }: Props) {
                   <Link href={`/hostels/${s.hostel.slug}`} className="font-medium">{s.hostel.name}</Link>
                   <div className="text-sm text-ink-soft">{dateLabel(s.startDate)} – {dateLabel(s.endDate)}</div>
                 </div>
-                {s.canReview ? (
-                  <LinkButton href={`/stay/${s.hostel.id}?tab=review`} variant="secondary" size="sm">{s.hasReview ? 'Edit review' : 'Review your stay'}</LinkButton>
-                ) : s.hasReview ? <Badge tone="green">Reviewed</Badge> : null}
+                <div className="flex flex-wrap items-center gap-2">
+                  <LinkButton href={`/stay/${s.hostel.id}?tab=issues`} variant="ghost" size="sm" aria-label={`Your issues at ${s.hostel.name}`}>
+                    Your issues
+                  </LinkButton>
+                  {s.canReview ? (
+                    <LinkButton href={`/stay/${s.hostel.id}?tab=review`} variant="secondary" size="sm">{s.hasReview ? 'Edit review' : 'Review your stay'}</LinkButton>
+                  ) : s.hasReview ? (
+                    <Badge tone="green">Reviewed</Badge>
+                  ) : null}
+                </div>
+                {!s.canReview && !s.hasReview && s.reviewBlockedReason && <p className="w-full text-xs text-ink-muted">Reviews: {s.reviewBlockedReason}.</p>}
               </Card>
             ))}
           </div>

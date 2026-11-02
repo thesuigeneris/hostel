@@ -16,7 +16,8 @@ const VARIANTS: Record<Variant, string> = {
   // White on amber is 2.7:1, so amber buttons carry dark text (5.9:1).
   food: 'bg-food text-ink hover:bg-food/90',
 };
-const SIZES = { sm: 'h-9 px-3 text-sm', md: 'h-11 px-4 text-sm', lg: 'h-12 px-6 text-base' };
+// `xs` is for text-sized actions inside a card (delete, report): still a 24 px target.
+const SIZES = { xs: 'min-h-6 px-1.5 text-xs', sm: 'h-9 px-3 text-sm', md: 'h-11 px-4 text-sm', lg: 'h-12 px-6 text-base' };
 
 export function buttonClass(variant: Variant = 'primary', size: keyof typeof SIZES = 'md', extra?: string) {
   return cx(
