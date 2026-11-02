@@ -84,15 +84,16 @@ export default async function Home() {
             <form action="/hostels" className="rounded-2xl border border-line bg-surface p-3 shadow-raised">
               <div className="grid gap-2 sm:grid-cols-[1.4fr_1fr_auto]">
                 <SearchSuggest label="Area or hostel name" hideLabel />
-                <label className="block">
-                  <span className="sr-only">Area</span>
-                  <Select name="area" defaultValue="">
+                {/* A separate label, so the select is named "Area" and not "Area All areas". */}
+                <div>
+                  <label htmlFor="hero-area" className="sr-only">Area</label>
+                  <Select id="hero-area" name="area" defaultValue="">
                     <option value="">All areas</option>
                     {areaOptions(areas).map((a) => (
                       <option key={a}>{a}</option>
                     ))}
                   </Select>
-                </label>
+                </div>
                 <SearchButton className="px-6" />
               </div>
               <label className="mt-2 flex min-h-9 items-center gap-2 px-1 text-sm text-ink-soft">
