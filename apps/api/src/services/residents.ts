@@ -117,14 +117,21 @@ export async function residentDirectory(hostelId: string) {
 
 // --- owner roster ------------------------------------------------------------
 
+/** Current stays and invites, then the 50 most recent past ones (moved out or declined). */
 export async function roster(user: User, hostelId: string) {
   const h = await ownedHostel(user, hostelId);
-  const rows = await getDb()
-    .select()
-    .from(schema.residencies)
-    .where(and(eq(schema.residencies.hostelId, h.id), inArray(schema.residencies.status, ['invited', 'active'])))
-    .orderBy(asc(schema.residencies.startDate));
-  return rows.map(toResidency);
+  const r = schema.residencies;
+  const db = getDb();
+  const [current, past] = await Promise.all([
+    db.select().from(r).where(and(eq(r.hostelId, h.id), inArray(r.status, ['invited', 'active']))).orderBy(asc(r.startDate), asc(r.id)),
+    db
+      .select()
+      .from(r)
+      .where(and(eq(r.hostelId, h.id), inArray(r.status, ['ended', 'declined'])))
+      .orderBy(sql`${r.endDate} desc nulls last`, desc(r.createdAt))
+      .limit(50),
+  ]);
+  return [...current, ...past].map(toResidency);
 }
 
 export async function addResident(user: User, hostelId: string, input: z.output<typeof residentInputSchema>) {
@@ -189,9 +196,7 @@ export async function endResident(user: User, hostelId: string, residencyId: str
   if (row.source === 'subscription') throw new AppError('invalid_state', 'Subscriber stays end when their plan ends or moves');
   if (row.status === 'ended' || row.status === 'declined') return toResidency(row);
   if (row.status === 'active' && endDate < row.startDate) {
-    throw new AppError('validation', `The move-out date is before they moved in (${dateLabel(row.startDate)})`, 400, [
-      { path: 'endDate', message: 'Pick a date on or after the start date' },
-    ]);
+    throw new AppError('validation', `The move-out date is before they moved in (${dateLabel(row.startDate)}). Pick that day or later.`, 400);
   }
   const set = row.status === 'invited' ? { status: 'declined' as const } : endDate <= clock.today() ? { status: 'ended' as const, endDate } : { endDate };
   const [updated] = await db

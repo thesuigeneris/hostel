@@ -1,7 +1,7 @@
 import { addDays, istDate, isValidDate } from '@hostels/shared';
 import Link from 'next/link';
 import { Upsell } from '@/components/Upsell';
-import { Card, Empty, StatusBadge, Table, Td } from '@/components/ui';
+import { Card, Empty, LinkButton, StatusBadge, Table, Td } from '@/components/ui';
 import { api } from '@/lib/api';
 import { dateLabel, planLabel, SHARING_LABEL, weekday } from '@/lib/format';
 import { hasPlan, ownerHostel } from '@/lib/owner';
@@ -12,7 +12,8 @@ export default async function KitchenPage({ params, searchParams }: Props) {
   const { id } = await params;
   const q = await searchParams;
   const h = await ownerHostel(id);
-  if (!hasPlan(h.plan.effective, 'partner')) return <Upsell hostelId={id} plan="partner" feature="Subscriptions and kitchen headcount" suspended={h.plan.suspended} />;
+  // The plan tier, not the effective plan: a paused Partner still feeds its existing subscribers.
+  if (!hasPlan(h.plan.plan, 'partner')) return <Upsell hostelId={id} plan="partner" feature="Subscriptions and kitchen headcount" />;
   const today = istDate();
   const date = q.date && isValidDate(q.date) ? q.date : today;
   const client = await api();
@@ -21,12 +22,21 @@ export default async function KitchenPage({ params, searchParams }: Props) {
 
   return (
     <div className="space-y-8">
+      {h.plan.suspended && (
+        <Card className="flex flex-wrap items-center justify-between gap-3 border-danger/40 bg-danger-soft text-sm">
+          <span className="min-w-0 text-ink">
+            Your plan is paused for an overdue bill. Existing subscribers still get their meals, so the menu and headcount keep working, but new
+            tenants can&apos;t subscribe until it is paid.
+          </span>
+          <LinkButton href={`/owner/hostels/${id}/plan`} size="sm">Pay the bill</LinkButton>
+        </Card>
+      )}
       <section>
         <div className="mb-3 flex flex-wrap items-center gap-3 text-sm">
           <h2 className="text-lg font-semibold">Headcount</h2>
-          <Link href={`${base}?date=${addDays(date, -1)}`}>←</Link>
+          <Link href={`${base}?date=${addDays(date, -1)}`} className="inline-flex min-h-6 min-w-6 items-center justify-center" aria-label={`Previous day, ${dateLabel(addDays(date, -1))}`}>←</Link>
           <span className="font-medium">{weekday(date)}, {dateLabel(date)}{date === today && ' (today)'}</span>
-          <Link href={`${base}?date=${addDays(date, 1)}`}>→</Link>
+          <Link href={`${base}?date=${addDays(date, 1)}`} className="inline-flex min-h-6 min-w-6 items-center justify-center" aria-label={`Next day, ${dateLabel(addDays(date, 1))}`}>→</Link>
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
           {count.meals.map((m) => (

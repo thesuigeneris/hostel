@@ -1,9 +1,9 @@
-import { ISSUE_CATEGORIES, istDate, monthOf } from '@hostels/shared';
+import { type OwnerInsights, ISSUE_CATEGORIES, istDate, monthOf } from '@hostels/shared';
 import Link from 'next/link';
 import { SubmitButton } from '@/components/SubmitButton';
-import { Card, Field, Input, LinkButton, Stat } from '@/components/ui';
+import { Card, cx, Field, Input, LinkButton, Stat } from '@/components/ui';
 import { api } from '@/lib/api';
-import { monthLabel, notCountedLabel, rupees, SHARING_LABEL, titleCase } from '@/lib/format';
+import { dateLabel, monthLabel, notCountedLabel, rupees, SHARING_LABEL, titleCase } from '@/lib/format';
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ month?: string }> };
 
@@ -40,6 +40,8 @@ export default async function OwnerDashboard({ params, searchParams }: Props) {
         <SubmitButton variant="secondary">Show</SubmitButton>
       </form>
 
+      <PlanBill bill={d.planBill} base={base} />
+
       <section aria-labelledby="money-heading">
         <h2 id="money-heading" className="mb-3 text-lg font-semibold">Occupancy and money · {monthLabel(month)}</h2>
         {d.occupancy && d.revenue ? (
@@ -65,12 +67,6 @@ export default async function OwnerDashboard({ params, searchParams }: Props) {
                 }
               />
             </div>
-            {d.revenue.planBillDue > 0 && (
-              <Card className="mt-3 flex flex-wrap items-center justify-between gap-3 border-food/50 bg-food-soft text-sm">
-                <span className="text-ink">Your plan bill of {rupees(d.revenue.planBillDue)} is unpaid.</span>
-                <LinkButton href={`${base}/plan`} size="sm">Pay it</LinkButton>
-              </Card>
-            )}
             {d.occupancy.rooms.length > 0 && (
               <Card className="mt-4">
                 <h3 className="mb-3 text-sm font-medium">Beds taken by room type</h3>
@@ -121,7 +117,11 @@ export default async function OwnerDashboard({ params, searchParams }: Props) {
         </p>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Stat label="Open" value={<Link href={`${base}/community`}>{d.issues.open}</Link>} />
-          <Stat label="Needs a reply" value={d.issues.needsResponse} hint={d.issues.needsResponse ? 'Open for over 24 hours with no reply' : 'All acknowledged in time'} />
+          <Stat
+            label="Needs a reply"
+            value={d.issues.needsResponse ? <Link href={`${base}/community`}>{d.issues.needsResponse}</Link> : 0}
+            hint={d.issues.needsResponse ? 'Waiting over 24 hours for your first answer (or since a resident reopened it)' : 'Every open issue has an answer from you'}
+          />
           <Stat label="Median first reply" value={hours(d.issues.medianHoursToFirstResponse)} hint="Last 90 days" />
           <Stat label="Median time to fix" value={hours(d.issues.medianHoursToResolve)} hint={`${d.issues.reportedLast90Days} reported in 90 days`} />
         </div>
@@ -166,5 +166,26 @@ export default async function OwnerDashboard({ params, searchParams }: Props) {
         </div>
       </section>
     </div>
+  );
+}
+
+/** What the owner owes us for this hostel's plan: shown on every plan, a paused one most of all. */
+function PlanBill({ bill, base }: { bill: OwnerInsights['planBill']; base: string }) {
+  if (!bill.oldest) return null;
+  const tone = bill.suspended ? 'border-danger/40 bg-danger-soft' : bill.oldest.isOverdue ? 'border-food bg-food-soft' : 'border-line';
+  return (
+    <Card className={cx('flex flex-wrap items-center justify-between gap-3 text-sm', tone)}>
+      <div className="min-w-0">
+        <p className="font-medium text-ink">
+          {bill.suspended ? 'Paid features are paused' : bill.oldest.isOverdue ? 'Your plan bill is overdue' : 'Plan bill due'}: you owe {rupees(bill.due)}
+        </p>
+        <p className="text-ink-soft">
+          {bill.suspended
+            ? 'Paying turns everything back on at once. Your listing, residents and records are kept.'
+            : `Due ${dateLabel(bill.oldest.dueDate)}. If it is still unpaid on ${dateLabel(bill.oldest.pausesOn)}, paid features pause until it is paid.`}
+        </p>
+      </div>
+      <LinkButton href={`${base}/plan`} size="sm">{bill.suspended ? 'Pay the bill' : 'Pay now'}</LinkButton>
+    </Card>
   );
 }

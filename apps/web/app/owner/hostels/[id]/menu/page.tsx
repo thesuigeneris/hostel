@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { copyMenuAction, saveMenuAction } from '@/app/owner/actions';
 import { SubmitButton } from '@/components/SubmitButton';
 import { Upsell } from '@/components/Upsell';
-import { Card, Flash, Input, Select } from '@/components/ui';
+import { Card, Flash, Input, LinkButton, Select } from '@/components/ui';
 import { api } from '@/lib/api';
 import { dateLabel, weekday } from '@/lib/format';
 import { hasPlan, ownerHostel } from '@/lib/owner';
@@ -14,7 +14,8 @@ export default async function MenuPage({ params, searchParams }: Props) {
   const { id } = await params;
   const q = await searchParams;
   const h = await ownerHostel(id);
-  if (!hasPlan(h.plan.effective, 'partner')) return <Upsell hostelId={id} plan="partner" feature="Weekly menus" suspended={h.plan.suspended} />;
+  // The plan tier, not the effective plan: a paused Partner still feeds its existing subscribers.
+  if (!hasPlan(h.plan.plan, 'partner')) return <Upsell hostelId={id} plan="partner" feature="Weekly menus" />;
   const thisWeek = weekStart(istDate());
   const week = q.week && isMonday(q.week) ? q.week : thisWeek;
   const client = await api();
@@ -29,6 +30,16 @@ export default async function MenuPage({ params, searchParams }: Props) {
   return (
     <div className="space-y-4">
       <Flash error={q.error} ok={q.ok} />
+      {h.plan.suspended && (
+        <Card className="flex flex-wrap items-center justify-between gap-3 border-danger/40 bg-danger-soft text-sm">
+          <span className="min-w-0 text-ink">
+            Your plan is paused for an overdue bill. Existing subscribers still get their meals, so the menu and headcount keep working, but new
+            tenants can&apos;t subscribe until it is paid.
+          </span>
+          <LinkButton href={`/owner/hostels/${id}/plan`} size="sm">Pay the bill</LinkButton>
+        </Card>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm">
           <Link href={`${base}?week=${addDays(week, -7)}`}>← Previous</Link>

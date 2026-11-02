@@ -1,7 +1,7 @@
 import { ApiError } from '@hostels/shared';
 import { type NextRequest, NextResponse } from 'next/server';
 import { api } from '@/lib/api';
-import { BRAND_FILES, type BrandFile, brandSvg } from '@/lib/brand-kit';
+import { BRAND_FILES, type BrandFile, brandFileName, brandSvg } from '@/lib/brand-kit';
 
 /** Serves a brand kit file as SVG. `?download=1` saves it instead of showing it. */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string; file: string }> }) {
@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const kit = await (await api()).owner.brandKit(id);
     const headers: Record<string, string> = { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'private, no-store', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'" };
     if (req.nextUrl.searchParams.get('download')) {
-      headers['Content-Disposition'] = `attachment; filename="${kit.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'hostel'}-${file}.svg"`;
+      headers['Content-Disposition'] = brandFileName(kit.name, file);
     }
     return new NextResponse(brandSvg(kit, file), { headers });
   } catch (e) {

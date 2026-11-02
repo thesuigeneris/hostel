@@ -12,6 +12,8 @@ export default async function OwnerHostelPage({ params, searchParams }: Props) {
   const h = await ownerHostel(id);
   const missing = [!h.roomTypes.length && 'a room type', !h.photos.length && 'a photo'].filter(Boolean);
   const order = h.photos.map((p) => p.id).join(',');
+  // A live listing (or one in review) keeps at least one photo; the API refuses to remove the last one.
+  const keepLast = h.photos.length === 1 && (h.status === 'live' || h.status === 'pending');
 
   return (
     <div className="space-y-6">
@@ -35,7 +37,10 @@ export default async function OwnerHostelPage({ params, searchParams }: Props) {
 
       <Card>
         <h2 className="font-semibold">Photos</h2>
-        <p className="mt-1 text-sm text-ink-soft">Real photos of rooms, bathrooms and the kitchen get the most calls. The first photo is the cover.</p>
+        <p className="mt-1 text-sm text-ink-soft">
+          Real photos of rooms, bathrooms and the kitchen get the most calls. The first photo is the cover. JPEG, PNG or WebP up to 5 MB; we remove
+          location and camera details from every photo.{keepLast && ' A live listing keeps at least one photo, so upload another before removing this one.'}
+        </p>
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {h.photos.map((p, i) => (
             <div key={p.id} className="overflow-hidden rounded-xl border border-line">
@@ -44,13 +49,17 @@ export default async function OwnerHostelPage({ params, searchParams }: Props) {
                 {i === 0 ? <span className="text-brand">Cover</span> : (
                   <form action={coverPhotoAction}>
                     <input type="hidden" name="hostelId" value={id} /><input type="hidden" name="photoId" value={p.id} /><input type="hidden" name="order" value={order} />
-                    <button type="submit" className="text-ink-soft hover:text-brand">Make cover</button>
+                    <button type="submit" className="inline-flex min-h-6 items-center text-ink-soft hover:text-brand" aria-label={`Make photo ${i + 1} the cover`}>Make cover</button>
                   </form>
                 )}
-                <form action={deletePhotoAction}>
-                  <input type="hidden" name="hostelId" value={id} /><input type="hidden" name="photoId" value={p.id} />
-                  <button type="submit" className="text-ink-soft hover:text-danger">Remove</button>
-                </form>
+                {keepLast ? (
+                  <span className="text-ink-muted">Needed: add another to swap</span>
+                ) : (
+                  <form action={deletePhotoAction}>
+                    <input type="hidden" name="hostelId" value={id} /><input type="hidden" name="photoId" value={p.id} />
+                    <button type="submit" className="inline-flex min-h-6 items-center text-ink-soft hover:text-danger" aria-label={`Remove photo ${i + 1}`}>Remove</button>
+                  </form>
+                )}
               </div>
             </div>
           ))}
