@@ -37,6 +37,12 @@ A pass over the API, website and app before the first real users. Each item list
 - **Photo links froze the host.** Uploads are stored as `/uploads/<key>`, and links are built from the current `API_PUBLIC_URL` when a response is made. Older absolute links are rewritten when read, so no data migration was needed.
 - **Photo metadata and outside photos.** See "Uploads" and "Photos are your own uploads" above. The demo seed draws its listing photos and stores them as uploads, so no stock-photo host is needed.
 
+## Production settings (fixed after the backend fixes pass)
+
+- **Fallback secrets in production.** Without `OTP_PEPPER`, a production API used the public development value, which also signed private photo links and upload receipts, so anyone reading this code could forge them. The API now checks its settings before it listens and exits with every problem listed. (`productionConfigProblems` in `apps/api/src/lib/config-check.ts`, called from `src/index.ts`)
+- **One secret for two jobs.** Upload receipts and photo links are signed with their own `UPLOAD_SIGNING_SECRET`, which must differ from `OTP_PEPPER`, so rotating one never breaks or weakens the other. (`apps/api/src/lib/uploads.ts`)
+- **A false "dev mode" banner.** A production instance without SMS keys reported OTP as `stub`, so the website would have told real users "OTP is 123456". The health check now reports `off` there (password login only) and the banner stays hidden. (`routes/public.ts`, `Health.msg91`)
+
 ## Still open before production
 
 - **Refunds are manual.** A payment that could not be applied is recorded and shown to admins, but the money goes back only when someone refunds it in the Razorpay dashboard and marks it here. The payer is told it comes back within `REFUND_WITHIN_DAYS` (7) days; that promise is not in the specs and needs the owner's confirmation.
@@ -48,4 +54,4 @@ A pass over the API, website and app before the first real users. Each item list
 - **Photos from before the fixes.** Issue and post photos uploaded before attachments became private carry public `pho_` keys and stay reachable by their link; outside photo links in older rows are blocked by the website's CSP but still shown in the app. There are no real users yet, so resetting development databases is enough; data from a real instance would need a one-off migration.
 - **Signed photo links can be shared.** Anyone given a private photo's link can open it until it expires (at most 90 minutes), including a resident who has just moved out.
 - **Owner-added residents.** They are labelled on reviews, but an owner could still add people who never lived there. An owner can also backdate a resident's start date, which makes them eligible to review at once. Consider requiring a few months of rent records, or an admin spot-check, before their reviews count in the rating.
-- **Secrets and HTTPS.** Real MSG91 and Razorpay keys, a long `OTP_PEPPER`, HTTPS everywhere, and database backups. See the run guide.
+- **Secrets and HTTPS.** Real MSG91 and Razorpay keys, HTTPS everywhere, and database backups. See the run guide. The API now refuses to start in production on missing, short or development secrets, on non-https public links, or on half-set key pairs (see "Production settings" below).

@@ -176,6 +176,14 @@ Gates run on disposable databases `hostels_test_d` and `hostels_e2e_d` (e2e on p
 | PAY-MOBILE | App: Refunds tab with mark refunded, Waived/Cancelled owner bills, not-counted notes on payouts, refunds due on the admin home | `apps/mobile/app/admin/billing.tsx`, `admin/payouts.tsx`, `owner/payouts.tsx`, `admin/index.tsx` | typecheck only | unverified: no mobile runtime test reaches these screens |
 | PAY-REFUND-DAYS | The payer is promised a refund within 7 days | `REFUND_WITHIN_DAYS` in `packages/shared/src/pricing.ts`; `refundMessage` | `packages/shared/test/format.test.ts` | open question: not in the specs; confirm the number (`00-completion-map.md`) |
 
+## Production settings check and separate upload signing secret
+
+| ID | Requirement | Implementation | Test / evidence | Status |
+|---|---|---|---|---|
+| CFG-PROD | Production refuses to start on unsafe settings (missing, short or dev secrets; non-https public links; half-set key pairs; real Razorpay without a webhook secret; invalid admin phones), listing every problem | `productionConfigProblems`, `assertProductionConfig` in `apps/api/src/lib/config-check.ts`; called first in `src/index.ts` | `test/config-check.test.ts` (10); runtime: `NODE_ENV=production bun run src/index.ts` with no settings exits 1 listing 6 problems, with valid settings starts and `/` answers | verified (this session) |
+| CFG-SIGN | Upload receipts and private photo links use `UPLOAD_SIGNING_SECRET`, independent of `OTP_PEPPER` | `env.uploadSigningSecret`; `receiptKey`, `linkKey` in `lib/uploads.ts` | `uploads.test.ts` › receipts are signed with their own secret (fails with the old shared secret, checked by reverting) | verified (this session) |
+| CFG-HEALTH | Health reports OTP as `off` in production without SMS, so the website shows no "OTP is 123456" banner to real users | `routes/public.ts` uses `otpMode()`; `Health.msg91` gains `off` | `routes.test.ts` (dev still `stub`); full API suite 162/162 | verified (this session) |
+
 ## Later PRPs (rows filled when each PRP is generated)
 
 | PRP | Area | Status |
