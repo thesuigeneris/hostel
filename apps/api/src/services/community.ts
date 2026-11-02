@@ -7,6 +7,7 @@ import { clock } from '../lib/clock';
 import { AppError, forbidden, notFound } from '../lib/errors';
 import { claimUpload, photoUrl } from '../lib/uploads';
 import { hostelIdsOwnedBy, requireMember, requirePlan } from './access';
+import { type ResponseState, responseStates } from './issue-response';
 
 type IssueRow = typeof schema.issues.$inferSelect;
 
@@ -34,10 +35,14 @@ export async function reportIssue(user: User, hostelId: string, input: z.output<
       createdAt: clock.now(),
     })
     .returning();
-  return toIssue(row!, { viewer: user, isOwner: false, reporterName: user.name, upvotes: 0, upvoted: false });
+  const [response] = (await responseStates([row!])).values();
+  return toIssue(row!, { viewer: user, isOwner: false, reporterName: user.name, upvotes: 0, upvoted: false, response: response! });
 }
 
-function toIssue(r: IssueRow, ctx: { viewer: User; isOwner: boolean; reporterName: string | null; upvotes: number; upvoted: boolean }) {
+function toIssue(
+  r: IssueRow,
+  ctx: { viewer: User; isOwner: boolean; reporterName: string | null; upvotes: number; upvoted: boolean; response: ResponseState },
+) {
   const mine = r.reporterId === ctx.viewer.id;
   return {
     id: r.id,
@@ -57,7 +62,8 @@ function toIssue(r: IssueRow, ctx: { viewer: User; isOwner: boolean; reporterNam
     mine,
     upvotes: ctx.upvotes,
     upvotedByMe: ctx.upvoted,
-    needsResponse: r.status === 'open' && clock.now().getTime() - r.createdAt.getTime() > 24 * 3600_000,
+    // One rule (`issueNeedsResponse`): an owner comment or status move answers it; a reopen asks again.
+    ...ctx.response,
   };
 }
 
@@ -65,7 +71,7 @@ async function decorate(viewer: User, rows: IssueRow[], isOwnerOf: (hostelId: st
   if (!rows.length) return [];
   const db = getDb();
   const ids = rows.map((r) => r.id);
-  const [votes, mineVotes, reporters] = await Promise.all([
+  const [votes, mineVotes, reporters, responses] = await Promise.all([
     db
       .select({ issueId: schema.issueUpvotes.issueId, n: sql<number>`count(*)::int` })
       .from(schema.issueUpvotes)
@@ -79,6 +85,7 @@ async function decorate(viewer: User, rows: IssueRow[], isOwnerOf: (hostelId: st
       .select({ id: schema.users.id, name: schema.users.name })
       .from(schema.users)
       .where(inArray(schema.users.id, [...new Set(rows.map((r) => r.reporterId))])),
+    responseStates(rows),
   ]);
   return rows.map((r) =>
     toIssue(r, {
@@ -87,6 +94,7 @@ async function decorate(viewer: User, rows: IssueRow[], isOwnerOf: (hostelId: st
       reporterName: reporters.find((u) => u.id === r.reporterId)?.name ?? null,
       upvotes: votes.find((v) => v.issueId === r.id)?.n ?? 0,
       upvoted: mineVotes.some((v) => v.issueId === r.id),
+      response: responses.get(r.id)!,
     }),
   );
 }

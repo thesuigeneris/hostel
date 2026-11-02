@@ -226,13 +226,25 @@ export async function addPhoto(user: User, hostelId: string, photo: string) {
   return toPhoto(row!);
 }
 
+/**
+ * Removes a photo. A live listing (or one in review) keeps at least one: the hostel row is locked first, so two
+ * removals at once can't each see the other's photo and leave none.
+ */
 export async function deletePhoto(user: User, hostelId: string, photoId: string) {
   const h = await ownedHostel(user, hostelId);
-  const deleted = await getDb()
-    .delete(schema.hostelPhotos)
-    .where(and(eq(schema.hostelPhotos.id, photoId), eq(schema.hostelPhotos.hostelId, h.id)))
-    .returning();
-  if (!deleted.length) throw notFound('Photo');
+  const p = schema.hostelPhotos;
+  await getDb().transaction(async (tx) => {
+    const [now] = await tx.select({ status: schema.hostels.status }).from(schema.hostels).where(eq(schema.hostels.id, h.id)).for('update');
+    const photos = await tx.select({ id: p.id }).from(p).where(eq(p.hostelId, h.id));
+    if (!photos.some((x) => x.id === photoId)) throw notFound('Photo');
+    if (photos.length === 1 && (now!.status === 'live' || now!.status === 'pending')) {
+      throw new AppError(
+        'invalid_state',
+        `Your listing is ${now!.status === 'live' ? 'live' : 'in review'}, so it needs at least one photo. Upload another photo first, then remove this one.`,
+      );
+    }
+    await tx.delete(p).where(and(eq(p.id, photoId), eq(p.hostelId, h.id)));
+  });
 }
 
 export async function reorderPhotos(user: User, hostelId: string, photoIds: string[]) {

@@ -3,6 +3,7 @@ import {
   addDays,
   addMonths,
   billingPeriod,
+  creditNote,
   daysBetween,
   invoiceGenerationDate,
   isOverdue,
@@ -11,6 +12,9 @@ import {
   OWNER_PLANS,
   OWNER_TRIAL_MONTHS,
   periodContaining,
+  prorate,
+  splitPeriod,
+  usedDaysNote,
 } from '@hostels/shared';
 import { and, asc, desc, eq, gte, ilike, inArray, lte, ne, or } from 'drizzle-orm';
 import { getDb, schema, type Tx } from '../db';
@@ -21,32 +25,87 @@ import { applyForPartner } from './listings';
 
 const RANK: Record<OwnerPlanTier, number> = { free: 0, pro: 1, partner: 2 };
 
-/** Starts a plan today, re-anchoring its billing. The first paid plan on a hostel gets a free first month. */
+/**
+ * Starts a plan today, re-anchoring its billing. The first paid plan on a hostel gets a free first month, once: inside
+ * that month a paid plan's billing starts when the month ends, so switching down and up again never adds free days.
+ *
+ * Money already paid or owed for the old plan's current month is settled here, so an upgrade never charges twice:
+ * - a paid bill's unused days (from today) are credited on the new plan's first bill, never more than that bill;
+ * - an unpaid bill is cut to the days used before today (same due date, so an overdue pause stands), or dropped
+ *   when no day was used; bills for months not yet started are dropped.
+ * Only money actually paid is credited: a waived or unpaid bill earns nothing, and a bill that itself carried a
+ * credit passes on only what was paid for it.
+ */
 export async function switchPlan(tx: Tx, hostelId: string, plan: OwnerPlanTier) {
   const today = clock.today();
-  const [current] = await tx.select().from(schema.ownerPlans).where(eq(schema.ownerPlans.hostelId, hostelId));
-  const trialEndsOn =
-    current?.trialEndsOn ?? (plan === 'free' ? null : addMonths(today, OWNER_TRIAL_MONTHS));
+  const [current] = await tx.select().from(schema.ownerPlans).where(eq(schema.ownerPlans.hostelId, hostelId)).for('update');
+  const trialEndsOn = current?.trialEndsOn ?? (plan === 'free' ? null : addMonths(today, OWNER_TRIAL_MONTHS));
+  const startDate = plan !== 'free' && current?.trialEndsOn && today < current.trialEndsOn ? current.trialEndsOn : today;
+  let planId = current?.id;
+  let credit = 0;
+  let creditFrom: { plan: OwnerPlanTier; to: string } | null = null;
   if (current) {
-    // Only bills for periods the old plan hasn't started are dropped; months already used stay owed,
-    // and refreshSuspensions keeps deciding whether the hostel is paused.
-    await tx
-      .update(schema.ownerInvoices)
-      .set({ status: 'void' })
-      .where(
-        and(
-          eq(schema.ownerInvoices.ownerPlanId, current.id),
-          eq(schema.ownerInvoices.status, 'due'),
-          gte(schema.ownerInvoices.periodStart, today),
-        ),
-      );
+    const oi = schema.ownerInvoices;
+    const open = await tx
+      .select()
+      .from(oi)
+      .where(and(eq(oi.ownerPlanId, current.id), inArray(oi.status, ['due', 'paid']), gte(oi.periodEnd, today)))
+      .for('update');
+    for (const b of open) {
+      const { periodDays, usedDays, unusedDays } = splitPeriod(b.periodStart, b.periodEnd, today);
+      if (b.status === 'paid') {
+        credit += prorate(b.amount, unusedDays, periodDays);
+        if (!creditFrom || b.periodEnd > creditFrom.to) creditFrom = { plan: b.plan, to: b.periodEnd };
+        continue;
+      }
+      // Due: drop it, and bill the days already used, if any.
+      await tx.update(oi).set({ status: 'void' }).where(and(eq(oi.id, b.id), eq(oi.status, 'due')));
+      if (usedDays > 0) {
+        await tx.insert(oi).values({
+          id: newId('oin'),
+          ownerPlanId: b.ownerPlanId,
+          hostelId: b.hostelId,
+          ownerId: b.ownerId,
+          plan: b.plan,
+          periodStart: b.periodStart,
+          periodEnd: addDays(today, -1),
+          amount: prorate(b.amount, usedDays, periodDays),
+          note: usedDaysNote(b.plan, b.periodStart, addDays(today, -1)),
+          dueDate: b.dueDate,
+        });
+      }
+    }
     await tx
       .update(schema.ownerPlans)
-      .set({ plan, startDate: today, trialEndsOn, pendingPlan: null, pendingPlanOn: null })
+      .set({ plan, startDate, trialEndsOn, pendingPlan: null, pendingPlanOn: null })
       .where(eq(schema.ownerPlans.id, current.id));
   } else {
-    await tx.insert(schema.ownerPlans).values({ id: newId('opl'), hostelId, plan, startDate: today, trialEndsOn });
+    planId = newId('opl');
+    await tx.insert(schema.ownerPlans).values({ id: planId, hostelId, plan, startDate, trialEndsOn });
   }
+  // A paid plan outside the free month bills its first month now, with the credit on it. Later months come from
+  // `generateOwnerInvoices`, which skips this one (same plan and period).
+  if (plan === 'free' || startDate !== today || (trialEndsOn && today < trialEndsOn)) return;
+  const [h] = await tx.select({ ownerId: schema.hostels.ownerId }).from(schema.hostels).where(eq(schema.hostels.id, hostelId));
+  const first = billingPeriod(startDate, 0);
+  const price = OWNER_PLANS[plan].price;
+  const creditAmount = Math.min(credit, price);
+  await tx
+    .insert(schema.ownerInvoices)
+    .values({
+      id: newId('oin'),
+      ownerPlanId: planId!,
+      hostelId,
+      ownerId: h!.ownerId,
+      plan,
+      periodStart: first.start,
+      periodEnd: first.end,
+      amount: price - creditAmount,
+      creditAmount,
+      note: creditAmount && creditFrom ? creditNote(creditFrom.plan, today, creditFrom.to) : null,
+      dueDate: first.start,
+    })
+    .onConflictDoNothing();
 }
 
 export async function getPlan(user: User, hostelId: string) {
@@ -59,7 +118,8 @@ export async function getPlan(user: User, hostelId: string) {
     .where(eq(schema.ownerInvoices.hostelId, h.id))
     .orderBy(desc(schema.ownerInvoices.periodStart));
   const today = clock.today();
-  const inTrial = !!plan?.trialEndsOn && today < plan.trialEndsOn;
+  // A Free hostel isn't "in a trial" even when its one free month hasn't run out.
+  const inTrial = !!plan?.trialEndsOn && plan.plan !== 'free' && today < plan.trialEndsOn;
   return {
     plan: plan ?? null,
     price: OWNER_PLANS[plan?.plan ?? 'free'].price,
@@ -117,7 +177,19 @@ export async function changePlan(user: User, hostelId: string, target: OwnerPlan
       if (current === 'partner') await tx.update(schema.hostels).set({ partnerStatus: 'none' }).where(eq(schema.hostels.id, h.id));
     });
   } else {
-    const effectiveOn = addDays(periodContaining(plan.startDate, today).end, 1);
+    // At the end of the month paid for: this one, or the next one when its bill is already paid. An unpaid bill for
+    // the next month is dropped now, since the plan changes before that month starts (it comes back if the change
+    // is called off).
+    let effectiveOn = addDays(periodContaining(plan.startDate, today).end, 1);
+    const oi = schema.ownerInvoices;
+    const next = await db
+      .select()
+      .from(oi)
+      .where(and(eq(oi.ownerPlanId, plan.id), eq(oi.periodStart, effectiveOn), inArray(oi.status, ['due', 'paid'])));
+    for (const b of next) {
+      if (b.status === 'paid') effectiveOn = addDays(b.periodEnd, 1);
+      else await db.update(oi).set({ status: 'void' }).where(and(eq(oi.id, b.id), eq(oi.status, 'due')));
+    }
     await db.update(schema.ownerPlans).set({ pendingPlan: target, pendingPlanOn: effectiveOn }).where(eq(schema.ownerPlans.id, plan.id));
   }
   return getPlan(user, hostelId);
@@ -231,7 +303,7 @@ export async function adminOwnerPlans(filter: { plan?: OwnerPlanTier; suspended?
       pendingPlanOn: plan.pendingPlanOn,
       startDate: plan.startDate,
       trialEndsOn: plan.trialEndsOn,
-      inTrial: !!plan.trialEndsOn && today < plan.trialEndsOn,
+      inTrial: !!plan.trialEndsOn && plan.plan !== 'free' && today < plan.trialEndsOn,
       suspended: plan.suspended,
       partnerStatus: hostel.partnerStatus,
       amountDue: bills.reduce((n, b) => n + b.amount, 0),

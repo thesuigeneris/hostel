@@ -33,6 +33,7 @@ import type {
   CommunityPost,
   EscalatedIssue,
   OwnerInsights,
+  OwnerIssueSummary,
   ErrorCode,
   FoodPartner,
   Headcount,
@@ -242,9 +243,13 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
       rent: (id: string, month?: string) => request<RentSheet>(`/owner/hostels/${id}/rent`, { query: { month } }),
       recordRent: (id: string, rid: string, input: RentRecordInput) => request(`/owner/hostels/${id}/rent/${rid}`, { method: 'PUT', body: input }),
       issues: () => request<IssueView[]>('/owner/issues'),
+      issueSummary: () => request<OwnerIssueSummary>('/owner/issues/summary'),
       reports: () => request<{ id: string; targetType: string; targetId: string; reason: string; hostelName: string; createdAt: string }[]>('/owner/reports'),
-      reviews: (id: string) => request<Review[]>(`/owner/hostels/${id}/reviews`),
+      /** Unreplied first, then newest; 20 a page. */
+      reviews: (id: string, page = 1) => request<Review[]>(`/owner/hostels/${id}/reviews`, { query: { page } }),
       reply: (reviewId: string, reply: string) => request<Review>(`/owner/reviews/${reviewId}/reply`, { body: { reply } }),
+      /** Changes a reply already posted; the review then shows it as edited. */
+      editReply: (reviewId: string, reply: string) => request<Review>(`/owner/reviews/${reviewId}/reply`, { method: 'PUT', body: { reply } }),
       insights: (id: string, month?: string) => request<OwnerInsights>(`/owner/hostels/${id}/insights`, { query: { month } }),
       partnerInfo: (id: string) => request<OwnerPartnerInfo>(`/owner/hostels/${id}/partner`),
       brandKit: (id: string) => request<BrandKit>(`/owner/hostels/${id}/brand-kit`),

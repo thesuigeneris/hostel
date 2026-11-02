@@ -3,6 +3,7 @@ import { endCancelledSubscriptions, expirePendingSubscriptions, generateUpcoming
 import { autoCloseResolvedIssues } from './community';
 import { completeDueMoves } from './moves';
 import { applyPendingPlanChanges, generateOwnerInvoices, refreshSuspensions } from './plans';
+import { endDueResidencies } from './residents';
 
 export const JOB_INTERVAL_MS = 15 * 60 * 1000;
 
@@ -19,6 +20,7 @@ export async function runJobs() {
     ownerInvoices: await generateOwnerInvoices(today),
     suspensions: await refreshSuspensions(today),
     closedIssues: await autoCloseResolvedIssues(now),
+    endedStays: await endDueResidencies(today),
   };
 }
 

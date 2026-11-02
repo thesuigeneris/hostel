@@ -23,8 +23,9 @@ import { getDb, schema } from '../db';
 import { clock } from '../lib/clock';
 import { parseBody, parseQuery } from '../lib/validate';
 import { type AppEnv, requireAuth } from '../middleware/auth';
-import { hostelIdsOwnedBy, ownedHostel } from '../services/access';
+import { hostelIdsOwnedBy } from '../services/access';
 import { openReports, ownerIssues } from '../services/community';
+import { ownerIssueSummary } from '../services/issue-response';
 import { ownerInsights } from '../services/insights';
 import { copyLastWeek, headcount, ownerMenu, saveMenu, subscribers } from '../services/food';
 import {
@@ -44,7 +45,7 @@ import { toHostel } from '../services/mappers';
 import { brandKit, ownerPartnerInfo } from '../services/partners';
 import { ownerPayouts } from '../services/payouts';
 import { changePlan, getPlan } from '../services/plans';
-import { addResident, endResident, hostelReviews, recordRent, rentSheet, replyToReview, roster } from '../services/residents';
+import { addResident, editReviewReply, endResident, ownerReviews, recordRent, rentSheet, replyToReview, roster } from '../services/residents';
 import { ownerVisits, setVisitStatus } from '../services/visits';
 
 const dateQuery = z.object({ date: z.string().refine(isValidDate).optional() });
@@ -150,12 +151,17 @@ export const ownerRoutes = new Hono<AppEnv>()
 
   // Issues, reviews and reports across the owner's hostels.
   .get('/owner/issues', async (c) => c.json(await ownerIssues(c.get('user'))))
+  .get('/owner/issues/summary', async (c) => c.json(await ownerIssueSummary(c.get('user'))))
   .get('/owner/reports', async (c) => c.json(await openReports({ hostelIds: await hostelIdsOwnedBy(c.get('user').id) })))
   .get('/owner/hostels/:id/reviews', async (c) => {
-    const h = await ownedHostel(c.get('user'), c.req.param('id'));
-    return c.json(await hostelReviews(h.id, { includeHidden: true }));
+    const { page } = parseQuery(c, z.object({ page: z.coerce.number().int().min(1).max(500).default(1) }));
+    return c.json(await ownerReviews(c.get('user'), c.req.param('id'), page));
   })
   .post('/owner/reviews/:id/reply', async (c) => {
     const { reply } = await parseBody(c, ownerReplySchema);
     return c.json(await replyToReview(c.get('user'), c.req.param('id'), reply));
+  })
+  .put('/owner/reviews/:id/reply', async (c) => {
+    const { reply } = await parseBody(c, ownerReplySchema);
+    return c.json(await editReviewReply(c.get('user'), c.req.param('id'), reply));
   });
