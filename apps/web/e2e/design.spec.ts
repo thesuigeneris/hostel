@@ -28,7 +28,8 @@ test('search works without the 3D scene, and the static illustration shows', asy
   await expect(page.getByText('Illustration, not a real property.')).toBeVisible();
 
   const search = page.getByRole('search', { name: 'Find a hostel' });
-  await search.getByLabel('Area').selectOption('Gachibowli');
+  // Exact: the search box beside it is labelled "Area or hostel name".
+  await search.getByLabel('Area', { exact: true }).selectOption('Gachibowli');
   await search.getByLabel('Only verified partners (no advance)').check();
   await search.getByRole('button', { name: 'Search' }).click();
   await page.waitForURL(/\/hostels\?/);

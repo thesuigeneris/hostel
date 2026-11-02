@@ -12,7 +12,7 @@ only when a test proves it (and, for a bug, fails without the fix).
 | ID | Case | Must happen | Status |
 |---|---|---|---|
 | T1 | Owner adds a resident with a start date months in the past; the resident accepts and reviews the same day. | The 14-day clock for owner-added stays starts at the later of the claimed start date and the day the invite was created. The stay span on the review still shows the claimed dates. | **Found**: `reviewEligibility` uses `startDate` only (`services/residents.ts`) |
-| T2 | One 5★ review outranks a hostel with 50 reviews averaging 4.8 in "sort by rating". | Sort by a shrunk average with the prior in `@hostels/shared`; show the true average with its count. Fewer than 3 reviews shows "New" with the count. | **Found**: `search.ts` orders by raw `avg` |
+| T2 | One 5★ review outranks a hostel with 50 reviews averaging 4.8 in "sort by rating". | Sort by a shrunk average with the prior in `@hostels/shared`; show the true average with its count. Fewer than 3 reviews shows "New" with the count. | **Fixed** (persona-seeker): shrunk average, prior weight 5 (`RATING_PRIOR_WEIGHT`); "4★ and up" needs 3 reviews; "New" below 3 on cards, page, JSON-LD and app. `seeker.test.ts` › a single 5★ review does not outrank many good ones (mutation-checked); e2e › S3 |
 | T3 | A resident edits a review after the owner replied. | The card says "Edited after the owner replied" (both dates are known), so the reply isn't read out of context. | Verify |
 | T4 | A hidden review is edited by its author. | Stays hidden; moderation is not undone by editing. | Verify |
 | T5 | Owner flags every negative review. | Flags go to the admin queue only; nothing is hidden until an admin acts. | Verify |
@@ -60,14 +60,14 @@ only when a test proves it (and, for a bug, fails without the fix).
 
 | ID | Case | Must happen | Status |
 |---|---|---|---|
-| S1 | Same visit request submitted twice at once. | One request. Partial unique index on (hostel, user) where status is `new`. | **Found**: no unique index |
-| S2 | Owner requests a visit at their own hostel. | Refused with a plain message. | **Found**: no check (`visits.ts`) |
-| S3 | Visit date years ahead. | Capped (e.g. 90 days ahead) with a clear message. | **Found**: no upper bound |
+| S1 | Same visit request submitted twice at once. | One request. Partial unique index on (hostel, user) where status is `new`. | **Fixed**: migration `0009_visit_one_open`; `seeker.test.ts` › a form sent twice at once (6 rows without the index) |
+| S2 | Owner requests a visit at their own hostel. | Refused with a plain message. | **Fixed**: `seeker.test.ts` › an owner cannot request a visit at their own hostel; e2e › S4 |
+| S3 | Visit date years ahead. | Capped (e.g. 90 days ahead) with a clear message. | **Fixed**: `VISIT_MAX_DAYS_AHEAD` in the schema and the service; `seeker.test.ts` › dates run from today to 90 days ahead |
 | S4 | Owner moves a withdrawn (closed) visit back to "contacted". | Not allowed: `new → contacted → closed`, closed is final. | **Found**: any status to any status |
-| S5 | Search page past the last page; equal-rank results across pages. | Real total shown, link to the last page; stable order with `id` as the final tie-break. | **Found** |
-| S6 | Search with no results, odd characters (`%`, `_`, quotes, emoji), a 500-character query. | Recovery suggestions; `ILIKE` wildcards escaped; long input refused or trimmed. | Verify |
-| S7 | Session expires between "Subscribe" and paying. | Sent to login and back to the same step (safe `next` path only), with the bed hold explained. | Verify |
-| S8 | Back button after paying; reopening `/pay` for a paid bill. | Shows "paid", never a second payment button. | Verify |
+| S5 | Search page past the last page; equal-rank results across pages. | Real total shown, link to the last page; stable order with `id` as the final tie-break. | **Fixed**: `seeker.test.ts` › equal rows keep one order…, › a page past the end…; e2e › S5 |
+| S6 | Search with no results, odd characters (`%`, `_`, quotes, emoji), a 500-character query. | Recovery suggestions; `ILIKE` wildcards escaped; long input refused or trimmed. | **Fixed** (wildcards matched everything): `seeker.test.ts` › wildcards, quotes and emoji…; e2e › S2, S6 |
+| S7 | Session expires between "Subscribe" and paying. | Sent to login and back to the same step (safe `next` path only), with the bed hold explained. | **Fixed** (no reason was given): e2e › S7; the pay page explains the hold (e2e › S4 + S8) |
+| S8 | Back button after paying; reopening `/pay` for a paid bill. | Shows "paid", never a second payment button. | **Verified**: e2e › S4 + S8 (back, reload, reopen); a cancelled bill: e2e › S8 (edge) |
 
 ## 5. Owner and admin operations
 

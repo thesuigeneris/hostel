@@ -123,7 +123,7 @@ test ran and passed in this session, `[~]` means implemented with only part of i
 | 3 | "4★ and up" let a single-review hostel in | needs `RATING_MIN_REVIEWS` reviews | same test |
 | 4 | Equal rows had no total order; paging could repeat or skip hostels (S5) | `h.id` last in every order | API › equal rows keep one order |
 | 5 | Past the last page the total read 0 ("0 hostels") (S5) | separate count; UI links to the last page | API › a page past the end; e2e S5 |
-| 6 | Double-submitted visit form made two waiting requests (S1) | partial unique index `visit_requests_one_open` (migration **0008**) | API › a form sent twice at once (6 parallel; 6 rows without the index) |
+| 6 | Double-submitted visit form made two waiting requests (S1) | partial unique index `visit_requests_one_open` (migration **0009**) | API › a form sent twice at once (6 parallel; 6 rows without the index) |
 | 7 | An owner could request a visit at their own hostel (S2) | refused in `requestVisit`; inbox link on the page | API › an owner cannot…; e2e S4 |
 | 8 | Visit dates had no upper bound (S3) | `VISIT_MAX_DAYS_AHEAD` (90) in the schema and the service | API › dates run from today to 90 days; shared › visit dates |
 | 9 | Without JavaScript the search and area pages showed only the loading skeleton (route `loading.tsx` streamed the results behind a Suspense boundary) | removed both `loading.tsx`; "Searching…" button state | e2e S1 (no-JS part failed before the fix) |
@@ -171,4 +171,4 @@ test ran and passed in this session, `[~]` means implemented with only part of i
 - Android screens were not run on a device or emulator (no Android SDK here); `npx expo export --platform android`
   builds the bundle. Screen behaviour is covered by unit tests of the shared and app helpers only.
 - API-down states (area page, suggestions) are code-reviewed, not tested: no test stops the API.
-- Migration number: **0008** (`0008_visit_one_open`), generated after merging the integration branch at `12c866c`.
+- Migration number: **0009** (`0009_visit_one_open`). It was generated as 0008 after merging `12c866c`; the payments work took 0008 first, so it was regenerated as 0009 when merging `53c7628`.

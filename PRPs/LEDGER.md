@@ -180,7 +180,7 @@ Gates run on disposable databases `hostels_test_d` and `hostels_e2e_d` (e2e on p
 
 Audit checklist with evidence per screen and action: [`docs/product/audit-seeker.md`](../docs/product/audit-seeker.md).
 Edge cases closed: S1–S3, S5–S8 and T2 from `docs/product/edge-cases.md` (S4 belongs to the owner agent).
-Migration: `0008_visit_one_open` (partial unique index; closes duplicate waiting requests first).
+Migration: `0009_visit_one_open` (partial unique index; closes duplicate waiting requests first). Regenerated as 0009 after `0008_payment_mode` landed.
 
 Gates: see the last row. Databases `hostels_test_s` and `hostels_e2e_s`; e2e on ports 4105/3105. Mutation checks: each
 fix below was reverted on its own and its test failed (API: 8 reverts; web e2e: 10 reverts in two builds; web unit and
@@ -193,7 +193,7 @@ shared: 4 reverts), then restored.
 | SEEK-T2 | Rating sort and "recommended" use a shrunk average (prior weight 5); "4★ and up" needs 3 reviews; pages show the true average, "New" below 3 reviews | `search.ts`; `RATING_PRIOR_WEIGHT`, `RATING_MIN_REVIEWS`, `ratingView` in `packages/shared/src/seeker.ts`; web `Rating.tsx`, hostel page, JSON-LD; app `Rating.tsx` | API › a single 5★ review does not outrank many good ones (mutation-checked twice: raw order, filter); e2e › S3 (JSON-LD) | verified @6d15344, @084f0e0 |
 | SEEK-S5 | Stable order (`id` last in every sort); real total past the last page, link to it | `search.ts`; `SearchResults.tsx` | API › equal rows keep one order…, › a page past the end…; e2e › S5 | verified @6d15344, @084f0e0 |
 | SEEK-S6 | `%`, `_`, quotes, emoji matched literally; text over 80 characters cut on the web, refused plainly by the API | `escapeLike`; `searchSchema.q`; web `lib/search.ts` | API › wildcards, quotes and emoji…; e2e › S6; web unit › search params | verified @6d15344, @084f0e0 |
-| SEEK-S1 | One waiting visit request per person per hostel, even when sent twice at once | `visit_requests_one_open` (migration 0008); `visits.ts` maps the violation | API › a form sent twice at once (6 parallel; 6 rows without the index) | verified @6d15344 |
+| SEEK-S1 | One waiting visit request per person per hostel, even when sent twice at once | `visit_requests_one_open` (migration 0009); `visits.ts` maps the violation | API › a form sent twice at once (6 parallel; 6 rows without the index) | verified @6d15344 |
 | SEEK-S2 | Owners can't request a visit at their own hostel; the page shows their inbox link | `visits.ts`; hostel page | API › an owner cannot…; e2e › S4 | verified @6d15344, @084f0e0 |
 | SEEK-S3 | Visit dates today to 90 days ahead, in the schema and the service | `VISIT_MAX_DAYS_AHEAD`, `visitDateProblem`, `visitRequestSchemaOn(clock)` | API › dates run from today to 90 days ahead; shared › visit dates | verified @6d15344 |
 | SEEK-TRUST | "Verified partner" lists what the in-person check covered (from the inspection record, never the notes); the hidden issue record says why | `listings.ts` `partnerCheckFor` (`HostelDetail.partnerCheck`); `HostelTrust.tsx`; `TRANSPARENCY_HIDDEN_NOTE`; app hostel screen | API › verified partner explainer; e2e › S3 | verified @084f0e0; app screen unverified on a device |
