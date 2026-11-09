@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { NextConfig } from 'next';
 
 const dev = process.env.NODE_ENV !== 'production';
@@ -21,7 +22,13 @@ const csp = [
   "object-src 'none'",
 ].join('; ');
 
+// The Docker image (deploy/web.Dockerfile) sets NEXT_OUTPUT=standalone: a self-contained server with only the files it
+// traces. Tracing starts at the repository root so the shared workspace package is included. Local runs and the
+// browser tests keep `next start`.
+const standalone = process.env.NEXT_OUTPUT === 'standalone';
+
 const config: NextConfig = {
+  ...(standalone ? { output: 'standalone' as const, outputFileTracingRoot: path.resolve(process.cwd(), '../..') } : {}),
   transpilePackages: ['@hostels/shared'],
   poweredByHeader: false,
   // Photo uploads pass through server actions on their way to the API.

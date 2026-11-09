@@ -21,3 +21,7 @@ apps/mobile/android/
 apps/mobile/ios/
 *.apk
 *.aab
+
+# Production settings and backups stay on the server
+deploy/.env.prod
+deploy/backups/

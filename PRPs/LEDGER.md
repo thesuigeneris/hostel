@@ -184,6 +184,16 @@ Gates run on disposable databases `hostels_test_d` and `hostels_e2e_d` (e2e on p
 | CFG-SIGN | Upload receipts and private photo links use `UPLOAD_SIGNING_SECRET`, independent of `OTP_PEPPER` | `env.uploadSigningSecret`; `receiptKey`, `linkKey` in `lib/uploads.ts` | `uploads.test.ts` › receipts are signed with their own secret (fails with the old shared secret, checked by reverting) | verified (this session) |
 | CFG-HEALTH | Health reports OTP as `off` in production without SMS, so the website shows no "OTP is 123456" banner to real users | `routes/public.ts` uses `otpMode()`; `Health.msg91` gains `off` | `routes.test.ts` (dev still `stub`); full API suite 162/162 | verified (this session) |
 
+## Deployment and backups (M12, M13)
+
+| ID | Requirement | Implementation | Test / evidence | Status |
+|---|---|---|---|---|
+| DEP-IMAGES | API and website build as production images from a clean context | `deploy/api.Dockerfile` (Bun 1.4.4, isolated install, non-root, health check), `deploy/web.Dockerfile` (Next standalone on Node 22, CSP origin as a build argument), `.dockerignore`, `NEXT_OUTPUT=standalone` in `next.config.ts` | `docker build` of both; API image without settings exits listing 6 problems | verified 2026-11-02 |
+| DEP-STACK | One command brings up database → migrations → API → website (→ Caddy HTTPS) in order, each health-checked | `deploy/compose.prod.yml`, `deploy/Caddyfile`, `deploy/.env.prod.example` | Local demo stack: migrate exit 0, all services healthy; browser smoke against the containers 10/10 (pages, 12 photos under the CSP, demo sign-in with httpOnly cookie, no console errors) | verified 2026-11-02; real TLS **unverified** (needs public DNS) |
+| DEP-BACKUP | Nightly backup of database and photos, checked, pruned | `deploy/backup.sh` | Produced `db.dump` + `uploads.tgz` + `SHA256SUMS`; dump listed by `pg_restore` | verified 2026-11-02; off-site copy **unverified** (needs a destination) |
+| DEP-RESTORE | Restore drill that changes nothing; real restore with confirmation | `deploy/restore.sh` (`--check`, checksum gate, confirmation) | Drill loaded into a scratch DB; corrupted backup, non-backup folder and unconfirmed restore refused with data untouched; after deleting all reviews and a photo, restore brought them back and the smoke test passed | verified 2026-11-02 |
+| DEP-ADMIN | First admin on a server without SMS | `src/scripts/grant-admin.ts` via `docker compose exec api` | Ran in the container: granted; an invalid phone printed usage | verified 2026-11-02 |
+
 ## Later PRPs (rows filled when each PRP is generated)
 
 | PRP | Area | Status |
@@ -195,8 +205,8 @@ Gates run on disposable databases `hostels_test_d` and `hostels_e2e_d` (e2e on p
 | 06 | Uploads: private attachments, relative URLs, metadata stripping, photo loading (M8–M10) | M8–M10 verified (Backend fixes above); object storage still open |
 | 07 | Responsive and accessible web (M11) | partly covered by PRP-12 (axe + overflow tests added) |
 | 08 | Mobile runtime verification | planned |
-| 09 | Zero-cost deployment configuration (M12) | planned |
-| 10 | Backup and recovery (M13) | planned |
+| 09 | Zero-cost deployment configuration (M12) | done (see Deployment and backups) |
+| 10 | Backup and recovery (M13) | done (see Deployment and backups) |
 | 11 | General rate limiting, CSP nonces, review weighting (M4, M14) | planned |
 | EXT-SMS | Live MSG91 | blocked: paid, needs approval |
 | EXT-RZP | Razorpay test and live | blocked: account needs approval |

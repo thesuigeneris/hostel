@@ -1,0 +1,19 @@
+# Keep build contexts small and free of secrets and local data.
+.git
+.claude
+**/node_modules
+**/.next
+**/.expo
+**/dist
+**/build
+**/*.log
+**/.env
+**/.env.*
+!**/.env.example
+apps/api/uploads
+apps/mobile/android
+apps/mobile/ios
+**/test-results
+**/playwright-report
+deploy/backups
+deploy/.env.prod
