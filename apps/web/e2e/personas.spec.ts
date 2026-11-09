@@ -124,8 +124,8 @@ test('3. owner moves a Free hostel to Pro and pays a plan bill', async ({ browse
   const owner = await signIn(browser, PRO_OWNER, { next: `/owner/hostels/${free.id}/plan` });
   await owner.getByRole('button', { name: 'Switch to Pro' }).click();
   await expect(owner.getByText('Plan updated')).toBeVisible();
-  await expect(owner.getByText(/Free trial until/)).toBeVisible();
-  await expect(owner.locator('div.rounded-2xl', { hasText: 'Adds the resident register' }).getByText('Current')).toBeVisible();
+  await expect(owner.getByText(/Free month until/)).toBeVisible();
+  await expect(owner.locator('div.rounded-2xl', { hasText: 'Resident register' }).getByText('Current')).toBeVisible();
 
   // The Pro hostel's trial ended last month; running the billing job issues this period's plan bill.
   const admin = await signIn(browser, ADMIN, { next: '/admin' });

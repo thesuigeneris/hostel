@@ -8,7 +8,6 @@ import {
   OWNER_PLANS,
   OWNER_TRIAL_MONTHS,
   PARTNER_REQUIREMENTS,
-  planPriceLine,
   REVIEW_MIN_STAY_DAYS,
   TRANSPARENCY_WINDOW_DAYS,
 } from '@hostels/shared';
@@ -139,7 +138,6 @@ export default async function ForOwnersPage() {
                   </li>
                 ))}
               </ul>
-              <span className="sr-only">{planPriceLine(id)}.</span>
               <LinkButton href={start} variant={id === 'partner' ? 'primary' : 'secondary'} className="mt-6 w-full">
                 {id === 'free' ? 'List free' : `Start with ${OWNER_PLANS[id].label}`}
               </LinkButton>
