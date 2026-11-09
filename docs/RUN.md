@@ -115,6 +115,8 @@ EAS stores the Play signing key for you on the first production build. With loca
 
 ## 6. Going live
 
+To run it on a server with Docker (images, HTTPS, backups, upgrades and rollback), follow [DEPLOY.md](DEPLOY.md). The rest of this section is the settings checklist both paths need.
+
 Run `bun run db:migrate` (in `apps/api`) before starting a new API version. The API doesn't migrate on start, and new code expects the new columns.
 
 Login works without SMS (phone + password). On a production standard instance, seeded demo accounts can't sign in and `db:reset` refuses to run. For a public demo instead, set `APP_MODE=demo` on a separate database; see the README.
