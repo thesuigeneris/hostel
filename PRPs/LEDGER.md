@@ -200,9 +200,14 @@ Audit checklist with evidence per screen and action: [`docs/product/audit-seeker
 Edge cases closed: S1–S3, S5–S8 and T2 from `docs/product/edge-cases.md` (S4 belongs to the owner agent).
 Migration: `0009_visit_one_open` (partial unique index; closes duplicate waiting requests first). Regenerated as 0009 after `0008_payment_mode` landed.
 
-Gates: see the last row. Databases `hostels_test_s` and `hostels_e2e_s`; e2e on ports 4105/3105. Mutation checks: each
-fix below was reverted on its own and its test failed (API: 8 reverts; web e2e: 10 reverts in two builds; web unit and
-shared: 4 reverts), then restored.
+Gates run at `b3a55c0` (after merging the integration branch at `9e4a084`) on disposable databases `hostels_test_s` and
+`hostels_e2e_s` (e2e on ports 4105/3105):
+- `bun run typecheck` (4/4 exit 0) and `bunx biome lint .` (clean).
+- Shared tests 38 pass; web unit tests 11 pass; mobile tests 45 pass; API tests 173 pass (162 on the integration branch).
+- `e2e:fresh`: 60/60 (9 new in `seeker-journeys.spec.ts`).
+- `npx expo export --platform android`: exit 0 (Hermes bundle).
+- Mutation checks: each fix below was reverted on its own and its test failed, then restored (API: 8 reverts; web e2e:
+  10 reverts in two builds; web unit: 4; shared: 1).
 
 | Req | Requirement | Implementation | Test | Status |
 |---|---|---|---|---|

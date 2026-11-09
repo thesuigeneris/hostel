@@ -16,6 +16,9 @@ test ran and passed in this session, `[~]` means implemented with only part of i
 
 "Mutation-checked" means the fix was reverted on its own and the named test failed, then the fix was restored.
 
+Gates at `b3a55c0` (integration branch merged at `9e4a084`): typecheck 4/4, lint clean, shared 38, web unit 11,
+mobile 45, API 173, `e2e:fresh` 60/60, `expo export --platform android` exit 0.
+
 ## 1. Trace of every seeker action (UI → handler → client → route → zod → service → SQL)
 
 | Action | Web / mobile entry | Shared client | API route → schema | Service → SQL | Authz | Evidence |
