@@ -54,7 +54,7 @@ bun --filter @hostels/web e2e:fresh   # same tests on a freshly reset hostels_e2
 
 The e2e suite starts the API and website if they are not running. It needs Chromium: run `bunx playwright install chromium` once (a Chromium at `/opt/pw-browsers/chromium` is used automatically). It creates a new owner, hostel and tenant on every run, so it can be repeated without a reset; the persona flows also act as seeded users, so reseed the dev database if you have run it several times.
 
-`e2e:fresh` resets and seeds a dedicated database (`createdb hostels_e2e` once; override with `E2E_DATABASE_URL`) and starts its own API and production web build on ports 4200 and 3200 (`E2E_API_PORT`, `E2E_WEB_PORT`), so it never touches your dev servers or data.
+`e2e:fresh` resets and seeds a dedicated database (`createdb hostels_e2e` once; override with `E2E_DATABASE_URL`) and starts its own API and production web build on ports 4200 and 3200 (`E2E_API_PORT`, `E2E_WEB_PORT`), so it never touches your dev servers or data. Its API is `apps/api/src/e2e-server.ts`: the same app plus a route that runs the clock ahead, so journeys like "review 14 days later" take seconds. It refuses to start in production; never deploy it. Against your dev servers (`e2e`), the steps that need it are skipped.
 
 ## 5. Build the Android app
 
