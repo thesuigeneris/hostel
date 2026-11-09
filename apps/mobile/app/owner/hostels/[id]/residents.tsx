@@ -1,10 +1,10 @@
-import { dateLabel, istDate, type Residency, rupees, SHARING_LABEL } from '@hostels/shared';
+import { dateLabel, istDate, type Residency, residencyLabel, rupees, SHARING_LABEL } from '@hostels/shared';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Text } from 'react-native';
 import { RoleGate } from '@/components/owner/Gate';
 import { Choice, HostelHeader, Upsell, whileLoading } from '@/components/owner/parts';
-import { Badge, Button, Card, Empty, ErrorText, Field, H2, Notice, P, Row, Screen, StatusBadge } from '@/components/ui';
+import { Badge, Button, Card, Empty, ErrorText, Field, H2, Notice, P, Row, Screen } from '@/components/ui';
 import { api } from '@/lib/api';
 import { checkResident, hasPlan, isDate } from '@/lib/owner';
 import { useAction } from '@/lib/ownerAction';
@@ -80,6 +80,7 @@ function Residents() {
       )}
 
       <H2>Current residents</H2>
+      <P muted>For a move-out date ahead, the resident keeps access to the board and issues until that day, then the stay ends on its own.</P>
       {current.length === 0 ? <Empty title="No residents yet" /> : current.map((r) => (
         <ResidentCard key={r.id} r={r} roomLabel={room(r.roomTypeId) ? SHARING_LABEL[room(r.roomTypeId)!.sharing] : '—'} hostelId={id} a={a} onEnded={s.reload} today={today} />
       ))}
@@ -91,9 +92,9 @@ function Residents() {
             <Card key={r.id}>
               <Row style={{ justifyContent: 'space-between' }}>
                 <Text style={{ color: theme.colors.text, fontWeight: '600' }}>{r.name || `+91 ${r.phone}`}</Text>
-                <StatusBadge status={r.status} />
+                <Badge label={residencyLabel(r, today)} tone="gray" />
               </Row>
-              <P muted>{dateLabel(r.startDate)} – {dateLabel(r.endDate)}</P>
+              <P muted>{dateLabel(r.startDate)}{r.endDate ? ` – ${dateLabel(r.endDate)}` : ''}</P>
             </Card>
           ))}
         </>
@@ -103,36 +104,40 @@ function Residents() {
 }
 
 function ResidentCard({ r, roomLabel, hostelId, a, onEnded, today }: { r: Residency; roomLabel: string; hostelId: string; a: ReturnType<typeof useAction>; onEnded: () => void; today: string }) {
-  const [end, setEnd] = useState(today);
+  const [end, setEnd] = useState(r.endDate ?? today);
   const [open, setOpen] = useState(false);
+  const label = residencyLabel(r, today);
+  const leaving = label.startsWith('Leaving');
+  const key = `end-${r.id}`;
+  const done = (date: string) => (r.status === 'invited' ? 'Invite withdrawn' : date > today ? `Leaving on ${dateLabel(date)}. They keep access until then.` : 'Marked as moved out');
+  const submit = (date: string) =>
+    a.run(key, async () => {
+      await api.owner.endResident(hostelId, r.id, date);
+      setOpen(false);
+      await onEnded();
+    }, done(date));
   return (
     <Card>
       <Row style={{ justifyContent: 'space-between' }}>
         <Text style={{ color: theme.colors.text, fontWeight: '600', flex: 1 }}>{r.name || '—'}</Text>
-        <StatusBadge status={r.status} />
+        <Badge label={label} tone={r.status === 'invited' || leaving ? 'food' : 'green'} />
         {r.source === 'subscription' && <Badge label="Subscriber" tone="green" />}
       </Row>
       <P muted>+91 {r.phone} · {roomLabel} · {rupees(r.monthlyRent)} · since {dateLabel(r.startDate)}</P>
-      {r.source === 'owner' && (open ? (
+      {r.source === 'subscription' && <P muted>Their stay ends with their plan.</P>}
+      {r.source === 'owner' && r.status === 'invited' && (
+        <Button small title="Withdraw invite" variant="secondary" busy={a.busy === key} onPress={() => submit(today)} />
+      )}
+      {r.source === 'owner' && r.status === 'active' && (open ? (
         <>
-          <Field label="Moved out on" hint="YYYY-MM-DD" value={end} onChangeText={setEnd} maxLength={10} />
+          <Field label="Move-out date" hint="YYYY-MM-DD. A date ahead keeps them here until then." value={end} onChangeText={setEnd} maxLength={10} />
           <Row>
-            <Button
-              small
-              title="Mark moved out"
-              variant="danger"
-              disabled={!isDate(end)}
-              busy={a.busy === `end-${r.id}`}
-              onPress={() => a.run(`end-${r.id}`, async () => {
-                await api.owner.endResident(hostelId, r.id, end.trim());
-                await onEnded();
-              }, 'Marked as moved out')}
-            />
+            <Button small title={end.trim() > today ? 'Set move-out date' : 'Mark moved out'} variant="danger" disabled={!isDate(end)} busy={a.busy === key} onPress={() => submit(end.trim())} />
             <Button small title="Cancel" variant="ghost" onPress={() => setOpen(false)} />
           </Row>
         </>
       ) : (
-        <Button small title="Moved out" variant="secondary" onPress={() => setOpen(true)} />
+        <Button small title={leaving ? 'Change move-out date' : 'Moving out'} variant="secondary" onPress={() => setOpen(true)} />
       ))}
     </Card>
   );

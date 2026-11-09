@@ -1,6 +1,5 @@
 import {
   addDays,
-  DEFAULT_PLATFORM_FEE_PCT,
   type GenderType,
   type Hostel,
   hostelInputSchema,
@@ -16,6 +15,8 @@ import {
   OWNER_PLAN_TIERS,
   type OwnerPlanInfo,
   type OwnerPlanTier,
+  type OwnerSection,
+  type PlanState,
   type RentMethod,
   rentRecordSchema,
   type RentRecordInput,
@@ -32,7 +33,8 @@ import {
 const RANK: Record<OwnerPlanTier, number> = { free: 0, pro: 1, partner: 2 };
 export const hasPlan = (effective: OwnerPlanTier, needed: OwnerPlanTier) => RANK[effective] >= RANK[needed];
 
-export type HostelSection = { path: string; label: string; hint: string; needs?: OwnerPlanTier };
+/** `byTier`: the section serves existing subscribers, so a plan paused for an overdue bill keeps it. */
+export type HostelSection = { path: string; label: string; hint: string; needs?: OwnerPlanTier; byTier?: boolean };
 
 /** The website's owner tabs, as rows on the hostel screen. `needs` locks a row below that plan. */
 export const HOSTEL_SECTIONS: HostelSection[] = [
@@ -42,18 +44,22 @@ export const HOSTEL_SECTIONS: HostelSection[] = [
   { path: 'rent', label: 'Rent tracker', hint: 'Who paid this month, who is due', needs: 'pro' },
   { path: 'community', label: 'Issues and community', hint: 'Answer issues, post announcements' },
   { path: 'reviews', label: 'Reviews', hint: 'Reply to verified residents' },
-  { path: 'menu', label: 'Weekly menu', hint: 'Meals subscribers see in their app', needs: 'partner' },
-  { path: 'kitchen', label: 'Kitchen and subscribers', hint: 'Daily headcount and subscriber list', needs: 'partner' },
+  { path: 'menu', label: 'Weekly menu', hint: 'Meals subscribers see in their app', needs: 'partner', byTier: true },
+  { path: 'kitchen', label: 'Kitchen and subscribers', hint: 'Daily headcount and subscriber list', needs: 'partner', byTier: true },
+  { path: 'dashboard', label: 'Dashboard', hint: 'What you owe, what you earned, occupancy and issues' },
   { path: 'plan', label: 'Plan and billing', hint: 'Change plan, pay your bill' },
 ];
 
-export const sectionLocked = (s: HostelSection, effective: OwnerPlanTier) => !!s.needs && !hasPlan(effective, s.needs);
+/** Locked below the section's plan. Paused plans count by what they are paying for only where `byTier` says so. */
+/** "3 issues waiting for your reply", for screen readers next to a count badge. */
+export const waitingLabel = (n: number) => `${n} ${n === 1 ? 'issue' : 'issues'} waiting for your reply`;
 
-export const PLAN_BLURB: Record<OwnerPlanTier, string> = {
-  free: 'Listing, visit requests, verified reviews and issue reporting.',
-  pro: 'Adds the resident register, rent tracker and community board.',
-  partner: `Adds the verified badge, online subscriptions with no advance, menus and payouts. ${DEFAULT_PLATFORM_FEE_PCT}% fee on collected rent.`,
-};
+export const sectionLocked = (s: HostelSection, plan: Pick<PlanState, 'plan' | 'effective'>) =>
+  !!s.needs && !hasPlan(s.byTier ? plan.plan : plan.effective, s.needs);
+
+/** Where a next step on the owner's home leads, in the app. */
+export const sectionPath = (hostelId: string, section: OwnerSection) =>
+  `/owner/hostels/${hostelId}/${{ listing: 'listing', rooms: 'rooms', plan: 'plan', issues: 'community', dashboard: 'dashboard' }[section]}`;
 
 export type PlanChoice = {
   tier: OwnerPlanTier;
@@ -64,9 +70,10 @@ export type PlanChoice = {
 };
 
 /** What each plan card offers, given the hostel's plan and listing status. Same rules as the website's plan page. */
-export function planChoices(info: Pick<OwnerPlanInfo, 'plan' | 'partnerStatus'>, hostelStatus: Hostel['status']): PlanChoice[] {
+export function planChoices(info: Pick<OwnerPlanInfo, 'plan' | 'partnerStatus'> & { inTrial?: boolean }, hostelStatus: Hostel['status']): PlanChoice[] {
   const current = info.plan?.plan ?? 'free';
-  const pending = !!info.plan?.pendingPlan;
+  // Only a scheduled downgrade can be called off with "Keep this plan"; a partner application waits for our team.
+  const pending = !!info.plan?.pendingPlan && !!info.plan.pendingPlanOn;
   return OWNER_PLAN_TIERS.map((tier) => {
     const isCurrent = tier === current;
     const rejectedNote = tier === 'partner' && info.partnerStatus === 'rejected' ? "A previous application wasn't approved. You can apply again." : null;
@@ -84,7 +91,10 @@ export function planChoices(info: Pick<OwnerPlanInfo, 'plan' | 'partnerStatus'>,
       action: {
         label,
         primary: RANK[tier] > RANK[current],
-        confirm: tier === 'free' && !isCurrent ? 'Downgrade to Free? Paid features stop at the end of the period.' : undefined,
+        confirm:
+          RANK[tier] < RANK[current] && !isCurrent
+            ? `Downgrade to ${tier === 'pro' ? 'Pro' : 'Free'}? ${info.inTrial ? 'You are in the free month, so it happens now.' : 'It happens at the end of the month you paid for.'}`
+            : undefined,
       },
       note: rejectedNote,
     };
@@ -189,6 +199,9 @@ export function draftToInput(d: HostelDraft): Checked<HostelInput> {
 export function missingForSubmit(h: { roomTypes: unknown[]; photos: unknown[] }): string[] {
   return [!h.roomTypes.length && 'a room type', !h.photos.length && 'a photo'].filter((s): s is string => !!s);
 }
+
+/** A live listing (or one in review) keeps at least one photo; the API refuses to remove the last one (edge case O4). */
+export const canRemovePhoto = (h: { status: Hostel['status']; photos: unknown[] }) => !(h.photos.length <= 1 && (h.status === 'live' || h.status === 'pending'));
 
 /** Photo order with `coverId` first; the API treats the first photo as the cover. */
 export const coverOrder = (photoIds: string[], coverId: string) => [coverId, ...photoIds.filter((p) => p !== coverId)];

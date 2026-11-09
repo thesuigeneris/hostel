@@ -42,10 +42,15 @@ describe('plans and sections', () => {
   });
 
   test('sections lock below their plan', () => {
-    const locked = (p: 'free' | 'pro' | 'partner') => HOSTEL_SECTIONS.filter((s) => sectionLocked(s, p)).map((s) => s.path);
+    const locked = (p: 'free' | 'pro' | 'partner') => HOSTEL_SECTIONS.filter((s) => sectionLocked(s, { plan: p, effective: p })).map((s) => s.path);
     expect(locked('free')).toEqual(['residents', 'rent', 'menu', 'kitchen']);
     expect(locked('pro')).toEqual(['menu', 'kitchen']);
     expect(locked('partner')).toEqual([]);
+  });
+
+  test('a paused Partner keeps the menu and kitchen for its existing subscribers, not the Pro tools (M10)', () => {
+    const paused = HOSTEL_SECTIONS.filter((s) => sectionLocked(s, { plan: 'partner', effective: 'free' })).map((s) => s.path);
+    expect(paused).toEqual(['residents', 'rent']);
   });
 
   const info = (plan: OwnerPlanInfo['plan'], partnerStatus: OwnerPlanInfo['partnerStatus'] = 'none') => ({ plan, partnerStatus });
@@ -63,13 +68,17 @@ describe('plans and sections', () => {
     const [free, pro] = planChoices(info(proPlan), 'live');
     expect(free!.action).toMatchObject({ label: 'Switch to Free', primary: false });
     expect(free!.action!.confirm).toContain('Downgrade');
+    expect(free!.action!.confirm).toContain('end of the month you paid for');
+    expect(planChoices({ ...info(proPlan), inTrial: true }, 'live')[0]!.action!.confirm).toContain('happens now');
     expect(pro!.action).toBeNull();
     const pending = planChoices(info({ ...proPlan, pendingPlan: 'free', pendingPlanOn: '2026-11-01' }), 'live');
     expect(pending[1]!.action!.label).toBe('Keep this plan');
   });
 
-  test('partner application in review shows a note instead of a button', () => {
+  test('partner application in review shows a note instead of a button, and no "Keep this plan"', () => {
     expect(planChoices(info(proPlan, 'applied'), 'live')[2]).toMatchObject({ action: null, note: expect.stringContaining('in review') });
+    const applied = planChoices(info({ ...proPlan, pendingPlan: 'partner', pendingPlanOn: null }, 'applied'), 'live');
+    expect(applied[1]!.action).toBeNull();
     expect(planChoices(info(proPlan, 'rejected'), 'live')[2]!.note).toContain("wasn't approved");
   });
 });
