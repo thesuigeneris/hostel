@@ -3,7 +3,7 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { RoleGate } from '@/components/owner/Gate';
-import { Choice, HostelHeader, Muted, Stepper, Upsell, whileLoading } from '@/components/owner/parts';
+import { Choice, HostelHeader, Muted, PausedPartnerNotice, Stepper, Upsell, whileLoading } from '@/components/owner/parts';
 import { Button, Card, ErrorText, Field, Notice, Screen } from '@/components/ui';
 import { api } from '@/lib/api';
 import { hasPlan, type MenuSlot, menuGrid, menuItems } from '@/lib/owner';
@@ -26,7 +26,8 @@ function Menu() {
   const [week, setWeek] = useState(thisWeek);
   const s = useLoad(async () => {
     const h = await api.owner.hostel(id);
-    if (!hasPlan(h.plan.effective, 'partner')) return { h, menu: null, partners: [] };
+    // The plan tier, not the effective plan: a paused Partner still feeds its existing subscribers.
+    if (!hasPlan(h.plan.plan, 'partner')) return { h, menu: null, partners: [] };
     const [menu, partners] = await Promise.all([
       api.owner.menu(id, week).catch((e) => (e instanceof ApiError && e.status === 404 ? null : Promise.reject(e))),
       api.hostels.foodPartners().catch(() => []),
@@ -47,8 +48,8 @@ function Menu() {
   const gate = whileLoading(s);
   if (gate) return gate;
   const { h, partners } = s.data!;
-  if (!hasPlan(h.plan.effective, 'partner')) {
-    return <Screen><HostelHeader h={h} /><Upsell hostelId={id} plan="partner" feature="Weekly menus" suspended={h.plan.suspended} /></Screen>;
+  if (!hasPlan(h.plan.plan, 'partner')) {
+    return <Screen><HostelHeader h={h} /><Upsell hostelId={id} plan="partner" feature="Weekly menus" /></Screen>;
   }
   const date = addDays(week, day);
   const slots = grid.filter((g) => g.date === date);
@@ -57,6 +58,7 @@ function Menu() {
   return (
     <Screen refreshing={s.refreshing} onRefresh={s.refresh}>
       <HostelHeader h={h} />
+      {h.plan.suspended && <PausedPartnerNotice hostelId={id} />}
       <Stepper label={`Week of ${dateLabel(week)}${week === thisWeek ? ' (this week)' : ''}`} onPrev={() => setWeek(addDays(week, -7))} onNext={() => setWeek(addDays(week, 7))} />
       <ErrorText>{a.error ?? s.error}</ErrorText>
       <Notice>{a.ok}</Notice>

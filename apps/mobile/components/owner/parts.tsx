@@ -82,8 +82,18 @@ export function Upsell({ hostelId, plan, feature, suspended }: { hostelId: strin
   return (
     <Card tone="food">
       <H2>{feature} is part of {OWNER_PLANS[plan].label}</H2>
-      <P>{suspended ? 'Your plan is paused because a bill is overdue. Pay it to turn everything back on.' : `Upgrade this hostel to ${OWNER_PLANS[plan].label}. The first month is free.`}</P>
+      <P>{suspended ? 'Your plan is paused because a bill is overdue. Pay it to turn everything back on.' : `Upgrade this hostel to ${OWNER_PLANS[plan].label}. A hostel's first paid plan starts with a free month.`}</P>
       <Button title={suspended ? 'Pay the bill' : 'See plans'} variant="food" onPress={() => router.push(`/owner/hostels/${hostelId}/plan`)} />
+    </Card>
+  );
+}
+
+/** A Partner hostel paused for an overdue bill: its subscribers still eat, so menus and the kitchen stay open. */
+export function PausedPartnerNotice({ hostelId }: { hostelId: string }) {
+  return (
+    <Card tone="danger">
+      <P>Your plan is paused for an overdue bill. Existing subscribers still get their meals, so the menu and headcount keep working, but new tenants can't subscribe until it is paid.</P>
+      <Button small title="Pay the bill" onPress={() => router.push(`/owner/hostels/${hostelId}/plan`)} />
     </Card>
   );
 }
