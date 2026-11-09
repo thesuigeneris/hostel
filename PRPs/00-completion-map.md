@@ -65,8 +65,8 @@
 | M9 | **Photo URLs are absolute and frozen** at upload time (`API_PUBLIC_URL`), which breaks them on domain or LAN changes and on mobile devices. | `lib/storage.ts` `put()` | 06 · **fixed** on `backend-fixes` (`f469d7d`, LEDGER BF-M9) |
 | M10 | **Photo metadata, such as GPS from phone cameras, isn't stripped.** | `routes/uploads.ts` | 06 · **fixed** on `backend-fixes` (`8edb050`, LEDGER BF-M10) |
 | M11 | **No accessibility checks** in tests. | `apps/web/e2e` | 07 |
-| M12 | **No deployment configuration:** no app Dockerfiles or production compose. | repo root, `docker/` has only a test-DB init | 09 |
-| M13 | **No backup or restore tooling or runbook.** | grep found nothing | 10 |
+| M12 | ~~**No deployment configuration:** no app Dockerfiles or production compose.~~ **Fixed:** `deploy/` (API and web images, production compose with a one-shot migration and optional Caddy HTTPS), runbook `docs/DEPLOY.md`; built and run end to end on 2026-11-02. | repo root, `docker/` has only a test-DB init | 09 |
+| M13 | ~~**No backup or restore tooling or runbook.**~~ **Fixed:** `deploy/backup.sh`, `deploy/restore.sh` (with a non-destructive `--check` drill), schedule and off-site copy in `docs/DEPLOY.md`; backup, drill, refusals and a real restore run on 2026-11-02. | grep found nothing | 10 |
 | M14 | **CSP allows `'unsafe-inline'` scripts.** | `docs/security-review.md` | 11 |
 
 ## 5. Blocked by credentials or approval

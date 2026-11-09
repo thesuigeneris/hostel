@@ -1,0 +1,19 @@
+# HTTPS for the website and the API (compose profile `tls`). Domains and the certificate email come from
+# deploy/.env.prod. Caddy gets and renews Let's Encrypt certificates on its own.
+{
+	email {$ACME_EMAIL}
+}
+
+{$SITE_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy web:3000
+}
+
+{$API_DOMAIN} {
+	encode zstd gzip
+	# Uploads are capped at 5 MB by the API; leave headroom for the multipart envelope.
+	request_body {
+		max_size 8MB
+	}
+	reverse_proxy api:4000
+}
