@@ -20,7 +20,7 @@ That template's Python rules (venv, pytest, pydantic, black, FastAPI) do not app
 
 | Area | What is used | Where |
 |---|---|---|
-| Runtime / package manager | Bun 1.3+, workspaces | `package.json` |
+| Runtime / package manager | Bun 1.4+ (the lockfile is format v2), workspaces | `package.json` |
 | API | Hono, Drizzle ORM, postgres-js, zod | `apps/api/src/{routes,services,lib,db}` |
 | Database | PostgreSQL 16, Drizzle migrations | `apps/api/src/db/schema.ts`, `apps/api/migrations/` |
 | Contract | zod schemas, types, typed client | `packages/shared/src/{schemas,types,client}.ts` |

@@ -53,7 +53,7 @@ On a physical phone with Expo Go, point the app at your laptop's LAN address for
 
 ## Configuration
 
-This section is the reference for every setting. For the step-by-step run and the checklist before real users, see [docs/RUN.md](docs/RUN.md).
+This section is the reference for every setting. For the step-by-step run and the checklist before real users, see [docs/RUN.md](docs/RUN.md); to deploy on a server with Docker, HTTPS and backups, see [docs/DEPLOY.md](docs/DEPLOY.md).
 
 To see what is live, check the API's startup lines or `GET /`:
 
