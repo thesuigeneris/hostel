@@ -9,12 +9,16 @@ import type {
 import {
   addDays,
   type hostelInputSchema,
+  istDate,
   newId,
+  type PartnerCheck,
+  type PartnerStandardId,
   type roomTypeInputSchema,
+  standardsFor,
   TRANSPARENCY_MIN_ISSUES,
   TRANSPARENCY_WINDOW_DAYS,
 } from '@hostels/shared';
-import { and, asc, eq, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, or, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 import { getDb, schema } from '../db';
 import { clock } from '../lib/clock';
@@ -360,14 +364,34 @@ export async function transparencyFor(hostelId: string): Promise<TransparencySta
   };
 }
 
+/** What the decision that verified this partner covered: the standards that apply to it and were ticked. */
+export async function partnerCheckFor(hostel: { id: string; partnerStatus: string; foodAvailable: boolean }): Promise<PartnerCheck | null> {
+  if (hostel.partnerStatus !== 'verified') return null;
+  const a = schema.partnerApplications;
+  const [row] = await getDb()
+    .select({ checklist: a.checklist, decidedAt: a.decidedAt })
+    .from(a)
+    .where(and(eq(a.hostelId, hostel.id), eq(a.status, 'verified')))
+    .orderBy(sql`${a.decidedAt} desc nulls last`, desc(a.appliedAt))
+    .limit(1);
+  const ticked = new Set(row?.checklist ?? []);
+  return {
+    checkedOn: row?.decidedAt ? istDate(row.decidedAt) : null,
+    checks: standardsFor(hostel.foodAvailable)
+      .map((s) => s.id)
+      .filter((id): id is PartnerStandardId => ticked.has(id)),
+  };
+}
+
 export async function hostelDetail(hostel: typeof schema.hostels.$inferSelect): Promise<HostelDetail> {
   const db = getDb();
-  const [photos, rooms, ratings, transparency, plan] = await Promise.all([
+  const [photos, rooms, ratings, transparency, plan, partnerCheck] = await Promise.all([
     db.select().from(schema.hostelPhotos).where(eq(schema.hostelPhotos.hostelId, hostel.id)).orderBy(asc(schema.hostelPhotos.sortOrder)),
     db.select().from(schema.roomTypes).where(eq(schema.roomTypes.hostelId, hostel.id)).orderBy(asc(schema.roomTypes.monthlyRent)),
     ratingsFor(hostel.id),
     transparencyFor(hostel.id),
     planFor(hostel.id),
+    partnerCheckFor(hostel),
   ]);
   return {
     ...toHostel(hostel),
@@ -376,6 +400,7 @@ export async function hostelDetail(hostel: typeof schema.hostels.$inferSelect): 
     roomTypes: rooms.map(toRoomType),
     ratings,
     transparency,
+    partnerCheck,
   };
 }
 

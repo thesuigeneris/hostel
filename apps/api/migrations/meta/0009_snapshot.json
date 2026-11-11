@@ -1,5 +1,5 @@
 {
-  "id": "abb4f369-0bfd-4875-9180-9bdcc69ba1e6",
+  "id": "b739e1b2-a6d4-409e-90dc-083c28828209",
   "prevId": "5e553641-e808-4690-9bf0-e0641c36904f",
   "version": "7",
   "dialect": "postgresql",
@@ -2027,19 +2027,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "credit_amount": {
-          "name": "credit_amount",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "note": {
-          "name": "note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "status": {
           "name": "status",
           "type": "invoice_status",
@@ -2088,8 +2075,8 @@
         }
       },
       "indexes": {
-        "owner_invoices_plan_tier_period": {
-          "name": "owner_invoices_plan_tier_period",
+        "owner_invoices_plan_period": {
+          "name": "owner_invoices_plan_period",
           "columns": [
             {
               "expression": "owner_plan_id",
@@ -2099,12 +2086,6 @@
             },
             {
               "expression": "period_start",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "plan",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2170,10 +2151,6 @@
       },
       "policies": {},
       "checkConstraints": {
-        "owner_invoices_amounts_nonneg": {
-          "name": "owner_invoices_amounts_nonneg",
-          "value": "\"owner_invoices\".\"amount\" >= 0 and \"owner_invoices\".\"credit_amount\" >= 0"
-        },
         "owner_invoices_payment_mode_status": {
           "name": "owner_invoices_payment_mode_status",
           "value": "(\"owner_invoices\".\"status\" = 'paid' and \"owner_invoices\".\"payment_mode\" is not null and \"owner_invoices\".\"payment_mode\" <> 'waived') or (\"owner_invoices\".\"status\" = 'void' and (\"owner_invoices\".\"payment_mode\" is null or \"owner_invoices\".\"payment_mode\" = 'waived')) or (\"owner_invoices\".\"status\" = 'due' and \"owner_invoices\".\"payment_mode\" is null)"
@@ -2980,28 +2957,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "residencies_one_open_owner_stay": {
-          "name": "residencies_one_open_owner_stay",
-          "columns": [
-            {
-              "expression": "hostel_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "phone",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"residencies\".\"source\" = 'owner' and \"residencies\".\"status\" in ('invited', 'active')",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -3223,12 +3178,6 @@
         },
         "owner_replied_at": {
           "name": "owner_replied_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "owner_reply_edited_at": {
-          "name": "owner_reply_edited_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
@@ -3792,6 +3741,28 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "visit_requests_one_open": {
+          "name": "visit_requests_one_open",
+          "columns": [
+            {
+              "expression": "hostel_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"visit_requests\".\"status\" = 'new'",
           "concurrently": false,
           "method": "btree",
           "with": {}

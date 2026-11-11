@@ -7,6 +7,7 @@ import { SearchResults } from '@/components/SearchResults';
 import { SearchViewToggle } from '@/components/SearchViewToggle';
 import { Flash } from '@/components/ui';
 import { publicApi } from '@/lib/api';
+import { searchInput } from '@/lib/search';
 
 type Props = { params: Promise<{ area: string }>; searchParams: Promise<SearchParams> };
 
@@ -44,11 +45,11 @@ export default async function AreaPage({ params, searchParams }: Props) {
   const name = area?.area ?? nameFromSlug(slug);
   // The area comes from the path, so it is left out of this page's own links.
   const { area: _ignored, ...q } = await searchParams;
-  const { view: _view, ...filters } = q;
+  const search = searchInput(q, area?.area);
   let error: string | undefined = failed ? 'We could not load hostels right now. Please try again in a minute.' : undefined;
   const result = area
     ? await publicApi(60)
-        .hostels.search({ ...filters, area: area.area })
+        .hostels.search(search)
         .catch(() => {
           error = 'We could not run this search. Check the filters, or clear them and try again.';
           return { items: [], total: 0, page: Number(q.page) || 1, limit: 20 };
@@ -82,7 +83,7 @@ export default async function AreaPage({ params, searchParams }: Props) {
       <section aria-labelledby="results-heading" className="mt-6">
         <h2 id="results-heading" className="sr-only">Results</h2>
         <Flash error={error} />
-        {result && !error && <SearchResults result={result} q={q} base={base} lockArea />}
+        {result && !error && <SearchResults result={result} q={q} base={base} lockArea search={search} />}
       </section>
     </div>
   );

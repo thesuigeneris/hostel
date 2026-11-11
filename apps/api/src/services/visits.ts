@@ -1,28 +1,39 @@
 import type { User, VisitStatus } from '@hostels/shared';
-import { newId, VISIT_NEXT } from '@hostels/shared';
+import { newId, VISIT_NEXT, visitDateProblem } from '@hostels/shared';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db';
 import { clock } from '../lib/clock';
+import { isUniqueViolation } from '../lib/db-errors';
 import { AppError, notFound } from '../lib/errors';
 import { hostelIdsOwnedBy, ownedHostel } from './access';
 
 const toVisit = (v: typeof schema.visitRequests.$inferSelect) => ({ ...v, createdAt: v.createdAt.toISOString() });
 
+const alreadyWaiting = () => new AppError('invalid_state', 'You already have a visit request waiting at this hostel');
+
 export async function requestVisit(user: User, hostelId: string, input: { preferredDate: string; message: string }) {
   const db = getDb();
   const [h] = await db.select().from(schema.hostels).where(and(eq(schema.hostels.id, hostelId), eq(schema.hostels.status, 'live')));
   if (!h) throw notFound('Hostel');
-  if (input.preferredDate < clock.today()) throw new AppError('validation', 'Pick today or a later date', 400);
+  if (h.ownerId === user.id) throw new AppError('invalid_state', 'This is your own hostel, so there is no visit to request.');
+  const problem = visitDateProblem(input.preferredDate, clock.today());
+  if (problem) throw new AppError('validation', problem, 400);
   const [open] = await db
     .select({ id: schema.visitRequests.id })
     .from(schema.visitRequests)
     .where(and(eq(schema.visitRequests.hostelId, h.id), eq(schema.visitRequests.userId, user.id), eq(schema.visitRequests.status, 'new')));
-  if (open) throw new AppError('invalid_state', 'You already have a visit request waiting at this hostel');
-  const [row] = await db
-    .insert(schema.visitRequests)
-    .values({ id: newId('vis'), hostelId: h.id, userId: user.id, ...input, createdAt: clock.now() })
-    .returning();
-  return toVisit(row!);
+  if (open) throw alreadyWaiting();
+  try {
+    const [row] = await db
+      .insert(schema.visitRequests)
+      .values({ id: newId('vis'), hostelId: h.id, userId: user.id, ...input, createdAt: clock.now() })
+      .returning();
+    return toVisit(row!);
+  } catch (e) {
+    // A double-submitted form: both requests passed the check above, and the partial unique index lets one in.
+    if (isUniqueViolation(e, 'visit_requests_one_open')) throw alreadyWaiting();
+    throw e;
+  }
 }
 
 export async function myVisits(user: User) {

@@ -6,6 +6,7 @@ import { SearchResults } from '@/components/SearchResults';
 import { SearchViewToggle } from '@/components/SearchViewToggle';
 import { Flash } from '@/components/ui';
 import { publicApi } from '@/lib/api';
+import { searchInput } from '@/lib/search';
 
 const BASE_METADATA: Metadata = {
   title: 'Find a hostel or PG in Hyderabad',
@@ -21,14 +22,19 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
 
 export default async function HostelsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const q = await searchParams;
-  const { view: _view, ...filters } = q;
+  const search = searchInput(q);
   let error: string | undefined;
-  const result = await publicApi(30)
-    .hostels.search(filters)
-    .catch(() => {
-      error = 'We could not run this search. Check the filters, or clear them and try again.';
-      return { items: [], total: 0, page: Number(q.page) || 1, limit: 20 };
-    });
+  const [result, areas] = await Promise.all([
+    publicApi(30)
+      .hostels.search(search)
+      .catch(() => {
+        error = 'We could not run this search. Check the filters, or clear them and try again.';
+        return { items: [], total: 0, page: Number(q.page) || 1, limit: 20 };
+      }),
+    publicApi(300)
+      .hostels.areas()
+      .catch(() => null),
+  ]);
   const base = '/hostels';
   const where = q.area ? ` in ${q.area}` : ' in Hyderabad';
   return (
@@ -47,12 +53,12 @@ export default async function HostelsPage({ searchParams }: { searchParams: Prom
           <SearchViewToggle q={q} base={base} />
         </div>
       </div>
-      <SearchFilters q={q} action={base} />
+      <SearchFilters q={q} action={base} areas={areas} />
       <AppliedFilters items={appliedFilters(q, base)} clearHref={searchHref(base, { view: q.view })} />
       <section aria-labelledby="results-heading" className="mt-6">
         <h2 id="results-heading" className="sr-only">Results</h2>
         <Flash error={error} />
-        {!error && <SearchResults result={result} q={q} base={base} />}
+        {!error && <SearchResults result={result} q={q} base={base} search={search} />}
       </section>
     </div>
   );

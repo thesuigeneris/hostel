@@ -9,14 +9,14 @@ import { demoLoginAction, passwordLoginAction, registerAction, requestOtpAction,
 export const metadata: Metadata = { title: 'Log in', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
-type Search = { step?: string; view?: string; phone?: string; name?: string; next?: string; role?: string; dev?: string; error?: string };
+type Search = { step?: string; view?: string; phone?: string; name?: string; next?: string; role?: string; dev?: string; error?: string; expired?: string };
 
 const OFF: AuthMethods = { mode: 'standard', otp: 'off', password: true, signup: true, demo: { enabled: false, accounts: [] } };
 
 function PhoneInput({ defaultValue, autoFocus }: { defaultValue?: string; autoFocus?: boolean }) {
   return (
     <div className="flex">
-      <span className="grid h-10 place-items-center rounded-l-xl border border-r-0 border-line bg-bg px-3 text-sm text-ink-soft">+91</span>
+      <span className="grid h-11 place-items-center rounded-l-xl border border-r-0 border-control/70 bg-bg px-3 text-sm text-ink-soft">+91</span>
       <Input name="phone" type="tel" inputMode="tel" autoComplete="tel-national" required defaultValue={defaultValue} className="rounded-l-none" placeholder="98765 43210" autoFocus={autoFocus} />
     </div>
   );
@@ -53,6 +53,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       )}
       <Card className="mt-6">
         <Flash error={q.error} />
+        {q.expired && !q.error && (
+          <output className="mb-4 block rounded-xl bg-info-soft px-4 py-3 text-sm text-info">
+            Your session ended, so please log in again. We&apos;ll take you back to where you were.
+          </output>
+        )}
 
         {methods.mode === 'standard' && view === 'otp-code' && (
           <form action={verifyOtpAction} className="space-y-4">

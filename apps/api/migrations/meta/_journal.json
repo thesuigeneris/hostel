@@ -68,8 +68,15 @@
     {
       "idx": 9,
       "version": "7",
-      "when": 1793560073571,
-      "tag": "0009_owner_fixes",
+      "when": 1793559799742,
+      "tag": "0009_visit_one_open",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794378323486,
+      "tag": "0010_owner_fixes",
       "breakpoints": true
     }
   ]

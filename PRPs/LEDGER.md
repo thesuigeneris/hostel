@@ -194,6 +194,42 @@ Gates run on disposable databases `hostels_test_d` and `hostels_e2e_d` (e2e on p
 | DEP-RESTORE | Restore drill that changes nothing; real restore with confirmation | `deploy/restore.sh` (`--check`, checksum gate, confirmation) | Drill loaded into a scratch DB; corrupted backup, non-backup folder and unconfirmed restore refused with data untouched; after deleting all reviews and a photo, restore brought them back and the smoke test passed | verified 2026-11-02 |
 | DEP-ADMIN | First admin on a server without SMS | `src/scripts/grant-admin.ts` via `docker compose exec api` | Ran in the container: granted; an invalid phone printed usage | verified 2026-11-02 |
 
+## Seeker persona audit (branch `persona-seeker`)
+
+Audit checklist with evidence per screen and action: [`docs/product/audit-seeker.md`](../docs/product/audit-seeker.md).
+Edge cases closed: S1–S3, S5–S8 and T2 from `docs/product/edge-cases.md` (S4 belongs to the owner agent).
+Migration: `0009_visit_one_open` (partial unique index; closes duplicate waiting requests first). Regenerated as 0009 after `0008_payment_mode` landed.
+
+Gates run at `b3a55c0` (after merging the integration branch at `9e4a084`) on disposable databases `hostels_test_s` and
+`hostels_e2e_s` (e2e on ports 4105/3105):
+- `bun run typecheck` (4/4 exit 0) and `bunx biome lint .` (clean).
+- Shared tests 38 pass; web unit tests 11 pass; mobile tests 45 pass; API tests 173 pass (162 on the integration branch).
+- `e2e:fresh`: 60/60 (9 new in `seeker-journeys.spec.ts`).
+- `npx expo export --platform android`: exit 0 (Hermes bundle).
+- Mutation checks: each fix below was reverted on its own and its test failed, then restored (API: 8 reverts; web e2e:
+  10 reverts in two builds; web unit: 4; shared: 1).
+
+| Req | Requirement | Implementation | Test | Status |
+|---|---|---|---|---|
+| SEEK-SUGGEST | Suggestions while typing: areas (word start) then live hostel names; debounced, keyboard combobox; plain form without JS; also on Explore | `search.ts` `suggest`; `GET /suggest`; `suggestSchema`, `hostels.suggest`; web `SearchSuggest`, `app/api/suggest/route.ts`; app `lib/suggest.ts`, Explore | API `seeker.test.ts` › suggestions while typing (2); e2e `seeker-journeys.spec.ts` › S1; mobile `seeker.test.ts` › explore suggestions | verified @6d15344 (API), @084f0e0 (web); app screen unverified on a device |
+| SEEK-NOJS | Search and area pages complete without JavaScript (route `loading.tsx` streamed results behind a JS-only Suspense swap) | removed `hostels/(list)/loading.tsx`, `hostels-in/[area]/loading.tsx`; `SearchButton` pending text | e2e › S1 (no-JS results; failed with the loading file restored) | verified @084f0e0 |
+| SEEK-T2 | Rating sort and "recommended" use a shrunk average (prior weight 5); "4★ and up" needs 3 reviews; pages show the true average, "New" below 3 reviews | `search.ts`; `RATING_PRIOR_WEIGHT`, `RATING_MIN_REVIEWS`, `ratingView` in `packages/shared/src/seeker.ts`; web `Rating.tsx`, hostel page, JSON-LD; app `Rating.tsx` | API › a single 5★ review does not outrank many good ones (mutation-checked twice: raw order, filter); e2e › S3 (JSON-LD) | verified @6d15344, @084f0e0 |
+| SEEK-S5 | Stable order (`id` last in every sort); real total past the last page, link to it | `search.ts`; `SearchResults.tsx` | API › equal rows keep one order…, › a page past the end…; e2e › S5 | verified @6d15344, @084f0e0 |
+| SEEK-S6 | `%`, `_`, quotes, emoji matched literally; text over 80 characters cut on the web, refused plainly by the API | `escapeLike`; `searchSchema.q`; web `lib/search.ts` | API › wildcards, quotes and emoji…; e2e › S6; web unit › search params | verified @6d15344, @084f0e0 |
+| SEEK-S1 | One waiting visit request per person per hostel, even when sent twice at once | `visit_requests_one_open` (migration 0009); `visits.ts` maps the violation | API › a form sent twice at once (6 parallel; 6 rows without the index) | verified @6d15344 |
+| SEEK-S2 | Owners can't request a visit at their own hostel; the page shows their inbox link | `visits.ts`; hostel page | API › an owner cannot…; e2e › S4 | verified @6d15344, @084f0e0 |
+| SEEK-S3 | Visit dates today to 90 days ahead, in the schema and the service | `VISIT_MAX_DAYS_AHEAD`, `visitDateProblem`, `visitRequestSchemaOn(clock)` | API › dates run from today to 90 days ahead; shared › visit dates | verified @6d15344 |
+| SEEK-TRUST | "Verified partner" lists what the in-person check covered (from the inspection record, never the notes); the hidden issue record says why | `listings.ts` `partnerCheckFor` (`HostelDetail.partnerCheck`); `HostelTrust.tsx`; `TRANSPARENCY_HIDDEN_NOTE`; app hostel screen | API › verified partner explainer; e2e › S3 | verified @084f0e0; app screen unverified on a device |
+| SEEK-NORESULTS | No results offers each relaxed filter with its count (and every area on area pages); app too | `SearchResults.tsx` `NoResults`; app `relaxations` | e2e › S2; mobile unit › no results | verified @084f0e0 |
+| SEEK-S4-HOLD | A held bed or running plan shows pay / release / move instead of "already subscribed"; first bill summary; visible focus on choice cards | `subscribe/[slug]/page.tsx`, `FirstBill.tsx`, `releaseHoldAction`; app subscribe | e2e › S4 + S8 | verified @084f0e0; app unverified on a device |
+| SEEK-S8 | A paid bill never offers a second payment (back, reload, reopen); a cancelled bill says so honestly | `pay/[invoiceId]/page.tsx` | e2e › S4 + S8, › S8 (edge) | verified @084f0e0 |
+| SEEK-S7 | An ended session reaches login with a notice and returns to the same step | `requireUser` `expired=1`; login notice | e2e › S7 | verified @084f0e0 |
+| SEEK-ERRORS | Form errors as "Field: problem"; unreachable API as a connection message (login no longer crashes) | `lib/errors.ts`, `run()`, login actions | web unit › form errors (2) | verified @084f0e0 |
+| SEEK-VISITS | Visit next step (including a passed date); withdraw on the app | `visitNextStep`; `/account`; app Profile | shared › visit dates; e2e › S4 | verified @084f0e0; app unverified on a device |
+| SEEK-PATHS | Shared client encodes slugs and ids as one path segment | `client.ts` `seg` | shared › client paths | verified @6d15344 |
+| SEEK-MOBILE-A11Y | Field labels for screen readers; 46 px chip touch area; muted and amber text at AA | `components/ui.tsx`, `lib/theme.ts` | typecheck; `expo export --platform android` | unverified: no device screen reader run |
+
+
 ## Later PRPs (rows filled when each PRP is generated)
 
 | PRP | Area | Status |

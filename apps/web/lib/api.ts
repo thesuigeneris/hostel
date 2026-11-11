@@ -36,7 +36,11 @@ export const currentUser = cache(async (): Promise<User | null> => {
 /** Redirects to login unless signed in with one of the roles (admins pass every check). */
 export async function requireUser(path: string, ...roles: User['role'][]): Promise<User> {
   const user = await currentUser();
-  if (!user) redirect(`/login?next=${encodeURIComponent(path)}`);
+  if (!user) {
+    // A cookie that no longer opens a session has expired (or was signed out elsewhere), so the login page says why.
+    const expired = (await cookies()).has(SESSION_COOKIE);
+    redirect(`/login?next=${encodeURIComponent(path)}${expired ? '&expired=1' : ''}`);
+  }
   if (roles.length && user.role !== 'admin' && !roles.includes(user.role)) redirect(`/login?next=${encodeURIComponent(path)}&role=${roles[0]}`);
   return user;
 }

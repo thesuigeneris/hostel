@@ -1,5 +1,4 @@
 import {
-  AREAS,
   DEFAULT_PLATFORM_FEE_PCT,
   FOOD_PLANS,
   ISSUE_AUTOCLOSE_DAYS,
@@ -15,9 +14,12 @@ import Link from 'next/link';
 import { HeroVisual } from '@/components/hero/HeroVisual';
 import { HostelCard } from '@/components/HostelCard';
 import { Reveal } from '@/components/motion';
-import { buttonClass, Empty, focusRing, Input, LinkButton, Select } from '@/components/ui';
+import { SearchButton } from '@/components/SearchButton';
+import { SearchSuggest } from '@/components/SearchSuggest';
+import { Empty, focusRing, LinkButton, Select } from '@/components/ui';
 import { publicApi } from '@/lib/api';
 import { rupees } from '@/lib/format';
+import { areaOptions } from '@/lib/search';
 
 /** "10 pm the night before" / "9 am": derived from the real cut-off rules so the copy can't drift. */
 function cutoffText(meal: keyof typeof SKIP_CUTOFFS) {
@@ -59,13 +61,14 @@ const FAQ: { q: string; a: string }[] = [
 export default async function Home() {
   const [featured, areas] = await Promise.all([
     publicApi().hostels.search({ verified: 'true', limit: 6 }).catch(() => ({ items: [], total: 0 })),
-    publicApi().hostels.areas().catch(() => []),
+    publicApi().hostels.areas().catch(() => null),
   ]);
 
   return (
     <>
       {/* Hero: the search is plain HTML and works before (and without) the 3D illustration. */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-brand-soft/70 via-bg to-bg">
+      {/* Clipped sideways only, so the search suggestions can open below the hero. */}
+      <section className="relative overflow-x-clip bg-gradient-to-b from-brand-soft/70 via-bg to-bg">
         <div className="mx-auto grid max-w-content items-center gap-10 px-4 pb-14 pt-12 sm:pt-16 lg:grid-cols-[1.05fr_0.95fr] lg:pb-20">
           <div>
             <p className="text-sm font-medium uppercase tracking-wider text-brand">Hostels &amp; PGs in Hyderabad</p>
@@ -80,22 +83,18 @@ export default async function Home() {
             <search aria-label="Find a hostel" className="mt-8 block">
             <form action="/hostels" className="rounded-2xl border border-line bg-surface p-3 shadow-raised">
               <div className="grid gap-2 sm:grid-cols-[1.4fr_1fr_auto]">
-                <label className="block">
-                  <span className="sr-only">Hostel name or street</span>
-                  <Input name="q" type="search" placeholder="Hostel name or street" autoComplete="off" enterKeyHint="search" />
-                </label>
-                <label className="block">
-                  <span className="sr-only">Area</span>
-                  <Select name="area" defaultValue="">
+                <SearchSuggest label="Area or hostel name" hideLabel />
+                {/* A separate label, so the select is named "Area" and not "Area All areas". */}
+                <div>
+                  <label htmlFor="hero-area" className="sr-only">Area</label>
+                  <Select id="hero-area" name="area" defaultValue="">
                     <option value="">All areas</option>
-                    {AREAS.map((a) => (
+                    {areaOptions(areas).map((a) => (
                       <option key={a}>{a}</option>
                     ))}
                   </Select>
-                </label>
-                <button type="submit" className={buttonClass('primary', 'md', 'px-6')}>
-                  Search
-                </button>
+                </div>
+                <SearchButton className="px-6" />
               </div>
               <label className="mt-2 flex min-h-9 items-center gap-2 px-1 text-sm text-ink-soft">
                 <input type="checkbox" name="verified" value="true" className={`h-4 w-4 accent-brand ${focusRing}`} />
@@ -104,9 +103,9 @@ export default async function Home() {
             </form>
             </search>
 
-            {areas.length > 0 && (
+            {!!areas?.length && (
               <nav aria-label="Popular areas" className="mt-5 flex flex-wrap gap-2">
-                {areas.map((a) => (
+                {[...areas].sort((a, b) => b.count - a.count || a.area.localeCompare(b.area)).map((a) => (
                   <Link
                     key={a.slug}
                     href={`/hostels-in/${a.slug}`}

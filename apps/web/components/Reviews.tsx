@@ -1,10 +1,10 @@
-import type { Review } from '@hostels/shared';
+import { REVIEW_FLAG_REASONS, type Review } from '@hostels/shared';
 import { flagReviewAction } from '@/app/hostels/[slug]/actions';
 import { dateLabel, monthLabel, reviewSource } from '@/lib/format';
 import { SubmitButton } from './SubmitButton';
 import { Badge, Card, cx, focusRing, Select, Stars } from './ui';
 
-export const FLAG_REASONS = ['Looks fake or not a real stay', 'Abusive or hateful', 'Shares personal data', 'Off-topic or spam'];
+export const FLAG_REASONS = REVIEW_FLAG_REASONS;
 
 /** A save within a minute of writing is the same review, not an edit. */
 const edited = (r: Review) => Date.parse(r.updatedAt) - Date.parse(r.createdAt) > 60_000;
