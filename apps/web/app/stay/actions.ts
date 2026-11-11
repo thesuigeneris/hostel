@@ -62,8 +62,14 @@ export async function reportIssueAction(form: FormData) {
 
 export async function updateIssueAction(form: FormData) {
   const id = str(form, 'issueId');
+  const status = (str(form, 'status') || undefined) as IssueStatus | undefined;
   await run(back(form, `/issues/${id}`), async () => {
-    const issue = await (await api()).resident.updateIssue(id, { status: (str(form, 'status') || undefined) as IssueStatus | undefined, message: str(form, 'message') || undefined });
+    const issue = await (await api()).resident.updateIssue(id, {
+      status,
+      message: str(form, 'message') || undefined,
+      // The status the page showed, so a double submit or a stale tab can't move the issue twice.
+      from: status ? ((str(form, 'from') || undefined) as IssueStatus | undefined) : undefined,
+    });
     // Status changes move the public issue record (resolved %, response times).
     revalidatePath('/hostels/[slug]', 'page');
     return issue;

@@ -37,7 +37,8 @@ export default defineConfig({
   webServer: FRESH
     ? [
         {
-          command: 'bun run src/db/seed.ts --reset && bun run src/index.ts',
+          // The browser-test entry: the same app plus a clock tests can move ahead (never used in production).
+          command: 'bun run src/db/seed.ts --reset && bun run src/e2e-server.ts',
           cwd: '../api',
           url: `${API_URL}/`,
           env: { DATABASE_URL, PORT: String(API_PORT), JOBS: 'off', ADMIN_PHONES: '9000000001', API_PUBLIC_URL: API_URL },

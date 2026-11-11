@@ -9,7 +9,10 @@ export const rupees = (n: number | null | undefined) => (n === null || n === und
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 export function dateLabel(iso: string | null | undefined) {
   if (!iso) return '—';
-  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  // A bare date is already an IST calendar date. An instant (createdAt, paidAt) is shown as the IST date it falls on:
+  // its first ten characters are the UTC date, a day early between midnight and 05:30 IST.
+  const day = iso.length > 10 ? istDate(new Date(iso)) : iso;
+  const [y, m, d] = day.split('-').map(Number);
   return `${d} ${MONTHS[m! - 1]} ${y}`;
 }
 export function monthLabel(iso: string) {

@@ -360,6 +360,8 @@ export const moveRequests = pgTable(
       .references(() => roomTypes.id),
     moveDate: day('move_date').notNull(),
     status: moveStatusEnum('status').notNull().default('scheduled'),
+    /** Why we cancelled the move for the tenant (the destination stopped taking residents); null otherwise. */
+    cancelReason: text('cancel_reason'),
     createdAt: createdAt(),
   },
   (t) => [
@@ -516,9 +518,8 @@ export const issueUpdates = pgTable(
     issueId: text('issue_id')
       .notNull()
       .references(() => issues.id, { onDelete: 'cascade' }),
-    authorId: text('author_id')
-      .notNull()
-      .references(() => users.id),
+    /** Null when the platform made the change itself (an issue closing on its own), never a stand-in user. */
+    authorId: text('author_id').references(() => users.id),
     message: text('message').notNull().default(''),
     fromStatus: issueStatusEnum('from_status'),
     toStatus: issueStatusEnum('to_status'),

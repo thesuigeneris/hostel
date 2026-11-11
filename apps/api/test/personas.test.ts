@@ -97,9 +97,13 @@ describe('owner-added residents', () => {
     expect(sheet.body.rows[0]).toMatchObject({ name: 'Ravi', status: 'partial' });
     expect(sheet.body.totals).toEqual({ due: 7000, collected: 3500, unpaid: 1 });
 
-    // Staying 14+ days lets them review as a verified resident (added by the hostel).
+    // The start date was backdated, so the 14 days count from the day the hostel added them (T1).
+    expect((await call(`/hostels/${free.hostel.id}/review`, { token: residentToken, method: 'PUT', body: REVIEW })).body.error).toBe('review_not_allowed');
+    setClock('2026-11-23T06:00:00Z');
     const review = await call(`/hostels/${free.hostel.id}/review`, { token: residentToken, method: 'PUT', body: REVIEW });
     expect(review.body.verifiedVia).toBe('owner');
+    // The card still shows the stay as the hostel recorded it.
+    expect(review.body.stay).toEqual({ from: '2026-10-01', to: null });
   });
 });
 
@@ -189,7 +193,7 @@ describe('community board', () => {
     const stays = (await call('/me/residencies', { token: a.token })).body;
     await call(`/me/residencies/${stays[0].id}`, { token: a.token, method: 'PATCH', body: { directoryOptIn: true } });
     const dir = await call(`/hostels/${hostel.id}/directory`, { token: b.token });
-    expect(dir.body).toEqual([{ name: 'Anil Kumar', sharing: '2-sharing', since: '2026-11-09' }]);
+    expect(dir.body).toEqual([{ name: 'Anil K.', sharing: '2-sharing', since: '2026-11-09' }]);
   });
 });
 

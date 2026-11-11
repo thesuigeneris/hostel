@@ -71,6 +71,13 @@
       "when": 1793559799742,
       "tag": "0009_visit_one_open",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794378360073,
+      "tag": "0010_resident_fixes",
+      "breakpoints": true
     }
   ]
 }

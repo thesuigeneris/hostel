@@ -10,9 +10,13 @@ export const JOB_INTERVAL_MS = 15 * 60 * 1000;
 export async function runJobs() {
   const today = clock.today();
   const now = clock.now();
+  const expiredSubscriptions = await expirePendingSubscriptions(now);
+  const moves = await completeDueMoves(today);
   return {
-    expiredSubscriptions: await expirePendingSubscriptions(now),
-    completedMoves: await completeDueMoves(today),
+    expiredSubscriptions,
+    completedMoves: moves.completed,
+    // Moves into a hostel that stopped taking residents, cancelled on their day.
+    cancelledMoves: moves.cancelled,
     endedSubscriptions: await endCancelledSubscriptions(today),
     tenantInvoices: await generateUpcomingInvoices(today),
     planChanges: await applyPendingPlanChanges(today),

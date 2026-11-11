@@ -1,4 +1,13 @@
-import { istDate, PASSWORD_MIN_LENGTH, PENDING_SUBSCRIPTION_TTL_MINUTES, visitNextStep } from '@hostels/shared';
+import {
+  istDate,
+  MEAL_LABEL,
+  NO_CREDIT_REASON,
+  PASSWORD_MIN_LENGTH,
+  PENDING_SUBSCRIPTION_TTL_MINUTES,
+  skipCreditText,
+  skipCutoffText,
+  visitNextStep,
+} from '@hostels/shared';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import {
@@ -72,12 +81,31 @@ export default async function AccountPage({ searchParams }: Props) {
                     <div><div className="text-ink-muted">This period</div><div className="font-medium">{dateLabel(mine.currentPeriod.start)} – {dateLabel(mine.currentPeriod.end)}</div></div>
                     <div><div className="text-ink-muted">Rent</div><div className="font-medium">{rupees(mine.roomType.monthlyRent)} /month</div></div>
                   </div>
-                  {sub.cancelAt && <p className="mt-4 rounded-xl bg-bg p-3 text-sm">Your plan ends on {dateLabel(sub.cancelAt)}.</p>}
+                  {sub.cancelAt && <p className="mt-4 rounded-xl bg-bg p-3 text-sm">Your plan ends on {dateLabel(sub.cancelAt)}. No more bills after that.</p>}
+                  {mine.cancelledMove && (
+                    <p role="note" className="mt-4 rounded-xl bg-info-soft p-3 text-sm text-info">
+                      Your move to {mine.cancelledMove.toHostelName} on {dateLabel(mine.cancelledMove.moveDate)} was cancelled — {mine.cancelledMove.cancelReason}.
+                      You're staying at {mine.hostel.name}, and your bills are for this room.
+                    </p>
+                  )}
                   {mine.scheduledMove && (
-                    <form action={cancelMoveAction} className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-brand-soft p-3 text-sm">
+                    <form action={cancelMoveAction} className="mt-4 rounded-xl bg-brand-soft p-3 text-sm">
                       <input type="hidden" name="moveId" value={mine.scheduledMove.id} />
-                      <span>Move scheduled for {dateLabel(mine.scheduledMove.moveDate)}.</span>
-                      <SubmitButton variant="secondary" size="sm">Cancel move</SubmitButton>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span>
+                          Moving to {mine.scheduledMove.toHostelName}
+                          {mine.scheduledMove.toSharing && ` (${SHARING_LABEL[mine.scheduledMove.toSharing]})`} on {dateLabel(mine.scheduledMove.moveDate)}.
+                        </span>
+                        <SubmitButton variant="secondary" size="sm" pendingText="Cancelling…" confirm="Cancel this move? The bed held for you there is released.">
+                          Cancel move
+                        </SubmitButton>
+                      </div>
+                      {!mine.scheduledMove.toHostelOpen && (
+                        <p className="mt-2 text-food-ink">
+                          {mine.scheduledMove.toHostelName} isn't taking new residents right now. If that's still so on the move date, the move is
+                          cancelled and you stay here.
+                        </p>
+                      )}
                     </form>
                   )}
                   {sub.status === 'active' && !sub.cancelAt && (
@@ -110,11 +138,16 @@ export default async function AccountPage({ searchParams }: Props) {
           )}
 
           {menu && sub?.status === 'active' && sub.mealPlan !== 'none' && (
-            <section>
-              <div className="mb-3 flex items-end justify-between">
-                <h2 className="text-lg font-semibold">Meals</h2>
-                <span className="text-xs text-ink-muted">Skip before the cut-off to get credit on your next bill</span>
+            <section aria-labelledby="meals-heading">
+              <div className="mb-3 flex flex-wrap items-end justify-between gap-1">
+                <h2 id="meals-heading" className="text-lg font-semibold">Meals</h2>
+                <span className="text-xs text-ink-muted">Skip before the cut-off (IST) to get credit on your next bill</span>
               </div>
+              {menu.noCreditFrom && menu.days.some((d) => d.date >= menu.noCreditFrom!) && (
+                <p role="note" className="mb-3 rounded-xl bg-food-soft p-3 text-sm text-food-ink">
+                  {NO_CREDIT_REASON}. Skipping still tells the kitchen to cook less.
+                </p>
+              )}
               <div className="grid gap-3 sm:grid-cols-3">
                 {menu.days.map((d) => (
                   <Card key={d.date} className="p-4">
@@ -125,21 +158,30 @@ export default async function AccountPage({ searchParams }: Props) {
                         <li key={m.meal} className="text-sm">
                           <div className="flex items-center justify-between">
                             <span className="font-medium capitalize">{m.meal}</span>
-                            {m.skipped && <Badge>Skipped · −{rupees(m.credit)}</Badge>}
+                            {m.skipped && <Badge>{m.credit > 0 ? `Skipped · −${rupees(m.credit)}` : 'Skipped · no credit'}</Badge>}
                           </div>
                           <div className={m.skipped ? 'text-ink-muted line-through' : 'text-ink-soft'}>
                             {(menu.diet === 'non-veg' && m.nonVegDish) || m.vegDish || 'Menu not posted yet'}
                           </div>
                           {m.canChange ? (
-                            <form action={skipMealAction} className="mt-1">
+                            <form action={skipMealAction} className="mt-1 flex flex-wrap items-center gap-x-2">
                               <Back to="/account" />
                               <input type="hidden" name="date" value={d.date} />
                               <input type="hidden" name="meal" value={m.meal} />
                               {m.skipped && <input type="hidden" name="undo" value="1" />}
-                              <button type="submit" className="text-xs font-medium text-brand hover:underline">{m.skipped ? 'Undo skip' : `Skip (save ${rupees(m.credit)})`}</button>
+                              <SubmitButton
+                                variant="ghost"
+                                size="xs"
+                                className="font-medium text-brand"
+                                pendingText="Saving…"
+                                aria-label={`${m.skipped ? 'Undo skip' : `Skip (${skipCreditText(m.credit)})`}: ${MEAL_LABEL[m.meal].toLowerCase()} on ${weekday(d.date)} ${dateLabel(d.date)}`}
+                              >
+                                {m.skipped ? 'Undo skip' : `Skip (${skipCreditText(m.credit)})`}
+                              </SubmitButton>
+                              <span className="text-xs text-ink-muted">until {skipCutoffText(d.date, m.cutoff)}</span>
                             </form>
                           ) : (
-                            <div className="mt-1 text-xs text-ink-muted">Locked</div>
+                            <div className="mt-1 text-xs text-ink-muted">Locked since {skipCutoffText(d.date, m.cutoff)}</div>
                           )}
                         </li>
                       ))}
@@ -163,7 +205,11 @@ export default async function AccountPage({ searchParams }: Props) {
                     <Td className="font-medium">{rupees(i.totalAmount)}</Td>
                     <Td><StatusBadge kind="invoice" status={i.isOverdue ? 'overdue' : i.status} /></Td>
                     <Td>
-                      {i.status === 'due' && <Link href={`/pay/${i.id}`}>Pay</Link>}
+                      {i.status === 'due' && (
+                        <Link href={`/pay/${i.id}`} aria-label={`Pay ${rupees(i.totalAmount)} for ${dateLabel(i.periodStart)} – ${dateLabel(i.periodEnd)}`}>
+                          Pay
+                        </Link>
+                      )}
                       {i.status === 'paid' && <span className="text-xs text-ink-muted">Paid {dateLabel(i.paidAt)}</span>}
                     </Td>
                   </tr>
