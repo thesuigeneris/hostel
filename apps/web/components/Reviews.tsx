@@ -1,4 +1,4 @@
-import { REVIEW_FLAG_REASONS, type Review } from '@hostels/shared';
+import { EDITED_AFTER_REPLY, REVIEW_FLAG_REASONS, type Review, reviewEdits } from '@hostels/shared';
 import { flagReviewAction } from '@/app/hostels/[slug]/actions';
 import { dateLabel, monthLabel, reviewSource } from '@/lib/format';
 import { SubmitButton } from './SubmitButton';
@@ -6,12 +6,10 @@ import { Badge, Card, cx, focusRing, Select, Stars } from './ui';
 
 export const FLAG_REASONS = REVIEW_FLAG_REASONS;
 
-/** A save within a minute of writing is the same review, not an edit. */
-const edited = (r: Review) => Date.parse(r.updatedAt) - Date.parse(r.createdAt) > 60_000;
-
 /** One resident review: how the stay was confirmed, when, the sub-ratings and the hostel's dated reply. */
 export function ReviewCard({ r, slug, canFlag }: { r: Review; slug: string; canFlag: boolean }) {
   const source = reviewSource(r.verifiedVia);
+  const { edited, editedAfterReply } = reviewEdits(r);
   const subs: [string, number | null][] = [
     ['Cleanliness', r.cleanliness],
     ['Food', r.food],
@@ -29,7 +27,7 @@ export function ReviewCard({ r, slug, canFlag }: { r: Review; slug: string; canF
           <p className="mt-1 text-xs text-ink-muted">
             {r.stay && <>Lived here {monthLabel(r.stay.from)} – {r.stay.to ? monthLabel(r.stay.to) : 'now'} · </>}
             Written {dateLabel(r.createdAt)}
-            {edited(r) && ` · edited ${dateLabel(r.updatedAt)}`}
+            {edited && ` · edited ${dateLabel(r.updatedAt)}`}
           </p>
         </div>
         <Stars value={r.rating} />
@@ -57,6 +55,8 @@ export function ReviewCard({ r, slug, canFlag }: { r: Review; slug: string; canF
             )}
           </p>
           <p className="mt-1 whitespace-pre-line text-ink-soft [overflow-wrap:anywhere]">{r.ownerReply}</p>
+          {/* The reply answers an earlier version of the review; say so, so it isn't read out of context. */}
+          {editedAfterReply && <p className="mt-1 text-xs text-ink-muted">{EDITED_AFTER_REPLY}.</p>}
         </div>
       )}
       {canFlag && (

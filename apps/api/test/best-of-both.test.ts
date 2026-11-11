@@ -43,7 +43,8 @@ describe('board likes', () => {
     expect((await call(`/posts/${post.body.id}/like`, { token: b.token, method: 'DELETE' })).body).toEqual({ likes: 1, likedByMe: false });
 
     const outsider = await newTenant('Out');
-    expect((await call(`/posts/${post.body.id}/like`, { token: outsider.token, method: 'PUT' })).body.error).toBe('not_a_resident');
+    // Outsiders get 404, so a post id confirms nothing.
+    expect((await call(`/posts/${post.body.id}/like`, { token: outsider.token, method: 'PUT' })).status).toBe(404);
     expect((await call('/posts/pst_missing/like', { token: b.token, method: 'PUT' })).status).toBe(404);
   });
 });

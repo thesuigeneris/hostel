@@ -17,3 +17,5 @@ apps/mobile/ios
 **/playwright-report
 deploy/backups
 deploy/.env.prod
+# Browser-test entry with an unauthenticated clock route: never in a production image
+apps/api/src/e2e-server.ts

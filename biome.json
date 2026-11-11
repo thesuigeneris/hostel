@@ -6,6 +6,8 @@
       "**/.next",
       "**/.expo",
       "**/dist",
+      "**/test-results",
+      "**/playwright-report",
       "apps/api/migrations/meta",
       ".specify",
       ".claude",

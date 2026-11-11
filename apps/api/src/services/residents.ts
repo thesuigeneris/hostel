@@ -1,7 +1,9 @@
-import type { User } from '@hostels/shared';
+import type { ISODate, User } from '@hostels/shared';
 import {
   dateLabel,
   daysBetween,
+  firstNameAndInitial,
+  istDate,
   newId,
   REVIEW_MIN_STAY_DAYS,
   REVIEW_WINDOW_AFTER_STAY_DAYS,
@@ -73,28 +75,35 @@ async function mine(user: User, residencyId: string) {
   return r;
 }
 
+/**
+ * Accepts or declines an invite. One conditional update, so a double tap (or accept and decline at once) answers it
+ * once; the other request is told it was already answered.
+ */
 export async function respondToInvite(user: User, residencyId: string, accept: boolean) {
-  const r = await mine(user, residencyId);
-  if (r.status !== 'invited') throw new AppError('invalid_state', 'This invitation was already answered');
+  await mine(user, residencyId);
+  const r = schema.residencies;
   const [row] = await getDb()
-    .update(schema.residencies)
-    .set({ status: accept ? 'active' : 'declined', name: r.name || user.name })
-    .where(eq(schema.residencies.id, r.id))
+    .update(r)
+    .set({ status: accept ? 'active' : 'declined', name: sql`coalesce(nullif(${r.name}, ''), ${user.name})` })
+    .where(and(eq(r.id, residencyId), eq(r.userId, user.id), eq(r.status, 'invited')))
     .returning();
-  return toResidency(row!);
+  if (!row) throw new AppError('invalid_state', 'This invitation was already answered. Refresh to see where it stands.');
+  return toResidency(row);
 }
 
 /** Residents can say they moved out of an owner-added stay. Subscription stays end through cancel or move. */
 export async function moveOut(user: User, residencyId: string) {
-  const r = await mine(user, residencyId);
-  if (r.status !== 'active') throw new AppError('invalid_state', 'This stay is not active');
-  if (r.source === 'subscription') throw new AppError('invalid_state', 'Cancel or move your plan to leave this hostel');
+  const current = await mine(user, residencyId);
+  if (current.source === 'subscription') throw new AppError('invalid_state', 'Cancel or move your plan to leave this hostel');
+  const r = schema.residencies;
   const [row] = await getDb()
-    .update(schema.residencies)
-    .set({ status: 'ended', endDate: clock.today() })
-    .where(eq(schema.residencies.id, r.id))
+    .update(r)
+    // A stay invited with a start date ahead of today ends on its start date, never before it.
+    .set({ status: 'ended', endDate: sql`greatest(${r.startDate}, ${clock.today()}::date)` })
+    .where(and(eq(r.id, residencyId), eq(r.userId, user.id), eq(r.source, 'owner'), eq(r.status, 'active')))
     .returning();
-  return toResidency(row!);
+  if (!row) throw new AppError('invalid_state', 'This stay is not active any more. Refresh to see where it stands.');
+  return toResidency(row);
 }
 
 export async function setDirectoryOptIn(user: User, residencyId: string, directoryOptIn: boolean) {
@@ -111,8 +120,8 @@ export async function residentDirectory(hostelId: string) {
     .leftJoin(schema.roomTypes, eq(schema.roomTypes.id, schema.residencies.roomTypeId))
     .where(and(eq(schema.residencies.hostelId, hostelId), eq(schema.residencies.status, 'active'), eq(schema.residencies.directoryOptIn, true)))
     .orderBy(asc(schema.residencies.startDate));
-  // Names and room types only; phone numbers never leave the owner view.
-  return rows.map((r) => ({ name: r.userName || r.name || 'Resident', sharing: r.sharing, since: r.since }));
+  // First name and initial and the room type only; phone numbers never leave the owner view.
+  return rows.map((r) => ({ name: firstNameAndInitial(r.userName || r.name), sharing: r.sharing, since: r.since }));
 }
 
 // --- owner roster ------------------------------------------------------------
@@ -172,6 +181,8 @@ export async function addResident(user: User, hostelId: string, input: z.output<
       monthlyRent: input.monthlyRent,
       startDate: input.startDate,
       status: 'invited',
+      // The day the hostel added this person starts their review clock (see `reviewClockStart`), so it comes from the clock.
+      createdAt: clock.now(),
     })
     .returning()
     .catch((e) => {
@@ -291,19 +302,37 @@ export async function recordRent(user: User, hostelId: string, residencyId: stri
 
 // --- reviews -----------------------------------------------------------------
 
+/**
+ * The day a stay starts counting toward a review. Owner-added stays count from the later of the start date the owner
+ * typed and the day the owner added the person: an owner can't backdate a friend into a review on day one. The stay
+ * span shown on the review keeps the dates as claimed.
+ */
+export function reviewClockStart(r: Pick<ResidencyRow, 'source' | 'startDate' | 'createdAt'>): ISODate {
+  if (r.source !== 'owner') return r.startDate;
+  const added = istDate(r.createdAt);
+  return added > r.startDate ? added : r.startDate;
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
 export function reviewEligibility(r: ResidencyRow, today: string): { ok: boolean; reason?: string } {
+  const from = reviewClockStart(r);
+  // Say which day the clock started when it isn't the start date the resident sees on their stay.
+  const counted = from === r.startDate ? '' : `, counted from ${dateLabel(from)} when the hostel added you`;
   if (r.status === 'active') {
-    const days = daysBetween(r.startDate, today);
-    return days >= REVIEW_MIN_STAY_DAYS
-      ? { ok: true }
-      : { ok: false, reason: `You can review after ${REVIEW_MIN_STAY_DAYS} days here (${REVIEW_MIN_STAY_DAYS - days} to go)` };
+    const days = daysBetween(from, today);
+    if (days >= REVIEW_MIN_STAY_DAYS) return { ok: true };
+    return { ok: false, reason: `You can review after ${REVIEW_MIN_STAY_DAYS} days here${counted} (${plural(REVIEW_MIN_STAY_DAYS - days, 'day')} to go)` };
   }
   if (r.status === 'ended' && r.endDate) {
-    if (daysBetween(r.startDate, r.endDate) + 1 < REVIEW_MIN_STAY_DAYS) return { ok: false, reason: 'Your stay was too short to review' };
+    if (daysBetween(from, r.endDate) + 1 < REVIEW_MIN_STAY_DAYS) {
+      return { ok: false, reason: `Your stay was too short to review: reviews need ${REVIEW_MIN_STAY_DAYS} days${counted}` };
+    }
     return daysBetween(r.endDate, today) <= REVIEW_WINDOW_AFTER_STAY_DAYS
       ? { ok: true }
-      : { ok: false, reason: 'Reviews are open for 180 days after you move out' };
+      : { ok: false, reason: `Reviews are open for ${REVIEW_WINDOW_AFTER_STAY_DAYS} days after you move out` };
   }
+  if (r.status === 'invited') return { ok: false, reason: 'Accept the invitation first' };
   return { ok: false, reason: 'Only residents can review this hostel' };
 }
 
@@ -339,13 +368,16 @@ export async function upsertReview(user: User, hostelId: string, input: z.output
     responsiveness: input.responsiveness,
     body: input.body,
   };
+  // Written and edited dates come from the clock, like every other time. Editing never touches `hidden`: a review
+  // our team hid stays hidden.
+  const now = clock.now();
   try {
     const [row] = await db
       .insert(schema.reviews)
-      .values({ id: newId('rev'), hostelId, userId: user.id, residencyId: qualifying.id, ...values })
+      .values({ id: newId('rev'), hostelId, userId: user.id, residencyId: qualifying.id, ...values, createdAt: now, updatedAt: now })
       .onConflictDoUpdate({
         target: [schema.reviews.hostelId, schema.reviews.userId],
-        set: { ...values, residencyId: qualifying.id, updatedAt: clock.now() },
+        set: { ...values, residencyId: qualifying.id, updatedAt: now },
       })
       .returning();
     return toReview(row!, { name: user.name, residency: qualifying });
@@ -375,12 +407,6 @@ function toReview(r: typeof schema.reviews.$inferSelect, extra: { name: string; 
     verifiedVia: extra.residency?.source ?? null,
     stay: extra.residency ? { from: extra.residency.startDate, to: extra.residency.endDate } : null,
   };
-}
-
-function firstNameAndInitial(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return 'Resident';
-  return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1]![0]}.` : parts[0]!;
 }
 
 export async function hostelReviews(hostelId: string, opts: { includeHidden?: boolean; page?: number } = {}) {

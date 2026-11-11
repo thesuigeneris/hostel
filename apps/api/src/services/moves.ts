@@ -5,7 +5,7 @@ import { getDb, schema } from '../db';
 import { clock } from '../lib/clock';
 import { isUniqueViolation } from '../lib/db-errors';
 import { AppError, notFound } from '../lib/errors';
-import { isBookable, planFor } from './access';
+import { isBookable, type PlanState, planFor } from './access';
 import { openSubscription, regenerateUnpaidFrom, releaseBed, reserveBed } from './billing';
 
 function toMove(m: typeof schema.moveRequests.$inferSelect) {
@@ -45,6 +45,7 @@ export async function scheduleMove(user: User, input: { toRoomTypeId: string; mo
           toHostelId: hostel.id,
           toRoomTypeId: room.id,
           moveDate: input.moveDate,
+          createdAt: clock.now(),
         })
         .returning();
       // Bills already generated for periods from the move date on now use the new room.
@@ -86,7 +87,19 @@ export async function myMoves(user: User) {
   return rows.map(toMove);
 }
 
-/** Job: on the move date, switch the subscription, release the old bed and move the residency. */
+/** Why a hostel can't take a move-in, in the tenant's words (never the owner's unpaid bill); null when it can. */
+function closedReason(hostel: typeof schema.hostels.$inferSelect | undefined, plan: PlanState): string | null {
+  if (!hostel || hostel.status !== 'live') return `${hostel?.name ?? 'That hostel'} is no longer listed on Hostels`;
+  if (hostel.partnerStatus !== 'verified') return `${hostel.name} is no longer a verified partner`;
+  if (plan.suspended) return `${hostel.name} isn't taking new residents right now`;
+  return null;
+}
+
+/**
+ * Job: on the move date, switch the subscription, release the old bed and move the residency. A move into a hostel
+ * that stopped taking residents (delisted, no longer verified, or paused) is cancelled instead: the bed held there
+ * is released, unpaid bills go back to the current room, the reason is kept for the tenant, and they stay put.
+ */
 export async function completeDueMoves(today = clock.today()) {
   const db = getDb();
   const due = await db
@@ -94,8 +107,25 @@ export async function completeDueMoves(today = clock.today()) {
     .from(schema.moveRequests)
     .where(and(eq(schema.moveRequests.status, 'scheduled'), lte(schema.moveRequests.moveDate, today)));
   let done = 0;
+  let cancelled = 0;
   for (const m of due) {
     await db.transaction(async (tx) => {
+      const [hostel] = await tx.select().from(schema.hostels).where(eq(schema.hostels.id, m.toHostelId));
+      const reason = closedReason(hostel, await planFor(m.toHostelId, tx));
+      if (reason) {
+        const [row] = await tx
+          .update(schema.moveRequests)
+          .set({ status: 'cancelled', cancelReason: reason })
+          .where(and(eq(schema.moveRequests.id, m.id), eq(schema.moveRequests.status, 'scheduled')))
+          .returning();
+        if (!row) return;
+        await releaseBed(tx, m.toRoomTypeId);
+        const [sub] = await tx.select().from(schema.subscriptions).where(eq(schema.subscriptions.id, m.subscriptionId));
+        // With the move gone, bills from the move date on are made again for the room they're in now.
+        if (sub) await regenerateUnpaidFrom(tx, sub, m.moveDate);
+        cancelled++;
+        return;
+      }
       const [row] = await tx
         .update(schema.moveRequests)
         .set({ status: 'completed' })
@@ -130,7 +160,7 @@ export async function completeDueMoves(today = clock.today()) {
       done++;
     });
   }
-  return done;
+  return { completed: done, cancelled };
 }
 
 export async function adminMoves() {

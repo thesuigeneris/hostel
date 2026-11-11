@@ -73,7 +73,8 @@ export default function Move() {
   const rooms = (dest?.roomTypes ?? []).filter((r) => r.id !== mine.roomType.id && r.bedsAvailable > 0);
   return (
     <Screen>
-      <P>Your bed at the new place is held as soon as you schedule. Bills after the move date use the new rent. No fee, no paperwork.</P>
+      <P>Your bed at the new place is held as soon as you schedule. Bills for periods starting on or after the move date use the new rent. No fee, no paperwork.</P>
+      <P muted>If that hostel stops taking residents before your move date, we cancel the move, release the bed and you stay where you are.</P>
       <H2>Where to</H2>
       <Row>{verified.map((h) => <Chip key={h.id} label={h.id === mine.hostel.id ? `${h.name} (current)` : `${h.name} · ${h.area}`} active={slug === h.slug} onPress={() => pick(h.slug)} />)}</Row>
       {dest && (
@@ -93,7 +94,7 @@ export default function Move() {
         </>
       )}
       <ErrorText>{err}</ErrorText>
-      <Button title="Schedule move" onPress={schedule} busy={busy} disabled={!roomId || rooms.length === 0} />
+      <Button title="Schedule move" onPress={schedule} busy={busy} disabled={!roomId || rooms.length === 0 || busy} />
     </Screen>
   );
 }

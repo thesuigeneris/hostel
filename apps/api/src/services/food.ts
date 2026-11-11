@@ -1,4 +1,4 @@
-import type { Meal, MenuWeek, User } from '@hostels/shared';
+import type { ISODate, Meal, MenuWeek, User } from '@hostels/shared';
 import {
   addDays,
   canChangeSkip,
@@ -7,6 +7,7 @@ import {
   MEALS,
   type menuWeekInputSchema,
   newId,
+  periodContaining,
   planIncludesMeal,
   SKIP_CREDITS,
   skipCutoff,
@@ -18,7 +19,7 @@ import { getDb, schema } from '../db';
 import { clock } from '../lib/clock';
 import { AppError, notFound } from '../lib/errors';
 import { ownedHostel, requirePlanTier } from './access';
-import { openSubscription } from './billing';
+import { creditWindow, openSubscription } from './billing';
 
 async function loadWeek(hostelId: string, start: string): Promise<MenuWeek | null> {
   const db = getDb();
@@ -114,6 +115,24 @@ export async function copyLastWeek(user: User, hostelId: string, start: string) 
 
 // --- tenant: menu with skips -------------------------------------------------
 
+/**
+ * The first day whose skip credit no bill will ever carry, or null while the plan runs on. A skip's credit goes on
+ * the bill whose credit window holds its date (`creditWindow`); a cancelled plan's bills stop at the last period that
+ * starts by `cancelAt`, so skips after that bill's window earn nothing (the spec doesn't refund them in v1).
+ */
+export function noCreditFrom(sub: { startDate: ISODate; cancelAt: ISODate | null }): ISODate | null {
+  if (!sub.cancelAt) return null;
+  const last = periodContaining(sub.startDate, sub.cancelAt).index;
+  // Ended inside the first period: the only bill is the first one, which carries no credits.
+  return last === 0 ? sub.startDate : addDays(creditWindow(sub.startDate, last).to, 1);
+}
+
+/** What skipping a meal on a date takes off a bill. */
+function skipCredit(sub: { startDate: ISODate; cancelAt: ISODate | null }, date: ISODate, meal: Meal) {
+  const from = noCreditFrom(sub);
+  return from && date >= from ? 0 : SKIP_CREDITS[meal];
+}
+
 async function activeSubscription(user: User) {
   const sub = await openSubscription(user.id);
   if (!sub || sub.status !== 'active') throw new AppError('invalid_state', 'You need an active plan for this');
@@ -166,12 +185,12 @@ export async function myMenu(user: User, days = 7) {
           skipped: skipped.has(`${date}:${meal}`),
           cutoff: skipCutoff(date, meal).toISOString(),
           canChange: inPlan && canChangeSkip(date, meal, now),
-          credit: SKIP_CREDITS[meal],
+          credit: skipCredit(sub, date, meal),
         };
       }),
     });
   }
-  return { mealPlan: sub.mealPlan, diet: sub.diet, planLabel: FOOD_PLANS[sub.mealPlan].label, days: out };
+  return { mealPlan: sub.mealPlan, diet: sub.diet, planLabel: FOOD_PLANS[sub.mealPlan].label, noCreditFrom: noCreditFrom(sub), days: out };
 }
 
 async function checkSkippable(sub: typeof schema.subscriptions.$inferSelect, date: string, meal: Meal) {
@@ -186,9 +205,11 @@ export async function skipMeal(user: User, date: string, meal: Meal) {
   const sub = await activeSubscription(user);
   await checkSkippable(sub, date, meal);
   const db = getDb();
+  // A skip in the last stretch of a cancelled plan still tells the kitchen (headcount), but earns nothing: no bill
+  // will carry it.
   await db
     .insert(schema.mealSkips)
-    .values({ id: newId('skp'), subscriptionId: sub.id, date, meal, creditAmount: SKIP_CREDITS[meal] })
+    .values({ id: newId('skp'), subscriptionId: sub.id, date, meal, creditAmount: skipCredit(sub, date, meal) })
     .onConflictDoNothing();
   const [row] = await db
     .select()

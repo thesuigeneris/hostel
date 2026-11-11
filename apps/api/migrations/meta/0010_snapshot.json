@@ -1,5 +1,5 @@
 {
-  "id": "89c2b965-b044-4a8d-9bc9-369183311fe0",
+  "id": "78f530f0-5a4f-4099-b06d-ba694a86858e",
   "prevId": "b739e1b2-a6d4-409e-90dc-083c28828209",
   "version": "7",
   "dialect": "postgresql",
@@ -1130,7 +1130,7 @@
           "name": "author_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "message": {
           "name": "message",
@@ -1809,6 +1809,12 @@
           "notNull": true,
           "default": "'scheduled'"
         },
+        "cancel_reason": {
+          "name": "cancel_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -2027,19 +2033,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "credit_amount": {
-          "name": "credit_amount",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "note": {
-          "name": "note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "status": {
           "name": "status",
           "type": "invoice_status",
@@ -2088,8 +2081,8 @@
         }
       },
       "indexes": {
-        "owner_invoices_plan_tier_period": {
-          "name": "owner_invoices_plan_tier_period",
+        "owner_invoices_plan_period": {
+          "name": "owner_invoices_plan_period",
           "columns": [
             {
               "expression": "owner_plan_id",
@@ -2099,12 +2092,6 @@
             },
             {
               "expression": "period_start",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "plan",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2170,10 +2157,6 @@
       },
       "policies": {},
       "checkConstraints": {
-        "owner_invoices_amounts_nonneg": {
-          "name": "owner_invoices_amounts_nonneg",
-          "value": "\"owner_invoices\".\"amount\" >= 0 and \"owner_invoices\".\"credit_amount\" >= 0"
-        },
         "owner_invoices_payment_mode_status": {
           "name": "owner_invoices_payment_mode_status",
           "value": "(\"owner_invoices\".\"status\" = 'paid' and \"owner_invoices\".\"payment_mode\" is not null and \"owner_invoices\".\"payment_mode\" <> 'waived') or (\"owner_invoices\".\"status\" = 'void' and (\"owner_invoices\".\"payment_mode\" is null or \"owner_invoices\".\"payment_mode\" = 'waived')) or (\"owner_invoices\".\"status\" = 'due' and \"owner_invoices\".\"payment_mode\" is null)"
@@ -2980,28 +2963,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "residencies_one_open_owner_stay": {
-          "name": "residencies_one_open_owner_stay",
-          "columns": [
-            {
-              "expression": "hostel_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "phone",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"residencies\".\"source\" = 'owner' and \"residencies\".\"status\" in ('invited', 'active')",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -3223,12 +3184,6 @@
         },
         "owner_replied_at": {
           "name": "owner_replied_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "owner_reply_edited_at": {
-          "name": "owner_reply_edited_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false

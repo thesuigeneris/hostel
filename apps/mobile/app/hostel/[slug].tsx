@@ -1,5 +1,6 @@
 import {
   dateLabel,
+  EDITED_AFTER_REPLY,
   FOOD_PLANS,
   GENDER_LABEL,
   type HostelDetail,
@@ -17,6 +18,7 @@ import {
   REVIEW_FLAG_REASONS,
   REVIEW_MIN_STAY_DAYS,
   type Review,
+  reviewEdits,
   reviewSource,
   rupees,
   SHARING_LABEL,
@@ -313,6 +315,8 @@ export default function HostelScreen() {
               {r.ownerReply && (
                 <View style={{ backgroundColor: theme.colors.bg, borderRadius: theme.radius.sm, padding: theme.spacing.md }}>
                   <P><Text style={{ fontWeight: '600', color: theme.colors.text }}>Reply from the hostel{r.ownerRepliedAt ? ` · ${dateLabel(r.ownerRepliedAt)}` : ''}:</Text> {r.ownerReply}</P>
+                  {/* The reply answers an earlier version of the review; say so, so it isn't read out of context. */}
+                  {reviewEdits(r).editedAfterReply && <P muted>{EDITED_AFTER_REPLY}.</P>}
                 </View>
               )}
               {user && reporting !== r.id && (

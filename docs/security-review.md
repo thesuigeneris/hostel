@@ -43,6 +43,14 @@ A pass over the API, website and app before the first real users. Each item list
 - **One secret for two jobs.** Upload receipts and photo links are signed with their own `UPLOAD_SIGNING_SECRET`, which must differ from `OTP_PEPPER`, so rotating one never breaks or weakens the other. (`apps/api/src/lib/uploads.ts`)
 - **A false "dev mode" banner.** A production instance without SMS keys reported OTP as `stub`, so the website would have told real users "OTP is 123456". The health check now reports `off` there (password login only) and the banner stays hidden. (`routes/public.ts`, `Health.msg91`)
 
+## Resident pass (persona-resident)
+
+- **Backdated residents.** An owner could type a start date months back and the resident could review on day one. The 14 days of an owner-added stay now count from the day the owner added the person; the review still shows the stay as claimed. (`reviewClockStart` in `apps/api/src/services/residents.ts`; `resident-trust.test.ts` › T1)
+- **Issue and post ids.** Someone outside a hostel got 403 for an issue or post id, which confirmed the id exists; they now get 404. The reporter of an issue who has moved out keeps read-only access to that issue only. (`loadIssue` in `services/issues.ts`, `requirePostBoard` in `services/community.ts`)
+- **Board paused.** Residents of a hostel whose plan lapsed are told the board is paused, never that the owner has an unpaid bill. (`requireBoard`)
+- **Names.** A phone number typed as a name is never shown to other residents or on reviews. (`firstNameAndInitial` in `packages/shared/src/resident.ts`)
+- **Browser-test clock.** `e2e:fresh` starts `apps/api/src/e2e-server.ts`, which adds an unauthenticated `PUT /__e2e/clock` to run the API's clock ahead. Production runs `src/index.ts`, which has no such route, and the test entry exits when `NODE_ENV=production` (`apps/api/test/e2e-server.test.ts`). Never deploy `e2e-server.ts`.
+
 ## Still open before production
 
 - **Refunds are manual.** A payment that could not be applied is recorded and shown to admins, but the money goes back only when someone refunds it in the Razorpay dashboard and marks it here. The payer is told it comes back within `REFUND_WITHIN_DAYS` (7) days; that promise is not in the specs and needs the owner's confirmation.
@@ -53,5 +61,5 @@ A pass over the API, website and app before the first real users. Each item list
 - **Photo storage.** Uploads sit on the API's local disk. Move them to object storage (R2 or S3) before running more than one API instance; the CSP `img-src` then needs the storage origin. Uploads that are never attached are never deleted.
 - **Photos from before the fixes.** Issue and post photos uploaded before attachments became private carry public `pho_` keys and stay reachable by their link; outside photo links in older rows are blocked by the website's CSP but still shown in the app. There are no real users yet, so resetting development databases is enough; data from a real instance would need a one-off migration.
 - **Signed photo links can be shared.** Anyone given a private photo's link can open it until it expires (at most 90 minutes), including a resident who has just moved out.
-- **Owner-added residents.** They are labelled on reviews, but an owner could still add people who never lived there. An owner can also backdate a resident's start date, which makes them eligible to review at once. Consider requiring a few months of rent records, or an admin spot-check, before their reviews count in the rating.
+- **Owner-added residents.** They are labelled on reviews, but an owner could still add people who never lived there (backdating no longer makes them eligible at once: see the resident pass above). Consider requiring a few months of rent records, or an admin spot-check, before their reviews count in the rating.
 - **Secrets and HTTPS.** Real MSG91 and Razorpay keys, HTTPS everywhere, and database backups. See the run guide. The API now refuses to start in production on missing, short or development secrets, on non-https public links, or on half-set key pairs (see "Production settings" below).

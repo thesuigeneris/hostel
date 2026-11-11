@@ -1,9 +1,10 @@
-import { type CommunityPost, ISSUE_CATEGORIES, type IssueCategory, type IssueView, POST_KINDS, type PostKind, timeAgo, titleCase } from '@hostels/shared';
+import { type CommunityPost, ISSUE_CATEGORIES, type IssueCategory, issueInputSchema, type IssueView, POST_KINDS, type PostKind, timeAgo, titleCase } from '@hostels/shared';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 import { api } from '@/lib/api';
 import { confirm } from '@/lib/confirm';
+import { charCount, POST_LIMIT, REPLY_LIMIT, textProblem } from '@/lib/stay';
 import { theme } from '@/lib/theme';
 import { type Photo, uploadPhoto } from '@/lib/upload';
 import { PhotoField } from './PhotoField';
@@ -16,7 +17,7 @@ const tiny = { color: theme.colors.muted, fontSize: 12, fontWeight: '600' as con
 
 function Link({ label, onPress, danger }: { label: string; onPress: () => void; danger?: boolean }) {
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} hitSlop={8}>
+    <Pressable accessibilityRole="button" onPress={onPress} hitSlop={14}>
       <Text style={[tiny, danger && { color: theme.colors.danger }]}>{label}</Text>
     </Pressable>
   );
@@ -49,7 +50,11 @@ export function IssueForm({ hostelId, act }: { hostelId: string; act: Act }) {
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const parsed = issueInputSchema.safeParse({ category, title, description });
+  const problem = parsed.success ? null : (parsed.error.issues[0]?.message ?? null);
+
   async function submit() {
+    if (busy || problem) return;
     setBusy(true);
     await act('issue', async () => {
       const upload = photo ? await uploadPhoto(photo) : null;
@@ -67,10 +72,12 @@ export function IssueForm({ hostelId, act }: { hostelId: string; act: Act }) {
       <H2>Report an issue</H2>
       <P muted>The hostel sees it right away. How fast issues get fixed shows on the public listing.</P>
       <Row>{ISSUE_CATEGORIES.map((c) => <Chip key={c} label={titleCase(c)} active={c === category} onPress={() => setCategory(c)} />)}</Row>
-      <Field label="What's wrong?" value={title} onChangeText={setTitle} placeholder="Geyser on 2nd floor not working" maxLength={120} />
-      <Field label="Details" value={description} onChangeText={setDescription} multiline maxLength={2000} placeholder="Since when, which room, anything that helps" />
+      <Field label="What's wrong?" value={title} onChangeText={setTitle} placeholder="Geyser on 2nd floor not working" maxLength={240} hint={`At least 4 characters. ${charCount(title, 120)}`} />
+      <Field label="Details (optional)" value={description} onChangeText={setDescription} multiline maxLength={4000} placeholder="Since when, which room, anything that helps" hint={charCount(description, 2000)} />
       <PhotoField value={photo} onChange={setPhoto} />
-      <Button title="Report issue" busy={busy} disabled={title.trim().length < 4} onPress={submit} />
+      <P muted>Only residents, the hostel and our team can see the photo.</P>
+      {title.trim().length >= 4 && problem ? <P muted>{problem}</P> : null}
+      <Button title="Report issue" busy={busy} disabled={!!problem} onPress={submit} />
     </Card>
   );
 }
@@ -83,17 +90,26 @@ export function Feed({ hostelId, posts, act, busy }: { hostelId: string; posts: 
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [replies, setReplies] = useState<Record<string, string>>({});
   const reported = 'Reported. The hostel and our team will review it.';
+  const postProblem = body.trim() ? textProblem('post', body) : null;
 
   return (
     <>
       <Card>
-        <Field label="Post to your hostel" value={body} onChangeText={setBody} multiline maxLength={1000} placeholder="Ask your neighbours, share something, plan a movie night…" />
+        <Field
+          label="Post to your hostel"
+          value={body}
+          onChangeText={setBody}
+          multiline
+          maxLength={POST_LIMIT * 2}
+          placeholder="Ask your neighbours, share something, plan a movie night…"
+          hint={postProblem ?? `Only residents and the hostel see the board. ${charCount(body, POST_LIMIT)}`}
+        />
         <Row>{POST_KINDS.filter((k) => k !== 'announcement').map((k) => <Chip key={k} label={titleCase(k)} active={k === kind} onPress={() => setKind(k)} />)}</Row>
         <PhotoField value={photo} onChange={setPhoto} />
         <Button
           title="Post"
           busy={busy === 'post'}
-          disabled={!body.trim()}
+          disabled={!body.trim() || !!postProblem || !!busy}
           onPress={() =>
             act('post', async () => {
               const upload = photo ? await uploadPhoto(photo) : null;
@@ -135,7 +151,7 @@ export function Feed({ hostelId, posts, act, busy }: { hostelId: string; posts: 
               <Row style={{ gap: theme.spacing.lg }}>
                 <Text style={{ color: theme.colors.muted, fontSize: 12 }}>{timeAgo(c.createdAt)}</Text>
                 {c.mine ? (
-                  <Link label="Delete" danger onPress={() => act(`dc${c.id}`, () => r.deleteComment(c.id))} />
+                  <Link label="Delete" danger onPress={() => confirm('Delete this reply?', 'It is removed for everyone.', () => act(`dc${c.id}`, () => r.deleteComment(c.id)), 'Delete')} />
                 ) : (
                   <Link label="Report" onPress={() => act(`rc${c.id}`, () => r.report('comment', c.id, 'Reported from the app'), reported)} />
                 )}
@@ -144,14 +160,22 @@ export function Feed({ hostelId, posts, act, busy }: { hostelId: string; posts: 
           ))}
           <Row style={{ flexWrap: 'nowrap', alignItems: 'flex-end' }}>
             <View style={{ flex: 1 }}>
-              <Field label="" accessibilityLabel="Reply" placeholder="Reply" value={replies[p.id] ?? ''} onChangeText={(t) => setReplies((x) => ({ ...x, [p.id]: t }))} maxLength={500} />
+              <Field
+                label=""
+                accessibilityLabel={`Reply to ${p.author}`}
+                placeholder="Reply"
+                value={replies[p.id] ?? ''}
+                onChangeText={(t) => setReplies((x) => ({ ...x, [p.id]: t }))}
+                maxLength={REPLY_LIMIT * 2}
+                hint={replies[p.id]?.trim() ? (textProblem('reply', replies[p.id]!) ?? undefined) : undefined}
+              />
             </View>
             <Button
               small
               variant="secondary"
               title="Reply"
               busy={busy === `c${p.id}`}
-              disabled={!replies[p.id]?.trim()}
+              disabled={!replies[p.id]?.trim() || !!textProblem('reply', replies[p.id] ?? '') || !!busy}
               onPress={() => act(`c${p.id}`, async () => { await r.comment(p.id, replies[p.id]!); setReplies((x) => ({ ...x, [p.id]: '' })); })}
             />
           </Row>

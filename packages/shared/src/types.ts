@@ -300,8 +300,13 @@ export type MoveRequest = {
   toRoomTypeId: string;
   moveDate: ISODate;
   status: MoveStatus;
+  /** Set when the move was cancelled for the tenant (the destination stopped taking residents), in plain words. */
+  cancelReason: string | null;
   createdAt: string;
 };
+
+/** A move as the tenant sees it: where to, and whether that hostel is taking residents right now. */
+export type MoveView = MoveRequest & { toHostelName: string; toSharing: SharingType | null; toHostelOpen: boolean };
 
 export type Payout = {
   id: string;
@@ -432,6 +437,8 @@ export type IssueView = {
   closedAt: string | null;
   reporter: { id: string; name: string } | null;
   mine: boolean;
+  /** The reporter moved out: they can still read their issue, but not comment, me-too, confirm or reopen. */
+  readOnly: boolean;
   upvotes: number;
   upvotedByMe: boolean;
   /** Open, unanswered by the hostel since it was reported or last reopened, for over a day (`issueNeedsResponse`). */
@@ -449,6 +456,8 @@ export type IssueDetail = IssueView & {
     createdAt: string;
     author: string;
     byOwner: boolean;
+    /** Written by the platform itself (the issue closed on its own), not by a person. */
+    bySystem: boolean;
   }[];
 };
 
@@ -473,7 +482,9 @@ export type MySubscription = {
   roomType: RoomType;
   currentPeriod: { index: number; start: ISODate; end: ISODate };
   invoices: Invoice[];
-  scheduledMove: MoveRequest | null;
+  scheduledMove: MoveView | null;
+  /** A move we cancelled for the tenant in the last 30 days, with the reason, so they know why they're staying. */
+  cancelledMove: MoveView | null;
 };
 
 export type MenuDay = {
@@ -489,11 +500,19 @@ export type MenuDay = {
     skipped: boolean;
     cutoff: string;
     canChange: boolean;
+    /** What skipping this meal takes off a bill; 0 when no bill will carry it (the plan ends first). */
     credit: number;
   }[];
 };
 
-export type MyMenu = { mealPlan: MealPlan; diet: Diet; planLabel: string; days: MenuDay[] };
+export type MyMenu = {
+  mealPlan: MealPlan;
+  diet: Diet;
+  planLabel: string;
+  /** Skips dated from here on earn nothing: the plan ends before the bill that would carry them. Null if none. */
+  noCreditFrom: ISODate | null;
+  days: MenuDay[];
+};
 
 export type Headcount = {
   date: ISODate;

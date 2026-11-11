@@ -229,13 +229,79 @@ Gates run at `b3a55c0` (after merging the integration branch at `9e4a084`) on di
 | SEEK-PATHS | Shared client encodes slugs and ids as one path segment | `client.ts` `seg` | shared › client paths | verified @6d15344 |
 | SEEK-MOBILE-A11Y | Field labels for screen readers; 46 px chip touch area; muted and amber text at AA | `components/ui.tsx`, `lib/theme.ts` | typecheck; `expo export --platform android` | unverified: no device screen reader run |
 
+## Resident persona (R1–R5): audit, fixes and journeys
+
+Branch `persona-resident`. Commits: `7c3a1b5` (API and shared), `80260c1` (website and app), `dbccfaf` (docs), merges
+of `claude/eager-hawking-4exijr` at `f8bdfa8` (`531c7cf`), `9e4a084` (`515d156`) and `f03cb85` (`010bd11`; the seeker's
+`0009_visit_one_open` landed first, so the resident migration is `0010_resident_fixes`), and the commit that records
+these results. Screen-by-screen checklist with evidence: `docs/product/audit-resident.md`.
+
+Decisions made here (reversible, no money or commercial terms):
+- **T1.** The 14-day review clock of an owner-added stay starts on the later of the start date the owner typed and the
+  IST day the owner added the person. The review still shows the stay as claimed; the refusal names the day.
+- **I3.** A change the platform makes has no author (`issue_updates.author_id` null), shown as "Automatic"; no stand-in user.
+- **I5.** The reporter keeps read-only access to their own issue after moving out (`GET /me/issues`, past-stay Issues
+  tab). Everyone else outside the hostel gets 404 for issue and post ids (was 403, which confirmed they exist).
+- **I6.** No me-too on a closed issue (plain message: report it again).
+- **I9.** When the plan lapses the board is hidden from residents with the reason: paused with nothing deleted, or never
+  turned on. Never the owner's billing. Data comes back with the plan.
+- **I10.** Resident text is counted in code points (an emoji is one character on every engine); invisible-only text is refused.
+- **M4.** A skip no bill will carry (cancelled plan, after the last bill's credit window) stores credit 0; the menu
+  returns `noCreditFrom` and the screens say "No credit — your plan ends before the next bill". Skips stored before a
+  cancel keep their amount (no bill reads them) and are shown as 0.
+- **M13.** On the move date, a move into a hostel that is delisted, no longer verified or paused is cancelled with a
+  reason the tenant can read (never the owner's unpaid bill): the bed held there is released, unpaid bills go back
+  to the current room, and My plan shows "cancelled — <reason>" for 30 days.
+- **Names.** Names shown to other people never show a phone number typed as a name; initials keep whole characters;
+  the neighbour list shows first name and last initial (the screen already said "first name").
+- **Browser-test time.** `e2e:fresh` starts `apps/api/src/e2e-server.ts`: the same app plus `PUT /__e2e/clock` to run the
+  clock ahead (used for "review 14 days later"). The production entry `src/index.ts` has no such route, and the e2e
+  entry refuses to start with `NODE_ENV=production`.
+
+Gates run at `010bd11` on disposable databases `hostels_test_r` and `hostels_e2e_r` (recreated after the migration
+renumbering; e2e on ports 4106/3106), after merging `claude/eager-hawking-4exijr` at `f03cb85`:
+- `bun run typecheck` (4/4 exit 0) and `bunx biome lint .` (clean).
+- Shared tests 46 pass (38 on the merged base + 8 new); web unit tests 11 pass (none new); mobile tests 50 pass
+  (45 on the merged base + 5 new); API tests 206 pass (173 on the merged base + 33 new).
+- `e2e:fresh`: 69/69 (60 on the merged base + 9 new: `resident-journey.spec.ts` 5, `resident-daily.spec.ts` 4).
+- `npx expo export --platform android`: exit 0 (Hermes bundle, 3.2 MB).
+- The same gates also passed at the earlier merges: `531c7cf` (API 195/195, `e2e:fresh` 60/60, Android export exit 0)
+  and `515d156` (API 195/195, `e2e:fresh` 60/60, Android export exit 0).
+- Mutation checks, each reverted on its own, its test run, then restored (re-run after the `f8bdfa8` merge, same
+  results): T1 review clock (2 tests fail), T9 invite answer unconditional (1), T9 move-out unconditional (1), review dates from the
+  database clock (1), I2 status change unconditional (1), I2 `from` ignored (1), I3 no timeline row (1), I5 reporter
+  loses access (2), 403 instead of 404 for outsiders (1), I6 me-too on closed (1), I9 owner-billing message (2), I10
+  UTF-16 length (1), I10 invisible-only text (1), M4 full credit (2), M13 move completes anyway (3), T11 phone shown as
+  a name (1), `dateLabel` UTC date (1), T3 not detected (1), app reopen after 7 days (1), app review form from
+  defaults (1), app community tabs for past stays (1).
+
+| ID | Requirement | Implementation | Test | Status |
+|---|---|---|---|---|
+| RES-T1 | Owner-added stays count toward a review from the day the hostel added the person | `residents.ts` `reviewClockStart`, `reviewEligibility`; `addResident` dates the invite from `clock` | `resident-trust.test.ts` › T1 (3); `e2e/resident-journey.spec.ts` 1, 4 | verified @010bd11 |
+| RES-T9 | Answering an invite or moving out twice at once: one wins, the rest get 409 | `residents.ts` `respondToInvite`, `moveOut` (conditional `UPDATE … WHERE status`) | `resident-trust.test.ts` › T9 (3); `resident-journey.spec.ts` 1 (re-accepting a declined invite is 409) | verified @010bd11 |
+| RES-I2 | One transition per status change; no duplicate timeline rows; buttons disabled while pending | `issues.ts` `updateIssue` (`from`, repeat refused, conditional update in the timeline transaction); `issueUpdateSchema.from`; web `updateIssueAction`; app `issue/[id].tsx` (ref guard) | `resident-issues.test.ts` › I2 (3); `resident-journey.spec.ts` 3 (double click → one "Closed") | verified @010bd11; app guard: typecheck only (no device) |
+| RES-I3 | The timeline says when an issue closed on its own | `issues.ts` `autoCloseResolvedIssues`; migration `0010_resident_fixes` | `resident-issues.test.ts` › the timeline says the issue closed automatically, once | verified @010bd11 |
+| RES-I5 | A reporter who moved out still reads their issue, read-only; others get 404 | `issues.ts` `loadIssue`, `myIssues`; `GET /me/issues`; web past-stay Issues tab and banner; app past-stay tabs | `resident-issues.test.ts` › I5 (2); `resident-journey.spec.ts` 5 | verified @010bd11 |
+| RES-I6 | No me-too on a closed issue; own refused; twice counts once | `issues.ts` `toggleUpvote` | `resident-issues.test.ts` › I6 | verified @010bd11 |
+| RES-I7 | Other residents never learn who reported | `issues.ts` `toIssue`, `issueDetail` | `resident-issues.test.ts` › I7 | verified @010bd11 |
+| RES-I9 | Lapsed board: hidden with the residents' reason, data kept | `community.ts` `requireBoard`, `requirePostBoard`; web and app show the API's reason | `resident-life.test.ts` › I9 (2) | verified @010bd11 (the screens' rendering of it: code review only; the seed has no lapsed board with residents) |
+| RES-I10 | Text limits in characters as people count them; blank and invisible-only refused | `resident.ts` `textLength`, `hasVisibleText`; `schemas.ts` `residentText` | `resident-life.test.ts` › I10; shared `resident.test.ts` › text lengths; app `stay.test.ts` › text limits | verified @010bd11 |
+| RES-M4 | Skips no bill will carry earn 0 and the screens say why | `food.ts` `noCreditFrom`, `skipCredit`; `MyMenu.noCreditFrom`; web `/account`, app My Stay | `resident-life.test.ts` › M4 (2); `resident-daily.spec.ts` 3; app `stay.test.ts` › meal skips | verified @010bd11 |
+| RES-M13 | A due move into a hostel that stopped taking residents is cancelled with a reason; bed and bills go back | `moves.ts` `completeDueMoves`, `closedReason`; `billing.ts` `mySubscription` (`scheduledMove`, `cancelledMove`); `jobs.ts` `cancelledMoves`; migration `0010_resident_fixes` | `resident-life.test.ts` › M13 (3 + control) | verified @010bd11 (web and app notice: code review only, no browser action can un-verify a partner) |
+| RES-NAMES | Names never show a phone; whole-character initials; directory first name + initial | `resident.ts` `firstNameAndInitial`, `publicFirstName`; `residents.ts`, `community.ts`, `issues.ts` | `resident-trust.test.ts` › T11; shared `resident.test.ts` › names; `resident-journey.spec.ts` 2 | verified @010bd11 |
+| RES-VERIFY | T3, T4, T7, I4, M5, M6, M7 behave as the catalogue says | as listed in `edge-cases.md` | `resident-trust.test.ts` › T3, T4, T7; `resident-issues.test.ts` › I4; `resident-life.test.ts` › M5, M6, M7; shared `resident.test.ts`; `resident-journey.spec.ts` 4 (T3 label) | verified @010bd11 |
+| RES-IST | Instants show their IST date; skip cut-offs show in IST; review, invite and move dates come from `clock` | `format.ts` `dateLabel`; `resident.ts` `istTime`, `skipCutoffText`; `upsertReview`, `addResident`, `scheduleMove` | shared `resident.test.ts` › IST; `resident-trust.test.ts` › T3 (created date); `resident-daily.spec.ts` 1 | verified @010bd11 |
+| RES-S7-S8 | Resident side: session ends mid-flow → login → same page; paid bill shows paid, no second pay button | no change needed (`requireUser` after a 401) | `resident-daily.spec.ts` 3, 4 | verified @010bd11 |
+| RES-WEB | Resident screens: every state, axe WCAG 2.2 AA (no serious/critical), 360–1440 without overflow, labelled controls | `app/stay/*`, `app/issues/[id]`, `app/account/*` (resident parts), `components/Community.tsx`, `components/Reviews.tsx` | `resident-journey.spec.ts` (5), `resident-daily.spec.ts` (4), `workspaces.spec.ts` › resident workspace | verified @010bd11 |
+| RES-MOBILE | App parity for the resident screens | `app/(tabs)/stay.tsx`, `app/home/[hostelId].tsx`, `app/issue/[id].tsx`, `app/move.tsx`, `components/Community.tsx`, `lib/stay.ts` | `apps/mobile/test/stay.test.ts` (screen logic); typecheck; `expo export --platform android` | unverified: no device or emulator (screen logic verified) |
+| RES-E2E-CLOCK | Browser tests can run the API clock ahead; production can't | `apps/api/src/e2e-server.ts`, `lib/clock.ts` `setClockOffset`; `playwright.config.ts` | `e2e-server.test.ts`; `resident-journey.spec.ts` 4 | verified @010bd11 |
 
 ## Owner persona audit (branch `persona-owner`)
 
 Branch `persona-owner` from `claude/eager-hawking-4exijr`; audit and screen checklist in `docs/product/audit-owner.md`.
 Commits: `27f7729` (API, shared, migration), `c33b431` (web), `ca3da9d` + `d188e00` (app, shared tests), `dc158e9`,
-`f1ce8f7`, `80585aa` (e2e), merges `efb8ca3`, `7c05ed9`, `988d9e4`. One migration: **`0010_owner_fixes`** (after the
-seeker's `0009_visit_one_open`; regenerated after merging, so it carries no snapshot conflict).
+`f1ce8f7`, `80585aa` (e2e), merges `efb8ca3`, `7c05ed9`, `988d9e4`. One migration: **`0011_owner_fixes`** (after the
+seeker's `0009_visit_one_open` and the resident's `0010_resident_fixes`; regenerated after merging).
 
 Decisions (reversible; each is in the audit):
 - A move-out date ahead keeps the stay active, with access, until that day; a job ends it then (T10).
@@ -261,9 +327,9 @@ Gates: see the table's last row.
 | OWN-O6 | A next step for every owner state | `@hostels/shared` `ownerNextStep`; web `app/owner/page.tsx`; app `owner/index.tsx` | shared › next step (4); e2e › O2 and O6 | verified @988d9e4 (web); paused state: rule and API only |
 | OWN-O8 | Pay and waive at the same moment: one outcome | `payments.ts`, `plans.ts` `voidOwnerInvoice` (unchanged) | API › paying at the moment an admin waives | verified @988d9e4 |
 | OWN-S4 | Visit inbox one way, conditional | `visits.ts` `setVisitStatus`, `VISIT_NEXT`; web visits page; app visits | API › visit inbox (3); e2e › S4 | verified @988d9e4; revert-checked (2) |
-| OWN-T8 | One invite per phone under concurrency | index `residencies_one_open_owner_stay` (0010), `addResident` | API › two "add resident" taps | verified @988d9e4; revert-checked (index dropped) |
+| OWN-T8 | One invite per phone under concurrency | index `residencies_one_open_owner_stay` (0011), `addResident` | API › two "add resident" taps | verified @988d9e4; revert-checked (index dropped) |
 | OWN-T10 | Move-out dates ahead keep access; job ends them | `endResident` (conditional), `endDueResidencies` in `runJobs`; `residencyLabel`; roster returns past stays | API › move-out ahead / today; e2e › O4 and T10 | verified @988d9e4; revert-checked |
-| OWN-M8 | Upgrade credits, used-days bill, early-paid month | `plans.ts` `switchPlan`; `owner_invoices.credit_amount`, `note`, index `owner_invoices_plan_tier_period` (0010); shared `splitPeriod`, `prorate`; plan pages | API › upgrading never charges twice (7); shared (2); e2e › M8 | verified @988d9e4; revert-checked |
+| OWN-M8 | Upgrade credits, used-days bill, early-paid month | `plans.ts` `switchPlan`; `owner_invoices.credit_amount`, `note`, index `owner_invoices_plan_tier_period` (0011); shared `splitPeriod`, `prorate`; plan pages | API › upgrading never charges twice (7); shared (2); e2e › M8 | verified @988d9e4; revert-checked |
 | OWN-M9 | One free month per hostel | `switchPlan` start date; `getPlan`/`adminOwnerPlans` `inTrial` | API › one free month per hostel (2) | verified @988d9e4; revert-checked (both) |
 | OWN-DOWN | A downgrade after paying next month early waits for it; an unpaid next-month bill is dropped (back if called off) | `plans.ts` `changePlan` | API › downgrades (2) | verified @988d9e4; revert-checked |
 | OWN-M10 | Pause at day 16, restore on payment; paused Partner keeps subscriber tools | `refreshSuspensions` (unchanged), `access.ts` `requirePlanTier`, `food.ts` `saveMenu`; web and app menu, kitchen; insights `planBill` | API › the 15-day pause (2) | verified @988d9e4; revert-checked (menu) |
