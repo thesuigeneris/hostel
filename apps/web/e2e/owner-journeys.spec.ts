@@ -31,6 +31,18 @@ async function call<T = unknown>(phone: string, path: string, init: { method?: s
   return (await res.json()) as T;
 }
 
+/** Horizontal overflow at phone widths (screen-reader text inside a scroller used to widen the page). */
+async function overflowAtPhoneWidths(page: Page) {
+  const out: string[] = [];
+  for (const width of [360, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    const { sw, vw } = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, vw: document.documentElement.clientWidth }));
+    if (sw > vw + 1) out.push(`${sw - vw}px at ${width}`);
+  }
+  await page.setViewportSize({ width: 1280, height: 720 });
+  return out;
+}
+
 async function axe(page: Page) {
   const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
   return result.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => `${v.id} ${v.nodes[0]?.target}`);
@@ -72,6 +84,8 @@ test('O2 and O6: every listing state on the owner home has a next step, from no 
   await expect(owner.getByText('Draft. Add your rooms and rent next.')).toBeVisible();
   await owner.getByRole('link', { name: 'Add rooms' }).click();
   await expect(owner).toHaveURL(new RegExp(`/owner/hostels/${hostel.id}/rooms`));
+  // A Free hostel's locked tabs carry screen-reader text inside the scrolling tab bar.
+  expect(await overflowAtPhoneWidths(owner)).toEqual([]);
 
   await call(NEW_OWNER, `/owner/hostels/${hostel.id}/rooms`, { body: { sharing: '2-sharing', monthlyRent: 8000, advanceAmount: 0, totalBeds: 6, bedsAvailable: 2 } });
   await owner.goto('/owner');
@@ -128,6 +142,9 @@ test('M8: upgrading Pro to Partner on a paid month credits the unused Pro days o
   await expect(row).toContainText('₹1,999 − ₹999 credit');
   await expect(owner.getByText('Plan bill ready')).toBeVisible();
   await expect(owner.getByRole('heading', { name: 'How billing works' })).toBeVisible();
+  // The due bill's Pay link sits in the scrolling bills table.
+  await expect(owner.getByRole('link', { name: /^Pay ₹1,000 for / })).toBeVisible();
+  expect(await overflowAtPhoneWidths(owner)).toEqual([]);
   expect(await axe(owner)).toEqual([]);
   await owner.context().close();
 });

@@ -10,7 +10,8 @@ export type OwnerTab = { href: string; label: string; locked?: boolean; badge?: 
 export function OwnerTabs({ base, tabs }: { base: string; tabs: OwnerTab[] }) {
   const path = usePathname();
   return (
-    <nav aria-label="Hostel sections" className="-mx-4 mb-6 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+    // `relative` keeps the screen-reader text of the badge and lock inside this scroller on phones.
+    <nav aria-label="Hostel sections" className="relative -mx-4 mb-6 overflow-x-auto px-4 sm:mx-0 sm:px-0">
       <ul className="flex w-max gap-1 rounded-2xl border border-line bg-surface p-1 sm:w-auto sm:flex-wrap">
         {tabs.map((t) => {
           const href = `${base}${t.href}`;

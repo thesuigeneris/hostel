@@ -174,7 +174,7 @@ export default async function PlanPage({ params, searchParams }: Props) {
                     <div className="mt-1 text-xs text-ink-muted">{PAYMENT_MODE_LABEL[b.paymentMode]}</div>
                   )}
                 </Td>
-                <Td>{b.status === 'due' && <Link href={`/pay/${b.id}`}>Pay<span className="sr-only"> {rupees(b.amount)}</span></Link>}</Td>
+                <Td>{b.status === 'due' && <Link href={`/pay/${b.id}`} aria-label={`Pay ${rupees(b.amount)} for ${dateLabel(b.periodStart)} – ${dateLabel(b.periodEnd)}`}>Pay</Link>}</Td>
               </tr>
             ))}
           </Table>
