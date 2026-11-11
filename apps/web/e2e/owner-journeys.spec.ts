@@ -62,7 +62,7 @@ test('I1: an issue waiting over a day is counted on the Issues tab, and a commen
 test('O2 and O6: every listing state on the owner home has a next step, from no hostels to a rejection', async ({ browser }) => {
   const owner = await signIn(browser, NEW_OWNER, { owner: true, name: 'Kavya', next: '/owner' });
   await expect(owner.getByText('List your first hostel')).toBeVisible();
-  await expect(owner.getByRole('link', { name: 'List your hostel free' })).toBeVisible();
+  await expect(owner.locator('#main').getByRole('link', { name: 'List your hostel free' })).toBeVisible();
   expect(await axe(owner)).toEqual([]);
 
   const hostel = await call<{ id: string }>(NEW_OWNER, '/owner/hostels', {
