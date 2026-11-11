@@ -105,12 +105,14 @@ export async function reviewListing(hostelId: string, decision: { approve: true 
   const [h] = await db.select().from(schema.hostels).where(eq(schema.hostels.id, hostelId));
   if (!h) throw notFound('Hostel');
   if (h.status !== 'pending') throw new AppError('invalid_state', 'Only listings in review can be approved or rejected');
+  // Conditional, so two admins (or a double click) deciding at once give one decision and one "refresh".
   const [row] = await db
     .update(schema.hostels)
     .set(decision.approve ? { status: 'live', rejectionReason: null } : { status: 'rejected', rejectionReason: decision.reason })
-    .where(eq(schema.hostels.id, hostelId))
+    .where(and(eq(schema.hostels.id, hostelId), eq(schema.hostels.status, 'pending')))
     .returning();
-  return toHostel(row!);
+  if (!row) throw new AppError('invalid_state', 'This listing was decided a moment ago; refresh to see the outcome');
+  return toHostel(row);
 }
 
 // --- rooms -----------------------------------------------------------------
@@ -284,24 +286,27 @@ export async function decidePartner(
   if (!h) throw notFound('Hostel');
   if (h.partnerStatus !== 'applied') throw new AppError('invalid_state', 'This hostel has no partner application in review');
   return db.transaction(async (tx) => {
-    await closeApplication(tx, h, decision, actorId);
+    // Claim the decision first, conditionally: of two admins deciding at once, one decides and the other is told to
+    // refresh, so the plan is switched once and the application closed once.
+    const [row] = await tx
+      .update(schema.hostels)
+      .set(
+        decision.verify
+          ? { partnerStatus: 'verified', platformFeePct: decision.platformFeePct, rejectionReason: null }
+          : { partnerStatus: 'rejected', rejectionReason: decision.reason },
+      )
+      .where(and(eq(schema.hostels.id, hostelId), eq(schema.hostels.partnerStatus, 'applied')))
+      .returning();
+    if (!row) throw new AppError('invalid_state', 'This application was decided a moment ago; refresh to see the outcome');
+    // Refuses (and rolls the claim back) unless every brand standard is ticked.
+    await closeApplication(tx, row, decision, actorId);
     if (!decision.verify) {
       await tx.update(schema.ownerPlans).set({ pendingPlan: null, pendingPlanOn: null }).where(eq(schema.ownerPlans.hostelId, hostelId));
-      const [row] = await tx
-        .update(schema.hostels)
-        .set({ partnerStatus: 'rejected', rejectionReason: decision.reason })
-        .where(eq(schema.hostels.id, hostelId))
-        .returning();
-      return toHostel(row!);
+      return toHostel(row);
     }
     await switchPlan(tx, hostelId, 'partner');
     await tx.update(schema.roomTypes).set({ advanceAmount: 0 }).where(eq(schema.roomTypes.hostelId, hostelId));
-    const [row] = await tx
-      .update(schema.hostels)
-      .set({ partnerStatus: 'verified', platformFeePct: decision.platformFeePct, rejectionReason: null })
-      .where(eq(schema.hostels.id, hostelId))
-      .returning();
-    return toHostel(row!);
+    return toHostel(row);
   });
 }
 

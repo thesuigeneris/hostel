@@ -1,4 +1,5 @@
 import { expect, spyOn } from 'bun:test';
+import { standardsFor } from '@hostels/shared';
 import { signPayment } from '../src/lib/razorpay';
 import { app, call, login } from './helpers';
 
@@ -84,7 +85,9 @@ export async function liveHostel(ownerToken: string, adminToken: string, opts: H
   expect((await call(`/admin/hostels/${hostel.id}/approve`, { token: adminToken, method: 'POST' })).status).toBe(200);
   if (opts.partner) {
     expect((await call(`/owner/hostels/${hostel.id}/partner`, { token: ownerToken, method: 'POST' })).status).toBe(200);
-    const v = await call(`/admin/hostels/${hostel.id}/partner/verify`, { token: adminToken, body: { platformFeePct: 10 } });
+    // Verifying needs every brand standard that applies ticked, as after a real visit.
+    const checklist = standardsFor(opts.foodAvailable ?? true).map((s) => s.id);
+    const v = await call(`/admin/hostels/${hostel.id}/partner/verify`, { token: adminToken, body: { platformFeePct: 10, checklist } });
     expect(v.status).toBe(200);
   }
   return { hostel: { ...hostel, status: 'live' }, rooms };

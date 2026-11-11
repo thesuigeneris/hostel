@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { addDays, istDate } from '@hostels/shared';
+import { addDays, istDate, PARTNER_STANDARD_IDS } from '@hostels/shared';
 import { setClock } from '../src/lib/clock';
 import { activeSubscriber, addListingPhoto, admin, liveHostel, newOwner, newTenant } from './fixtures';
 import { call, resetDb } from './helpers';
@@ -88,7 +88,7 @@ describe('partner flow', () => {
     });
     expect((await call(`/owner/hostels/${hostel.id}/partner`, { token: ownerToken, method: 'POST' })).body.partnerStatus).toBe('applied');
     expect((await call(`/owner/hostels/${hostel.id}/partner`, { token: ownerToken, method: 'POST' })).body.error).toBe('invalid_state');
-    const v = await call(`/admin/hostels/${hostel.id}/partner/verify`, { token: adminToken, body: { platformFeePct: 12 } });
+    const v = await call(`/admin/hostels/${hostel.id}/partner/verify`, { token: adminToken, body: { platformFeePct: 12, checklist: PARTNER_STANDARD_IDS } });
     expect(v.body).toMatchObject({ partnerStatus: 'verified', platformFeePct: 12 });
 
     const detail = await call(`/hostels/${hostel.slug}`);

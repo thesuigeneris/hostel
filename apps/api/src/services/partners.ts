@@ -45,9 +45,24 @@ async function openApplicationFor(hostelId: string, db: Tx = getDb()) {
   return row ?? null;
 }
 
+/** Refuses unless every brand standard that applies to the hostel is ticked. */
+export function assertAllStandards(foodAvailable: boolean, checklist: readonly string[]) {
+  const missing = missingStandards(foodAvailable, checklist);
+  if (missing.length) {
+    throw new AppError('validation', `Tick every brand standard before verifying. Still to check: ${missing.map((s) => s.label).join('; ')}`);
+  }
+}
+
+/** Only the standards that apply to the hostel, once each. */
+function applicable(foodAvailable: boolean, checklist: readonly string[]) {
+  const allowed = new Set<string>(standardsFor(foodAvailable).map((s) => s.id));
+  return [...new Set(checklist)].filter((id) => allowed.has(id));
+}
+
 /**
- * Records the outcome on the open application. A verification that sends a checklist must cover every
- * standard that applies to the hostel; the console always sends one.
+ * Records the outcome on the open application. A verification needs every standard that applies to the hostel ticked:
+ * the checklist sent with it, or else the progress saved on the application. Every path (website, app, a direct API
+ * call) goes through here, so none can verify a hostel nobody checked.
  */
 export async function closeApplication(
   tx: Tx,
@@ -56,13 +71,8 @@ export async function closeApplication(
   actorId: string | null,
 ) {
   const open = await openApplicationFor(hostel.id, tx);
-  const checklist = decision.verify ? (decision.checklist ?? open?.checklist ?? []) : (open?.checklist ?? []);
-  if (decision.verify && decision.checklist) {
-    const missing = missingStandards(hostel.foodAvailable, decision.checklist);
-    if (missing.length) {
-      throw new AppError('validation', `Tick every brand standard before verifying. Still to check: ${missing.map((s) => s.label).join('; ')}`);
-    }
-  }
+  const checklist = applicable(hostel.foodAvailable, decision.verify ? (decision.checklist ?? open?.checklist ?? []) : (open?.checklist ?? []));
+  if (decision.verify) assertAllStandards(hostel.foodAvailable, checklist);
   const values = {
     status: decision.verify ? ('verified' as const) : ('rejected' as const),
     checklist,
@@ -85,13 +95,14 @@ export async function saveChecklist(hostelId: string, input: { checklist: string
   if (!h) throw notFound('Hostel');
   const open = await openApplicationFor(hostelId);
   if (!open || h.partnerStatus !== 'applied') throw new AppError('invalid_state', 'This hostel has no partner application in review');
-  const allowed = new Set<string>(standardsFor(h.foodAvailable).map((s) => s.id));
+  // Only while it is still open: a decision made meanwhile keeps the checklist it was made on.
   const [row] = await db
     .update(schema.partnerApplications)
-    .set({ checklist: [...new Set(input.checklist)].filter((id) => allowed.has(id)), note: input.note })
-    .where(eq(schema.partnerApplications.id, open.id))
+    .set({ checklist: applicable(h.foodAvailable, input.checklist), note: input.note })
+    .where(and(eq(schema.partnerApplications.id, open.id), eq(schema.partnerApplications.status, 'applied')))
     .returning();
-  return toApplication(row!);
+  if (!row) throw new AppError('invalid_state', 'This application was decided while you were checking; refresh to see the outcome');
+  return toApplication(row);
 }
 
 export async function adminApplications(status: 'applied' | 'verified' | 'rejected' = 'applied'): Promise<AdminPartnerApplication[]> {
