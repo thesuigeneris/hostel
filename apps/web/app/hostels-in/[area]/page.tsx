@@ -1,4 +1,4 @@
-import { REVIEW_MIN_STAY_DAYS } from '@hostels/shared';
+import { ApiError, REVIEW_MIN_STAY_DAYS } from '@hostels/shared';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -6,7 +6,7 @@ import { AppliedFilters, appliedFilters, type SearchParams, SearchFilters, searc
 import { SearchResults } from '@/components/SearchResults';
 import { SearchViewToggle } from '@/components/SearchViewToggle';
 import { Flash } from '@/components/ui';
-import { publicApi } from '@/lib/api';
+import { publicApi, visitorApi } from '@/lib/api';
 import { searchInput } from '@/lib/search';
 
 type Props = { params: Promise<{ area: string }>; searchParams: Promise<SearchParams> };
@@ -48,10 +48,10 @@ export default async function AreaPage({ params, searchParams }: Props) {
   const search = searchInput(q, area?.area);
   let error: string | undefined = failed ? 'We could not load hostels right now. Please try again in a minute.' : undefined;
   const result = area
-    ? await publicApi(60)
+    ? await (await visitorApi(60))
         .hostels.search(search)
-        .catch(() => {
-          error = 'We could not run this search. Check the filters, or clear them and try again.';
+        .catch((e) => {
+          error = e instanceof ApiError && e.status === 429 ? e.message : 'We could not run this search. Check the filters, or clear them and try again.';
           return { items: [], total: 0, page: Number(q.page) || 1, limit: 20 };
         })
     : null;

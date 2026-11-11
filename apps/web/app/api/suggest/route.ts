@@ -1,6 +1,6 @@
 import { SEARCH_TEXT_MAX, SUGGEST_MIN_CHARS, type Suggestions } from '@hostels/shared';
 import { type NextRequest, NextResponse } from 'next/server';
-import { publicApi } from '@/lib/api';
+import { visitorApi } from '@/lib/api';
 
 /**
  * Suggestions for the search box. The browser can't call the API itself (the API is server-side only, and the CSP
@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   const empty: Suggestions = { q, items: [] };
   if (q.length < SUGGEST_MIN_CHARS) return NextResponse.json(empty);
   try {
-    const result = await publicApi(60).hostels.suggest(q);
+    const result = await (await visitorApi(60)).hostels.suggest(q);
     return NextResponse.json(result, { headers: { 'Cache-Control': 'public, max-age=60' } });
   } catch {
     return NextResponse.json(empty, { status: 503, headers: { 'Cache-Control': 'no-store' } });

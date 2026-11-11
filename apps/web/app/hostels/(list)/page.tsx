@@ -5,7 +5,8 @@ import { AppliedFilters, appliedFilters, type SearchParams, SearchFilters, searc
 import { SearchResults } from '@/components/SearchResults';
 import { SearchViewToggle } from '@/components/SearchViewToggle';
 import { Flash } from '@/components/ui';
-import { publicApi } from '@/lib/api';
+import { ApiError } from '@hostels/shared';
+import { publicApi, visitorApi } from '@/lib/api';
 import { searchInput } from '@/lib/search';
 
 const BASE_METADATA: Metadata = {
@@ -25,10 +26,11 @@ export default async function HostelsPage({ searchParams }: { searchParams: Prom
   const search = searchInput(q);
   let error: string | undefined;
   const [result, areas] = await Promise.all([
-    publicApi(30)
+    (await visitorApi(30))
       .hostels.search(search)
-      .catch(() => {
-        error = 'We could not run this search. Check the filters, or clear them and try again.';
+      .catch((e) => {
+        // Too many searches: say so and when to try again, rather than blame the filters.
+        error = e instanceof ApiError && e.status === 429 ? e.message : 'We could not run this search. Check the filters, or clear them and try again.';
         return { items: [], total: 0, page: Number(q.page) || 1, limit: 20 };
       }),
     publicApi(300)

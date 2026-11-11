@@ -8,6 +8,7 @@ import { env } from './lib/env';
 import { AppError } from './lib/errors';
 import { auditAdminActing } from './middleware/admin-audit';
 import type { AppEnv } from './middleware/auth';
+import { applyRateLimits } from './middleware/rate-limit';
 import { adminRoutes } from './routes/admin';
 import { authRoutes } from './routes/auth';
 import { ownerRoutes } from './routes/owner';
@@ -31,6 +32,8 @@ export function createApp(opts: { log?: boolean } = {}) {
   });
   // Admins working in an owner's workspace are audited here, whichever route they used.
   app.use('*', auditAdminActing);
+  // Request limits for sign-up, login, writes, uploads, search and views (middleware/rate-limit.ts).
+  applyRateLimits(app);
 
   app.route('/', publicRoutes);
   app.route('/', authRoutes);

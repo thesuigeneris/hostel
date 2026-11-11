@@ -3,6 +3,7 @@ import { addDays, computePayout, istInstant, TRANSPARENCY_WINDOW_DAYS } from '@h
 import { and, asc, eq, gte, isNull, lt, sql } from 'drizzle-orm';
 import { getDb, schema } from '../db';
 import { clock } from '../lib/clock';
+import { seenWithin } from '../lib/rate-limit';
 import { ownedHostel, planFor } from './access';
 import { ratingsFor } from './listings';
 import { monthBounds, realTenantMoney, tenantNotCounted } from './money';
@@ -11,19 +12,28 @@ import { rentSheet } from './residents';
 const INSIGHT_DAYS = 30;
 const HOUR = 3600_000;
 
-/** Count one page view for a live hostel today. Unknown or non-live slugs are ignored. */
-export async function recordView(slug: string) {
+/** A visitor counts as one view per hostel per half hour, however often the page loads. */
+export const VIEW_DEDUPE_SECONDS = 30 * 60;
+
+/**
+ * Count one page view for a live hostel today. Unknown or non-live slugs are ignored, and so are the owner looking at
+ * their own page and a visitor (signed-in person, else network address) seen in the last half hour, so a script
+ * reloading the page can't inflate the owner's insights. Returns whether it counted.
+ */
+export async function recordView(slug: string, visitor: { userId: string | null; ip: string }) {
   const db = getDb();
   const [h] = await db
-    .select({ id: schema.hostels.id })
+    .select({ id: schema.hostels.id, ownerId: schema.hostels.ownerId })
     .from(schema.hostels)
     .where(and(eq(schema.hostels.slug, slug), eq(schema.hostels.status, 'live')));
-  if (!h) return;
+  if (!h || h.ownerId === visitor.userId) return false;
+  if (seenWithin(`view:${h.id}`, visitor.userId ? `user:${visitor.userId}` : `ip:${visitor.ip}`, VIEW_DEDUPE_SECONDS)) return false;
   const v = schema.hostelViews;
   await db
     .insert(v)
     .values({ hostelId: h.id, day: clock.today(), count: 1 })
     .onConflictDoUpdate({ target: [v.hostelId, v.day], set: { count: sql`${v.count} + 1` } });
+  return true;
 }
 
 function median(values: number[]): number | null {

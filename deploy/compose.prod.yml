@@ -6,6 +6,9 @@ name: hostels
 
 x-api-env: &api-env
   NODE_ENV: production
+  # Only Caddy and the website reach the API (its port is published on 127.0.0.1 only); both put the client's
+  # address last in X-Forwarded-For, which rate limits then count per client.
+  TRUST_PROXY: "1"
   DATABASE_URL: postgres://hostels:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/hostels
   UPLOAD_DIR: /data/uploads
   PORT: "4000"

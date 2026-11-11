@@ -41,7 +41,9 @@ export default defineConfig({
           command: 'bun run src/db/seed.ts --reset && bun run src/e2e-server.ts',
           cwd: '../api',
           url: `${API_URL}/`,
-          env: { DATABASE_URL, PORT: String(API_PORT), JOBS: 'off', ADMIN_PHONES: '9000000001', API_PUBLIC_URL: API_URL },
+          // As in production, the API believes the website's X-Forwarded-For (TRUST_PROXY). Every browser test runs from
+          // this one machine, so limits are raised; rate-limits.spec.ts uses its own address to reach one.
+          env: { DATABASE_URL, PORT: String(API_PORT), JOBS: 'off', ADMIN_PHONES: '9000000001', API_PUBLIC_URL: API_URL, TRUST_PROXY: '1', RATE_LIMIT_FACTOR: '50' },
           reuseExistingServer: false,
           timeout: 120_000,
         },

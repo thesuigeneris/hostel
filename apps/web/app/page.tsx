@@ -17,7 +17,7 @@ import { Reveal } from '@/components/motion';
 import { SearchButton } from '@/components/SearchButton';
 import { SearchSuggest } from '@/components/SearchSuggest';
 import { Empty, focusRing, LinkButton, Select } from '@/components/ui';
-import { publicApi } from '@/lib/api';
+import { publicApi, visitorApi } from '@/lib/api';
 import { rupees } from '@/lib/format';
 import { areaOptions } from '@/lib/search';
 
@@ -60,7 +60,7 @@ const FAQ: { q: string; a: string }[] = [
 
 export default async function Home() {
   const [featured, areas] = await Promise.all([
-    publicApi().hostels.search({ verified: 'true', limit: 6 }).catch(() => ({ items: [], total: 0 })),
+    (await visitorApi(60)).hostels.search({ verified: 'true', limit: 6 }).catch(() => ({ items: [], total: 0 })),
     publicApi().hostels.areas().catch(() => null),
   ]);
 

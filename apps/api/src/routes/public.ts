@@ -4,12 +4,14 @@ import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb, pingDb, schema } from '../db';
+import { clientIp } from '../lib/client-ip';
 import { notFound } from '../lib/errors';
 import { otpMode } from '../lib/msg91';
 import { instancePaymentMode, isRazorpayConfigured } from '../lib/razorpay';
 import { parseQuery } from '../lib/validate';
-import type { AppEnv } from '../middleware/auth';
+import { type AppEnv, bearerToken } from '../middleware/auth';
 import { listFoodPartners, publicMenu } from '../services/food';
+import { getSessionUser } from '../services/auth';
 import { listAreas, liveSlugs, publicHostelBySlug } from '../services/listings';
 import { recordView } from '../services/insights';
 import { hostelReviews } from '../services/residents';
@@ -51,7 +53,10 @@ export const publicRoutes = new Hono<AppEnv>()
   .get('/food-partners', async (c) => c.json(await listFoodPartners(true)))
   .get('/hostels/:slug', async (c) => c.json(await publicHostelBySlug(c.req.param('slug'))))
   .post('/hostels/:slug/view', async (c) => {
-    await recordView(c.req.param('slug'));
+    // Signed in or not; a session only helps tell visitors apart (and the owner from a visitor).
+    const token = bearerToken(c.req.header('Authorization'));
+    const user = token ? await getSessionUser(token) : null;
+    await recordView(c.req.param('slug'), { userId: user?.id ?? null, ip: clientIp(c) });
     return c.json({ ok: true as const });
   })
   .get('/hostels/:slug/reviews', async (c) => {

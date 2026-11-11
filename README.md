@@ -79,6 +79,9 @@ To see what is live, check the API's startup lines or `GET /`:
 | `API_PUBLIC_URL` | `http://localhost:<PORT>` | Public base URL of the API. Used in links to uploaded photos. |
 | `WEB_URL` | `http://localhost:3000` | Website URL. Not read by the API yet. |
 | `JOBS` | on | `off` stops the background jobs inside the API. |
+| `TRUST_PROXY` | unset | `1` when the API is reached only through your own proxy (Caddy) and the website: the last `X-Forwarded-For` entry is then the client's address for rate limits. Unset, the header is ignored and the connection's address counts, so a made-up header can't dodge a limit. `deploy/compose.prod.yml` sets it. |
+| `RATE_LIMITS` | none | Per-rule overrides of the request limits in `apps/api/src/lib/rate-limit.ts`, as `rule=requests/seconds` (e.g. `login=30/600`). Rules: `signup`, `login`, `otp`, `write`, `upload`, `search`, `suggest`, `view`. |
+| `RATE_LIMIT_FACTOR` | `1` | Multiplies every limit. The API and browser tests raise it because all their traffic comes from one machine; production refuses a value above 1. |
 | `UPLOAD_DIR` | `apps/api/uploads` | Where uploaded photos are stored. |
 | `MSG91_AUTH_KEY`, `MSG91_TEMPLATE_ID` | empty | Set both to send real OTP texts. See [MSG91](#msg91-otp-texts). |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | empty | Set both for real Razorpay orders and Checkout. See [Razorpay](#razorpay-payments). |

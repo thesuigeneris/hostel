@@ -1,10 +1,10 @@
 'use server';
 
-import { ApiError, type AuthSession, createApiClient } from '@hostels/shared';
+import { ApiError, type AuthSession } from '@hostels/shared';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { safePath, str } from '@/lib/actions';
-import { API_URL, api, SESSION_COOKIE } from '@/lib/api';
+import { api, SESSION_COOKIE, visitorOnlyApi } from '@/lib/api';
 import { errorText, UNREACHABLE } from '@/lib/errors';
 
 function back(params: Record<string, string | undefined>) {
@@ -17,7 +17,7 @@ export async function requestOtpAction(form: FormData) {
   const next = safePath(str(form, 'next'), '');
   const role = str(form, 'role') === 'owner' ? 'owner' : undefined;
   try {
-    const res = await createApiClient(API_URL).auth.requestOtp({ phone });
+    const res = await (await visitorOnlyApi()).auth.requestOtp({ phone });
     redirect(back({ step: 'otp', phone, next, role, dev: res.devOtp }));
   } catch (e) {
     if (e instanceof ApiError) redirect(back({ phone, next, role, error: e.issues?.[0]?.message ?? e.message }));
@@ -55,7 +55,7 @@ export async function verifyOtpAction(form: FormData) {
   const role = str(form, 'role') === 'owner' ? 'owner' : undefined;
   let destination = '/';
   try {
-    const session = await createApiClient(API_URL).auth.verifyOtp({ phone, otp: str(form, 'otp'), role, name: str(form, 'name') || undefined });
+    const session = await (await visitorOnlyApi()).auth.verifyOtp({ phone, otp: str(form, 'otp'), role, name: str(form, 'name') || undefined });
     destination = await startSession(session, next);
   } catch (e) {
     const error = apiMessage(e);
@@ -70,7 +70,7 @@ export async function passwordLoginAction(form: FormData) {
   const next = safePath(str(form, 'next'), '');
   let destination = '/';
   try {
-    const session = await createApiClient(API_URL).auth.login({ phone, password: rawPassword(form, 'password') });
+    const session = await (await visitorOnlyApi()).auth.login({ phone, password: rawPassword(form, 'password') });
     destination = await startSession(session, next);
   } catch (e) {
     const error = apiMessage(e);
@@ -87,7 +87,7 @@ export async function registerAction(form: FormData) {
   const role = str(form, 'role') === 'owner' ? 'owner' : undefined;
   let destination = '/';
   try {
-    const session = await createApiClient(API_URL).auth.register({ phone, name, role, password: rawPassword(form, 'password') });
+    const session = await (await visitorOnlyApi()).auth.register({ phone, name, role, password: rawPassword(form, 'password') });
     destination = await startSession(session, next);
   } catch (e) {
     const error = apiMessage(e);
@@ -101,7 +101,7 @@ export async function demoLoginAction(form: FormData) {
   const next = safePath(str(form, 'next'), '');
   let destination = '/';
   try {
-    const session = await createApiClient(API_URL).auth.demo(str(form, 'demoPhone'));
+    const session = await (await visitorOnlyApi()).auth.demo(str(form, 'demoPhone'));
     destination = await startSession(session, next);
   } catch (e) {
     const error = apiMessage(e);

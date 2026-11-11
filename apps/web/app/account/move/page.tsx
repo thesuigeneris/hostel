@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { scheduleMoveAction } from '@/app/account/actions';
 import { SubmitButton } from '@/components/SubmitButton';
 import { Card, Empty, Field, Flash, Input, LinkButton, PageHeader, Select } from '@/components/ui';
-import { api, publicApi, requireUser } from '@/lib/api';
+import { api, publicApi, requireUser, visitorApi } from '@/lib/api';
 import { rupees, SHARING_LABEL } from '@/lib/format';
 
 export const metadata: Metadata = { title: 'Move', robots: { index: false } };
@@ -16,7 +16,7 @@ export default async function MovePage({ searchParams }: Props) {
   await requireUser('/account/move');
   const mine = await (await api()).me.subscription();
   if (!mine || mine.subscription.status !== 'active') redirect('/account');
-  const verified = await publicApi(60).hostels.search({ verified: 'true', limit: 50 });
+  const verified = await (await visitorApi(60)).hostels.search({ verified: 'true', limit: 50 });
   const slug = q.to ?? mine.hostel.slug;
   const dest = await publicApi(0).hostels.get(slug).catch(() => null);
   const rooms = (dest?.roomTypes ?? []).filter((r) => r.id !== mine.roomType.id && r.bedsAvailable > 0);

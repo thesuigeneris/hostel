@@ -1,5 +1,6 @@
 import { phoneSchema } from '@hostels/shared';
 import { DEV_SECRETS } from './env';
+import { rateLimitConfigProblems } from './rate-limit';
 
 type Env = Record<string, string | undefined>;
 
@@ -63,6 +64,12 @@ export function productionConfigProblems(e: Env = process.env): string[] {
   const razorpay = e.APP_MODE !== 'demo' && isSet(e.RAZORPAY_KEY_ID) && isSet(e.RAZORPAY_KEY_SECRET);
   // Without the webhook, a payment made in a tab that was then closed is never recorded.
   if (razorpay && !isSet(e.RAZORPAY_WEBHOOK_SECRET)) problems.push('RAZORPAY_WEBHOOK_SECRET is not set; payments from closed tabs would be lost.');
+
+  // Behind Caddy every request comes from the proxy: without TRUST_PROXY all visitors would share one limit.
+  if (e.TRUST_PROXY !== undefined && e.TRUST_PROXY !== '' && e.TRUST_PROXY !== '0' && e.TRUST_PROXY !== '1') {
+    problems.push(`TRUST_PROXY must be 1 (behind Caddy or another proxy that sets X-Forwarded-For) or 0 (got "${e.TRUST_PROXY}").`);
+  }
+  problems.push(...rateLimitConfigProblems(e));
 
   for (const phone of (e.ADMIN_PHONES ?? '').split(',').map((p) => p.trim()).filter(Boolean)) {
     if (!phoneSchema.safeParse(phone).success) problems.push(`ADMIN_PHONES has an invalid phone number: "${phone}".`);

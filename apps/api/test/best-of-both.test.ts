@@ -51,9 +51,10 @@ describe('board likes', () => {
 
 describe('page views and owner insights', () => {
   test('anyone can record a view; owners on Pro/Partner see 30-day views, Free sees them locked', async () => {
-    for (let k = 0; k < 3; k++) expect((await call(`/hostels/${hostel.slug}/view`, { method: 'POST' })).status).toBe(200);
+    // Three visitors (a visitor counts once per half hour; see admin-limits.test.ts), then one more the next day.
+    for (let k = 1; k <= 3; k++) expect((await call(`/hostels/${hostel.slug}/view`, { method: 'POST', ip: `203.0.113.${k}` })).status).toBe(200);
     setClock('2026-11-10T06:00:00Z');
-    await call(`/hostels/${hostel.slug}/view`, { method: 'POST' });
+    await call(`/hostels/${hostel.slug}/view`, { method: 'POST', ip: '203.0.113.1' });
     // Unknown slugs are ignored, not errors (the page may be stale).
     expect((await call('/hostels/no-such-hostel/view', { method: 'POST' })).status).toBe(200);
 

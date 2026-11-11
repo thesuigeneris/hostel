@@ -15,6 +15,7 @@ console.log(`hostels-api listening on http://localhost:${env.port}`);
 console.log(`  payments: ${instancePaymentMode()}${instancePaymentMode() === 'razorpay_live' ? ' (real money)' : ' (no real money moves)'}`);
 const OTP_LOG = { live: 'live (real texts)', stub: 'stub (OTP is 123456)', off: 'off (phone + password login only)' } as const;
 console.log(`  msg91:    ${OTP_LOG[otpMode()]}`);
+console.log(`  clients:  ${env.trustProxy ? 'address from X-Forwarded-For (TRUST_PROXY=1, behind the proxy)' : 'connection address (X-Forwarded-For ignored)'}`);
 
 if (process.env.JOBS !== 'off') startScheduler();
 

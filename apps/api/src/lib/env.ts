@@ -56,4 +56,20 @@ export const env = {
   get webUrl() {
     return process.env.WEB_URL ?? 'http://localhost:3000';
   },
+  /**
+   * `TRUST_PROXY=1`: every request reaches the API through our own proxy (Caddy) or the website, which put the
+   * client's address last in X-Forwarded-For. Only then is the header believed; otherwise the connection's address is.
+   */
+  get trustProxy() {
+    return process.env.TRUST_PROXY === '1';
+  },
+  /** Multiplies every rate limit (see lib/rate-limit.ts). Tests raise it; production leaves it at 1. */
+  get rateLimitFactor() {
+    const f = Number(process.env.RATE_LIMIT_FACTOR ?? 1);
+    return Number.isFinite(f) && f > 0 ? f : 1;
+  },
+  /** Per-rule overrides, `rule=requests/seconds,...`. */
+  get rateLimitOverrides() {
+    return process.env.RATE_LIMITS;
+  },
 };
