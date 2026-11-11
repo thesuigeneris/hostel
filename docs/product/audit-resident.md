@@ -7,9 +7,13 @@ edge cases, accessible, responsive, honest copy, tested. Evidence names a test t
 
 Legend: ✅ checked with evidence · ⚠️ checked by code reading only (reason given) · ❌ open (owner named).
 
-Commits: `7c3a1b5` (API and shared), `80260c1` (website and app), `531c7cf` (merge of the integration branch; the
-resident migration is `0010_resident_fixes`: `issue_updates.author_id` nullable, `move_requests.cancel_reason`).
-Gates and ledger rows: `PRPs/LEDGER.md` › Resident persona.
+Commits: `7c3a1b5` (API and shared), `80260c1` (website and app), `dbccfaf` (docs), and merges of the integration
+branch `531c7cf`, `515d156`, `010bd11`. The resident migration is `0010_resident_fixes` (`issue_updates.author_id`
+nullable, `move_requests.cancel_reason`). Gates and ledger rows: `PRPs/LEDGER.md` › Resident persona.
+
+Final gates at `010bd11` (after merging the integration branch at `f03cb85`): typecheck 4/4 and Biome clean; shared
+tests 46 (8 new), web unit 11, mobile 50 (5 new), API 206 (173 + 33 new), `e2e:fresh` 69/69 (9 new),
+`expo export --platform android` exit 0. 22 mutation checks: every fix reverted on its own made its test fail.
 
 Test files referred to below:
 
