@@ -255,6 +255,12 @@ export async function reorderPhotos(user: User, hostelId: string, photoIds: stri
   const h = await ownedHostel(user, hostelId);
   const db = getDb();
   await db.transaction(async (tx) => {
+    // The new order must name every photo exactly once; a partial or repeated list would leave two photos in one place.
+    const current = await tx.select({ id: schema.hostelPhotos.id }).from(schema.hostelPhotos).where(eq(schema.hostelPhotos.hostelId, h.id)).for('update');
+    const ids = new Set(current.map((p) => p.id));
+    if (photoIds.length !== ids.size || new Set(photoIds).size !== photoIds.length || photoIds.some((id) => !ids.has(id))) {
+      throw new AppError('validation', 'The photo order has changed; reload the page and try again', 400);
+    }
     for (const [i, id] of photoIds.entries()) {
       await tx
         .update(schema.hostelPhotos)
