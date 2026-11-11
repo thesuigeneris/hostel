@@ -4,7 +4,12 @@ Owner: the Owner / Partner persona (decide to join, list, pick a plan, run the h
 it's going, use the brand, live somewhere too). Bar: `docs/product/acceptance.md` › "What done means for one screen" and
 section 2 (O1–O8), plus the owner rows of `docs/product/edge-cases.md` (I1, M8–M10, O1, O2, O4–O6, O8, S4, T8, T10).
 
-Branch `persona-owner` (from `claude/eager-hawking-4exijr`). `[x]` means the named test ran and passed in this session,
+Branch `persona-owner` (from `claude/eager-hawking-4exijr`, merged up to `2f2a17f`). Migration: `0011_owner_fixes`.
+
+Gates at `49effd3`: typecheck 4/4, lint clean, shared 59, web unit 18, mobile 51, API 237 (at `592bdf2`), `e2e:fresh`
+78/78, `expo export --platform android` exit 0.
+
+`[x]` means the named test ran and passed in this session,
 `[~]` means implemented with only part of it testable here (the gap is stated), `[ ]` means not done. Commands:
 
 - API: `cd apps/api && TEST_DATABASE_URL=…/hostels_test_o bun test` (this audit's files: `test/owner-replies.test.ts`,

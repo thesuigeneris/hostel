@@ -300,7 +300,8 @@ renumbering; e2e on ports 4106/3106), after merging `claude/eager-hawking-4exijr
 
 Branch `persona-owner` from `claude/eager-hawking-4exijr`; audit and screen checklist in `docs/product/audit-owner.md`.
 Commits: `27f7729` (API, shared, migration), `c33b431` (web), `ca3da9d` + `d188e00` (app, shared tests), `dc158e9`,
-`f1ce8f7`, `80585aa` (e2e), merges `efb8ca3`, `7c05ed9`, `988d9e4`. One migration: **`0011_owner_fixes`** (after the
+`f1ce8f7`, `80585aa` (e2e), `7d1e2c7` (docs), `49effd3` (phone-width overflow), merges `efb8ca3`, `7c05ed9`, `988d9e4`,
+`592bdf2` (resident work: issues now live in `services/issues.ts`, where the needs-response rule is applied). One migration: **`0011_owner_fixes`** (after the
 seeker's `0009_visit_one_open` and the resident's `0010_resident_fixes`; regenerated after merging).
 
 Decisions (reversible; each is in the audit):
@@ -337,8 +338,10 @@ Gates: see the table's last row.
 | OWN-O1-PAGE | `/for-owners` and the plan page: features and prices from shared, billing rules, Verified-partner checklist | `@hostels/shared` `OWNER_PLAN_FEATURES`, `planPriceLine`, `OWNER_BILLING_RULES`, `PARTNER_REQUIREMENTS`; `app/for-owners/page.tsx`, plan pages | shared › owner copy; e2e › O1, `owners.spec.ts` | verified @988d9e4 |
 | OWN-O7 | Brand kit names: wrap at spaces, Devanagari fonts and lang, held to the print, UTF-8 download names | `apps/web/lib/brand-kit.ts` `layoutName`, `emWidth`, `brandFileName` | web unit `brand-kit.test.ts` (7); e2e › O7 | verified @988d9e4; revert-checked (6 of 7 fail on the old file); print rendering unverified |
 | OWN-RENT | The rent tracker's "still unpaid" is rupees (closes P6-RENT's gap) | `app/owner/hostels/[id]/rent/page.tsx` (unchanged) | e2e › O4 and T10 (amount asserted) | verified @988d9e4 |
-| OWN-UI | Owner screens: states, labels, targets, contrast, overflow | web owner pages; app owner screens | e2e `workspaces.spec.ts` (owner sweep), `owner-journeys.spec.ts` (axe on 8 pages) | web: see gates; app: typecheck and Android export only |
-| OWN-GATES | Final gates on the merged branch | — | (filled below) | (filled below) |
+| OWN-UI | Owner screens: states, labels, targets, contrast, overflow | web owner pages; app owner screens | e2e `workspaces.spec.ts` (owner sweep), `owner-journeys.spec.ts` (axe on 8 pages) | verified @49effd3 (web); app: typecheck and Android export only |
+| OWN-OVERFLOW | Screen-reader text inside a horizontal scroller no longer widens the page (plan page with a due bill: 286 px at 360; a Free hostel's tab bar: 698 px) | `components/ui.tsx` `Table`, `OwnerTabs` (`relative` scrollers); plan page Pay link `aria-label` | `workspaces.spec.ts` owner sweep (failed before); `owner-journeys.spec.ts` › O2 and O6, › M8 (360/390 px) | verified @49effd3; revert-checked (tab bar) |
+| OWN-ISSUE-FROM | The app's owner issue buttons send the status they showed (`from`), like the web form | `apps/mobile/app/owner/issue/[id].tsx` | typecheck | unverified: no device run |
+| OWN-GATES | Final gates on the merged branch (base `2f2a17f`) | — | typecheck 4/4; lint clean (319 files); shared 59 (46 + 13); web unit 18 (11 + 7); mobile 51 (50 + 1); API 237 (206 + 31) at `592bdf2`; `e2e:fresh` 78/78 (69 + 9) at `49effd3`; `npx expo export --platform android` exit 0 | verified; databases `hostels_test_o`, `hostels_e2e_o` (recreated after the migration renumbering) |
 
 
 ## Later PRPs (rows filled when each PRP is generated)
