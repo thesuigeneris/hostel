@@ -1,3 +1,4 @@
+import { PARTNER_STANDARD_IDS } from '@hostels/shared';
 import { readFileSync } from 'node:fs';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page, test } from '@playwright/test';
@@ -130,7 +131,8 @@ test('M8: upgrading Pro to Partner on a paid month credits the unused Pro days o
   const owner = await signIn(browser, PADMA, { next: `/owner/hostels/${pro.id}/plan` });
   await owner.getByRole('button', { name: 'Apply to become a partner' }).click();
   await expect(owner.getByText('Partner application sent.', { exact: false })).toBeVisible();
-  await call(ADMIN, `/admin/hostels/${pro.id}/partner/verify`, { body: { platformFeePct: 10 } });
+  // Verifying needs every brand standard ticked (standards that don't apply are ignored).
+  await call(ADMIN, `/admin/hostels/${pro.id}/partner/verify`, { body: { platformFeePct: 10, checklist: PARTNER_STANDARD_IDS } });
 
   await owner.goto(`/owner/hostels/${pro.id}/plan`);
   const bills = (await apiGet<{ bills: Bill[] }>(PADMA, `/owner/hostels/${pro.id}/plan`)).bills;

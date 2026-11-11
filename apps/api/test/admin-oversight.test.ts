@@ -246,6 +246,37 @@ describe('admins acting in an owner workspace (edge case O7)', () => {
   });
 });
 
+describe('admin actions on issues are not the hostel answering', () => {
+  test("an admin's comment or status move never counts as the hostel's response; the owner's does", async () => {
+    const { hostel, rooms } = await liveHostel(ownerToken, adminToken, { partner: true });
+    const t = await newTenant('Reporter');
+    await activeSubscriber(t.token, hostel.id, rooms[0].id);
+    const report = async (title: string) =>
+      (await call(`/hostels/${hostel.id}/issues`, { token: t.token, body: { category: 'water', title, description: 'No water since morning' } })).body.id as string;
+    const acknowledged = async (id: string) =>
+      (await getDb().select({ at: schema.issues.acknowledgedAt }).from(schema.issues).where(eq(schema.issues.id, id)))[0]!.at;
+    const needsResponse = async (id: string) =>
+      ((await call('/owner/issues', { token: ownerToken })).body as { id: string; needsResponse: boolean }[]).find((i) => i.id === id)!.needsResponse;
+
+    const first = await report('Tank empty');
+    const second = await report('Geyser broken');
+    setClock('2026-11-09T07:00:00Z');
+    expect((await call(`/issues/${first}/updates`, { token: adminToken, body: { message: 'We have asked the owner to look today.' } })).status).toBe(200);
+    expect((await call(`/issues/${second}/updates`, { token: adminToken, body: { status: 'in_progress' } })).status).toBe(200);
+    expect(await acknowledged(first)).toBeNull();
+    expect(await acknowledged(second)).toBeNull();
+    // A day later the hostel still owes the first issue an answer, and the timeline shows who spoke.
+    setClock('2026-11-10T08:00:00Z');
+    expect(await needsResponse(first)).toBe(true);
+    const timeline = (await call(`/issues/${first}`, { token: t.token })).body.updates as { author: string; byOwner: boolean }[];
+    expect(timeline.at(-1)).toMatchObject({ author: 'Hostels team', byOwner: false });
+
+    expect((await call(`/issues/${first}/updates`, { token: ownerToken, body: { message: 'Tanker arriving at 6' } })).status).toBe(200);
+    expect(await acknowledged(first)).not.toBeNull();
+    expect(await needsResponse(first)).toBe(false);
+  });
+});
+
 test('an owner cannot read the admin queues', async () => {
   for (const path of ['/admin/reports', '/admin/reviews/hidden', '/admin/content/hidden', '/admin/listing-changes']) {
     expect((await call(path, { token: ownerToken })).status).toBe(403);

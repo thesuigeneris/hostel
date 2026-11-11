@@ -210,9 +210,12 @@ const OWNER_NEXT: Record<IssueStatus, IssueStatus[]> = {
  * double tap, two people at once, or the close job racing a reopen make one change; the other gets "refresh".
  */
 export async function updateIssue(user: User, issueId: string, input: { status?: IssueStatus; message?: string; from?: IssueStatus }) {
-  const { issue, isOwner, readOnly } = await loadIssue(user, issueId);
+  const { issue, isOwner, readOnly, hostel } = await loadIssue(user, issueId);
   if (readOnly) throw movedOut();
   if (input.from && input.from !== issue.status) throw changed();
+  // Only the hostel answering counts as its response (the public response time and "needs response"). An admin acts
+  // with the owner's powers, but their comments and moves show as the Hostels team's, never as the hostel's.
+  const byHostel = hostel.ownerId === user.id;
   const now = clock.now();
   const set: Partial<IssueRow> = {};
   const to = input.status;
@@ -235,7 +238,7 @@ export async function updateIssue(user: User, issueId: string, input: { status?:
       throw forbidden(`You can't move this issue from ${ISSUE_STATUS_WORDS[issue.status]} to ${ISSUE_STATUS_WORDS[to]}`);
     }
     set.status = to;
-    if (to !== 'open' && !issue.acknowledgedAt) set.acknowledgedAt = now;
+    if (to !== 'open' && !issue.acknowledgedAt && byHostel) set.acknowledgedAt = now;
     if (to === 'resolved') set.resolvedAt = now;
     if (to === 'closed') set.closedAt = now;
     if (to === 'open') Object.assign(set, { resolvedAt: null, closedAt: null });
@@ -250,8 +253,8 @@ export async function updateIssue(user: User, issueId: string, input: { status?:
         .returning({ id: i.id });
       if (!moved.length) throw changed();
     }
-    // An owner's first comment also counts as a response.
-    if (isOwner && !set.acknowledgedAt && input.message) {
+    // The hostel's first comment also counts as a response.
+    if (byHostel && !set.acknowledgedAt && input.message) {
       await tx.update(i).set({ acknowledgedAt: now }).where(and(eq(i.id, issue.id), isNull(i.acknowledgedAt)));
     }
     await tx.insert(schema.issueUpdates).values({
