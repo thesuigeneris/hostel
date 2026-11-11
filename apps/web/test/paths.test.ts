@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { safePath } from '../lib/paths';
+import { absoluteUrl, safePath } from '../lib/paths';
 
 describe('safePath', () => {
   test('keeps same-site paths with their query and hash', () => {
@@ -11,5 +11,12 @@ describe('safePath', () => {
     for (const bad of ['//evil.example', '/\\evil.example', '/\t/evil.example', '/\n/evil.example', 'https://evil.example', 'evil', '', null, undefined]) {
       expect(safePath(bad, '/home')).toBe('/home');
     }
+  });
+});
+
+describe('absoluteUrl', () => {
+  test('keeps full links and joins site-relative ones to the site', () => {
+    expect(absoluteUrl('https://cdn.example/a.jpg', 'https://hostels.example')).toBe('https://cdn.example/a.jpg');
+    expect(absoluteUrl('/uploads/pho_1.jpg', 'https://hostels.example')).toBe('https://hostels.example/uploads/pho_1.jpg');
   });
 });

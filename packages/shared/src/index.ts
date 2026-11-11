@@ -6,5 +6,6 @@ export * from './owner-admin';
 export * from './pricing';
 export * from './resident';
 export * from './schemas';
+export * from './seeker';
 export * from './time';
 export * from './types';

@@ -5,6 +5,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { safePath, str } from '@/lib/actions';
 import { API_URL, api, SESSION_COOKIE } from '@/lib/api';
+import { errorText, UNREACHABLE } from '@/lib/errors';
 
 function back(params: Record<string, string | undefined>) {
   const q = new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => !!e[1]));
@@ -20,6 +21,7 @@ export async function requestOtpAction(form: FormData) {
     redirect(back({ step: 'otp', phone, next, role, dev: res.devOtp }));
   } catch (e) {
     if (e instanceof ApiError) redirect(back({ phone, next, role, error: e.issues?.[0]?.message ?? e.message }));
+    if (e instanceof TypeError) redirect(back({ phone, next, role, error: UNREACHABLE }));
     throw e;
   }
 }
@@ -42,8 +44,9 @@ async function startSession(session: AuthSession, next: string): Promise<string>
   return next || home;
 }
 
-function apiMessage(e: ApiError) {
-  return e.issues?.[0]?.message ?? e.message;
+/** The first field problem or the API's message; a network failure in plain words; null for real bugs. */
+function apiMessage(e: unknown) {
+  return e instanceof ApiError ? (e.issues?.[0]?.message ?? e.message) : errorText(e);
 }
 
 export async function verifyOtpAction(form: FormData) {
@@ -55,7 +58,8 @@ export async function verifyOtpAction(form: FormData) {
     const session = await createApiClient(API_URL).auth.verifyOtp({ phone, otp: str(form, 'otp'), role, name: str(form, 'name') || undefined });
     destination = await startSession(session, next);
   } catch (e) {
-    if (e instanceof ApiError) redirect(back({ step: 'otp', phone, next, role, error: e.message }));
+    const error = apiMessage(e);
+    if (error) redirect(back({ step: 'otp', phone, next, role, error }));
     throw e;
   }
   redirect(destination);
@@ -69,7 +73,8 @@ export async function passwordLoginAction(form: FormData) {
     const session = await createApiClient(API_URL).auth.login({ phone, password: rawPassword(form, 'password') });
     destination = await startSession(session, next);
   } catch (e) {
-    if (e instanceof ApiError) redirect(back({ view: 'password', phone, next, error: apiMessage(e) }));
+    const error = apiMessage(e);
+    if (error) redirect(back({ view: 'password', phone, next, error }));
     throw e;
   }
   redirect(destination);
@@ -85,7 +90,8 @@ export async function registerAction(form: FormData) {
     const session = await createApiClient(API_URL).auth.register({ phone, name, role, password: rawPassword(form, 'password') });
     destination = await startSession(session, next);
   } catch (e) {
-    if (e instanceof ApiError) redirect(back({ view: 'signup', phone, name, next, role, error: apiMessage(e) }));
+    const error = apiMessage(e);
+    if (error) redirect(back({ view: 'signup', phone, name, next, role, error }));
     throw e;
   }
   redirect(destination);
@@ -98,7 +104,8 @@ export async function demoLoginAction(form: FormData) {
     const session = await createApiClient(API_URL).auth.demo(str(form, 'demoPhone'));
     destination = await startSession(session, next);
   } catch (e) {
-    if (e instanceof ApiError) redirect(back({ next, error: apiMessage(e) }));
+    const error = apiMessage(e);
+    if (error) redirect(back({ next, error }));
     throw e;
   }
   redirect(destination);

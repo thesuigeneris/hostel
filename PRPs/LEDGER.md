@@ -194,10 +194,45 @@ Gates run on disposable databases `hostels_test_d` and `hostels_e2e_d` (e2e on p
 | DEP-RESTORE | Restore drill that changes nothing; real restore with confirmation | `deploy/restore.sh` (`--check`, checksum gate, confirmation) | Drill loaded into a scratch DB; corrupted backup, non-backup folder and unconfirmed restore refused with data untouched; after deleting all reviews and a photo, restore brought them back and the smoke test passed | verified 2026-11-02 |
 | DEP-ADMIN | First admin on a server without SMS | `src/scripts/grant-admin.ts` via `docker compose exec api` | Ran in the container: granted; an invalid phone printed usage | verified 2026-11-02 |
 
+## Seeker persona audit (branch `persona-seeker`)
+
+Audit checklist with evidence per screen and action: [`docs/product/audit-seeker.md`](../docs/product/audit-seeker.md).
+Edge cases closed: S1–S3, S5–S8 and T2 from `docs/product/edge-cases.md` (S4 belongs to the owner agent).
+Migration: `0009_visit_one_open` (partial unique index; closes duplicate waiting requests first). Regenerated as 0009 after `0008_payment_mode` landed.
+
+Gates run at `b3a55c0` (after merging the integration branch at `9e4a084`) on disposable databases `hostels_test_s` and
+`hostels_e2e_s` (e2e on ports 4105/3105):
+- `bun run typecheck` (4/4 exit 0) and `bunx biome lint .` (clean).
+- Shared tests 38 pass; web unit tests 11 pass; mobile tests 45 pass; API tests 173 pass (162 on the integration branch).
+- `e2e:fresh`: 60/60 (9 new in `seeker-journeys.spec.ts`).
+- `npx expo export --platform android`: exit 0 (Hermes bundle).
+- Mutation checks: each fix below was reverted on its own and its test failed, then restored (API: 8 reverts; web e2e:
+  10 reverts in two builds; web unit: 4; shared: 1).
+
+| Req | Requirement | Implementation | Test | Status |
+|---|---|---|---|---|
+| SEEK-SUGGEST | Suggestions while typing: areas (word start) then live hostel names; debounced, keyboard combobox; plain form without JS; also on Explore | `search.ts` `suggest`; `GET /suggest`; `suggestSchema`, `hostels.suggest`; web `SearchSuggest`, `app/api/suggest/route.ts`; app `lib/suggest.ts`, Explore | API `seeker.test.ts` › suggestions while typing (2); e2e `seeker-journeys.spec.ts` › S1; mobile `seeker.test.ts` › explore suggestions | verified @6d15344 (API), @084f0e0 (web); app screen unverified on a device |
+| SEEK-NOJS | Search and area pages complete without JavaScript (route `loading.tsx` streamed results behind a JS-only Suspense swap) | removed `hostels/(list)/loading.tsx`, `hostels-in/[area]/loading.tsx`; `SearchButton` pending text | e2e › S1 (no-JS results; failed with the loading file restored) | verified @084f0e0 |
+| SEEK-T2 | Rating sort and "recommended" use a shrunk average (prior weight 5); "4★ and up" needs 3 reviews; pages show the true average, "New" below 3 reviews | `search.ts`; `RATING_PRIOR_WEIGHT`, `RATING_MIN_REVIEWS`, `ratingView` in `packages/shared/src/seeker.ts`; web `Rating.tsx`, hostel page, JSON-LD; app `Rating.tsx` | API › a single 5★ review does not outrank many good ones (mutation-checked twice: raw order, filter); e2e › S3 (JSON-LD) | verified @6d15344, @084f0e0 |
+| SEEK-S5 | Stable order (`id` last in every sort); real total past the last page, link to it | `search.ts`; `SearchResults.tsx` | API › equal rows keep one order…, › a page past the end…; e2e › S5 | verified @6d15344, @084f0e0 |
+| SEEK-S6 | `%`, `_`, quotes, emoji matched literally; text over 80 characters cut on the web, refused plainly by the API | `escapeLike`; `searchSchema.q`; web `lib/search.ts` | API › wildcards, quotes and emoji…; e2e › S6; web unit › search params | verified @6d15344, @084f0e0 |
+| SEEK-S1 | One waiting visit request per person per hostel, even when sent twice at once | `visit_requests_one_open` (migration 0009); `visits.ts` maps the violation | API › a form sent twice at once (6 parallel; 6 rows without the index) | verified @6d15344 |
+| SEEK-S2 | Owners can't request a visit at their own hostel; the page shows their inbox link | `visits.ts`; hostel page | API › an owner cannot…; e2e › S4 | verified @6d15344, @084f0e0 |
+| SEEK-S3 | Visit dates today to 90 days ahead, in the schema and the service | `VISIT_MAX_DAYS_AHEAD`, `visitDateProblem`, `visitRequestSchemaOn(clock)` | API › dates run from today to 90 days ahead; shared › visit dates | verified @6d15344 |
+| SEEK-TRUST | "Verified partner" lists what the in-person check covered (from the inspection record, never the notes); the hidden issue record says why | `listings.ts` `partnerCheckFor` (`HostelDetail.partnerCheck`); `HostelTrust.tsx`; `TRANSPARENCY_HIDDEN_NOTE`; app hostel screen | API › verified partner explainer; e2e › S3 | verified @084f0e0; app screen unverified on a device |
+| SEEK-NORESULTS | No results offers each relaxed filter with its count (and every area on area pages); app too | `SearchResults.tsx` `NoResults`; app `relaxations` | e2e › S2; mobile unit › no results | verified @084f0e0 |
+| SEEK-S4-HOLD | A held bed or running plan shows pay / release / move instead of "already subscribed"; first bill summary; visible focus on choice cards | `subscribe/[slug]/page.tsx`, `FirstBill.tsx`, `releaseHoldAction`; app subscribe | e2e › S4 + S8 | verified @084f0e0; app unverified on a device |
+| SEEK-S8 | A paid bill never offers a second payment (back, reload, reopen); a cancelled bill says so honestly | `pay/[invoiceId]/page.tsx` | e2e › S4 + S8, › S8 (edge) | verified @084f0e0 |
+| SEEK-S7 | An ended session reaches login with a notice and returns to the same step | `requireUser` `expired=1`; login notice | e2e › S7 | verified @084f0e0 |
+| SEEK-ERRORS | Form errors as "Field: problem"; unreachable API as a connection message (login no longer crashes) | `lib/errors.ts`, `run()`, login actions | web unit › form errors (2) | verified @084f0e0 |
+| SEEK-VISITS | Visit next step (including a passed date); withdraw on the app | `visitNextStep`; `/account`; app Profile | shared › visit dates; e2e › S4 | verified @084f0e0; app unverified on a device |
+| SEEK-PATHS | Shared client encodes slugs and ids as one path segment | `client.ts` `seg` | shared › client paths | verified @6d15344 |
+| SEEK-MOBILE-A11Y | Field labels for screen readers; 46 px chip touch area; muted and amber text at AA | `components/ui.tsx`, `lib/theme.ts` | typecheck; `expo export --platform android` | unverified: no device screen reader run |
+
 ## Resident persona (R1–R5): audit, fixes and journeys
 
 Branch `persona-resident`. Commits: `7c3a1b5` (API and shared), `80260c1` (website and app), `531c7cf` (merge of
-`claude/eager-hawking-4exijr` at `f8bdfa8`; the resident migration is `0009_resident_fixes`), and the commit that
+`claude/eager-hawking-4exijr` at `f8bdfa8`; the resident migration is `0010_resident_fixes`), and the commit that
 records this section. Screen-by-screen checklist with evidence: `docs/product/audit-resident.md`.
 
 Decisions made here (reversible, no money or commercial terms):
@@ -242,14 +277,14 @@ merging `claude/eager-hawking-4exijr` at `f8bdfa8`:
 | RES-T1 | Owner-added stays count toward a review from the day the hostel added the person | `residents.ts` `reviewClockStart`, `reviewEligibility`; `addResident` dates the invite from `clock` | `resident-trust.test.ts` › T1 (3); `e2e/resident-journey.spec.ts` 1, 4 | verified @@@HASH@@ |
 | RES-T9 | Answering an invite or moving out twice at once: one wins, the rest get 409 | `residents.ts` `respondToInvite`, `moveOut` (conditional `UPDATE … WHERE status`) | `resident-trust.test.ts` › T9 (3); `resident-journey.spec.ts` 1 (re-accepting a declined invite is 409) | verified @@@HASH@@ |
 | RES-I2 | One transition per status change; no duplicate timeline rows; buttons disabled while pending | `issues.ts` `updateIssue` (`from`, repeat refused, conditional update in the timeline transaction); `issueUpdateSchema.from`; web `updateIssueAction`; app `issue/[id].tsx` (ref guard) | `resident-issues.test.ts` › I2 (3); `resident-journey.spec.ts` 3 (double click → one "Closed") | verified @@@HASH@@; app guard: typecheck only (no device) |
-| RES-I3 | The timeline says when an issue closed on its own | `issues.ts` `autoCloseResolvedIssues`; migration `0009_resident_fixes` | `resident-issues.test.ts` › the timeline says the issue closed automatically, once | verified @@@HASH@@ |
+| RES-I3 | The timeline says when an issue closed on its own | `issues.ts` `autoCloseResolvedIssues`; migration `0010_resident_fixes` | `resident-issues.test.ts` › the timeline says the issue closed automatically, once | verified @@@HASH@@ |
 | RES-I5 | A reporter who moved out still reads their issue, read-only; others get 404 | `issues.ts` `loadIssue`, `myIssues`; `GET /me/issues`; web past-stay Issues tab and banner; app past-stay tabs | `resident-issues.test.ts` › I5 (2); `resident-journey.spec.ts` 5 | verified @@@HASH@@ |
 | RES-I6 | No me-too on a closed issue; own refused; twice counts once | `issues.ts` `toggleUpvote` | `resident-issues.test.ts` › I6 | verified @@@HASH@@ |
 | RES-I7 | Other residents never learn who reported | `issues.ts` `toIssue`, `issueDetail` | `resident-issues.test.ts` › I7 | verified @@@HASH@@ |
 | RES-I9 | Lapsed board: hidden with the residents' reason, data kept | `community.ts` `requireBoard`, `requirePostBoard`; web and app show the API's reason | `resident-life.test.ts` › I9 (2) | verified @@@HASH@@ (the screens' rendering of it: code review only; the seed has no lapsed board with residents) |
 | RES-I10 | Text limits in characters as people count them; blank and invisible-only refused | `resident.ts` `textLength`, `hasVisibleText`; `schemas.ts` `residentText` | `resident-life.test.ts` › I10; shared `resident.test.ts` › text lengths; app `stay.test.ts` › text limits | verified @@@HASH@@ |
 | RES-M4 | Skips no bill will carry earn 0 and the screens say why | `food.ts` `noCreditFrom`, `skipCredit`; `MyMenu.noCreditFrom`; web `/account`, app My Stay | `resident-life.test.ts` › M4 (2); `resident-daily.spec.ts` 3; app `stay.test.ts` › meal skips | verified @@@HASH@@ |
-| RES-M13 | A due move into a hostel that stopped taking residents is cancelled with a reason; bed and bills go back | `moves.ts` `completeDueMoves`, `closedReason`; `billing.ts` `mySubscription` (`scheduledMove`, `cancelledMove`); `jobs.ts` `cancelledMoves`; migration `0009_resident_fixes` | `resident-life.test.ts` › M13 (3 + control) | verified @@@HASH@@ (web and app notice: code review only, no browser action can un-verify a partner) |
+| RES-M13 | A due move into a hostel that stopped taking residents is cancelled with a reason; bed and bills go back | `moves.ts` `completeDueMoves`, `closedReason`; `billing.ts` `mySubscription` (`scheduledMove`, `cancelledMove`); `jobs.ts` `cancelledMoves`; migration `0010_resident_fixes` | `resident-life.test.ts` › M13 (3 + control) | verified @@@HASH@@ (web and app notice: code review only, no browser action can un-verify a partner) |
 | RES-NAMES | Names never show a phone; whole-character initials; directory first name + initial | `resident.ts` `firstNameAndInitial`, `publicFirstName`; `residents.ts`, `community.ts`, `issues.ts` | `resident-trust.test.ts` › T11; shared `resident.test.ts` › names; `resident-journey.spec.ts` 2 | verified @@@HASH@@ |
 | RES-VERIFY | T3, T4, T7, I4, M5, M6, M7 behave as the catalogue says | as listed in `edge-cases.md` | `resident-trust.test.ts` › T3, T4, T7; `resident-issues.test.ts` › I4; `resident-life.test.ts` › M5, M6, M7; shared `resident.test.ts`; `resident-journey.spec.ts` 4 (T3 label) | verified @@@HASH@@ |
 | RES-IST | Instants show their IST date; skip cut-offs show in IST; review, invite and move dates come from `clock` | `format.ts` `dateLabel`; `resident.ts` `istTime`, `skipCutoffText`; `upsertReview`, `addResident`, `scheduleMove` | shared `resident.test.ts` › IST; `resident-trust.test.ts` › T3 (created date); `resident-daily.spec.ts` 1 | verified @@@HASH@@ |

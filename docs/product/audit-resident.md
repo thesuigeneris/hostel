@@ -8,7 +8,7 @@ edge cases, accessible, responsive, honest copy, tested. Evidence names a test t
 Legend: ✅ checked with evidence · ⚠️ checked by code reading only (reason given) · ❌ open (owner named).
 
 Commits: `7c3a1b5` (API and shared), `80260c1` (website and app), `531c7cf` (merge of the integration branch; the
-resident migration is `0009_resident_fixes`: `issue_updates.author_id` nullable, `move_requests.cancel_reason`).
+resident migration is `0010_resident_fixes`: `issue_updates.author_id` nullable, `move_requests.cancel_reason`).
 Gates and ledger rows: `PRPs/LEDGER.md` › Resident persona.
 
 Test files referred to below:
@@ -132,14 +132,14 @@ merging the integration branch; list in the ledger).
 | T1 | Backdated owner-added stays could review on day one | `residents.ts` `reviewClockStart`; reason names the day | `resident-trust` › T1 (2 tests); `resident-journey` 1, 4 |
 | T9 | Invite answer and move-out were read-then-write | conditional `UPDATE … WHERE status` | `resident-trust` › T9 (2 tests) |
 | I2 | Issue status changes were read-then-write; a double tap wrote two timeline rows | `from` + conditional update in the timeline transaction; repeat refused | `resident-issues` › I2 (2 tests); `resident-journey` 3 |
-| I3 | Closing on its own left no timeline entry | job writes an author-less row ("Automatic"); `issue_updates.author_id` nullable (migration `0009_resident_fixes`) | `resident-issues` › I3 |
+| I3 | Closing on its own left no timeline entry | job writes an author-less row ("Automatic"); `issue_updates.author_id` nullable (migration `0010_resident_fixes`) | `resident-issues` › I3 |
 | I5 | A reporter who moved out lost their own issue (403) | read-only access for the reporter, `GET /me/issues`, past-stay issues tab | `resident-issues` › I5; `resident-journey` 5 |
 | — | Outsiders got 403 for issue and post ids (confirming they exist) | 404 for non-members on issue and post routes | `resident-issues` › anyone else outside the hostel gets 404 |
 | I6 | Me-too allowed on closed issues | refused with a plain message | `resident-issues` › I6 |
 | I9 | Residents on a lapsed board saw "hasn't turned on" (or the owner's billing message) | resident wording, paused vs never on | `resident-life` › I9 (2 tests) |
 | I10 | Lengths counted UTF-16 units (an emoji was 2); blank or invisible-only text accepted | `textLength`, `hasVisibleText` in all resident text fields | `resident-life` › I10; shared › text lengths |
 | M4 | Skips after cancelling stored credit no bill would carry | credit 0 from `noCreditFrom`; menu and screens say why | `resident-life` › M4 (2 tests); `resident-daily` 3 |
-| M13 | A due move completed into a delisted/unverified/paused hostel | cancelled with a stored reason (`move_requests.cancel_reason`, migration `0009_resident_fixes`); bed and unpaid bills go back | `resident-life` › M13 (3 tests + 1 control) |
+| M13 | A due move completed into a delisted/unverified/paused hostel | cancelled with a stored reason (`move_requests.cancel_reason`, migration `0010_resident_fixes`); bed and unpaid bills go back | `resident-life` › M13 (3 tests + 1 control) |
 | T11 | A phone typed as a name was shown; initials split emoji and accents | `firstNameAndInitial` (graphemes, phone-like names → "Resident") | `resident-trust` › T11; shared › names |
 | — | Review `createdAt`, residency `createdAt` (owner add) and move `createdAt` came from the database clock, not `clock` | set from `clock.now()` | `resident-trust` › T3 (created date) |
 | — | Instants were labelled with their UTC date (a day early 00:00–05:30 IST) | `dateLabel` converts instants to IST | shared › an instant is labelled with its IST date |

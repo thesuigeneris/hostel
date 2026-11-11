@@ -45,7 +45,8 @@ export function Button({ title, onPress, variant = 'primary', disabled, busy, sm
     primary: { bg: c.brand, fg: c.white, border: c.brand },
     secondary: { bg: c.surface, fg: c.text, border: c.border },
     ghost: { bg: 'transparent', fg: c.soft, border: 'transparent' },
-    food: { bg: c.food, fg: c.white, border: c.food },
+    // White on amber is 2.7:1, so amber buttons carry dark text (5.9:1), as on the web.
+    food: { bg: c.food, fg: c.text, border: c.food },
     danger: { bg: c.danger, fg: c.white, border: c.danger },
   }[variant];
   return (
@@ -80,7 +81,7 @@ export function P({ children, muted, style, numberOfLines }: { children: ReactNo
 
 const BADGE = {
   green: { bg: c.brandSoft, fg: c.brand },
-  food: { bg: c.foodSoft, fg: c.food },
+  food: { bg: c.foodSoft, fg: c.foodInk },
   gray: { bg: c.bg, fg: c.soft },
   red: { bg: c.dangerSoft, fg: c.danger },
 };
@@ -102,8 +103,9 @@ export function StatusBadge({ status }: { status: string }) {
 }
 
 export function Chip({ label, active, onPress }: { label: string; active?: boolean; onPress: () => void }) {
+  // The chip is 34 px tall; the hit area reaches 46 px, above the 44 px touch target.
   return (
-    <Pressable accessibilityRole="button" accessibilityState={{ selected: !!active }} hitSlop={6} onPress={onPress} style={[styles.chip, active && { backgroundColor: c.brand, borderColor: c.brand }]}>
+    <Pressable accessibilityRole="button" accessibilityState={{ selected: !!active }} onPress={onPress} hitSlop={{ top: 6, bottom: 6 }} style={[styles.chip, active && { backgroundColor: c.brand, borderColor: c.brand }]}>
       <Text style={{ color: active ? c.white : c.soft, fontSize: 13, fontWeight: '500' }}>{label}</Text>
     </Pressable>
   );
@@ -113,7 +115,8 @@ export function Field({ label, hint, ...props }: TextInputProps & { label: strin
   return (
     <View style={{ gap: sp.xs }}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput placeholderTextColor={c.muted} {...props} style={[styles.input, props.multiline && { minHeight: 90, textAlignVertical: 'top', paddingTop: sp.sm }, props.style]} />
+      {/* The visible label is also the field's name for screen readers. */}
+      <TextInput placeholderTextColor={c.muted} accessibilityLabel={label} {...props} style={[styles.input, props.multiline && { minHeight: 90, textAlignVertical: 'top', paddingTop: sp.sm }, props.style]} />
       {hint ? <Text style={{ color: c.muted, fontSize: 12 }}>{hint}</Text> : null}
     </View>
   );
@@ -190,7 +193,7 @@ const styles = StyleSheet.create({
   h2: { fontSize: 18, fontWeight: '700', color: c.text },
   p: { fontSize: 15, color: c.soft, lineHeight: 21 },
   badge: { borderRadius: theme.radius.pill, paddingHorizontal: 10, paddingVertical: 3, alignSelf: 'flex-start' },
-  chip: { borderRadius: theme.radius.pill, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, paddingHorizontal: 14, paddingVertical: 7 },
+  chip: { minHeight: 34, justifyContent: 'center', borderRadius: theme.radius.pill, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, paddingHorizontal: 14, paddingVertical: 7 },
   label: { fontSize: 14, fontWeight: '600', color: c.text },
   input: { borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, borderRadius: theme.radius.sm, paddingHorizontal: sp.md, height: 44, fontSize: 15, color: c.text },
   empty: { borderWidth: 1, borderStyle: 'dashed', borderColor: c.border, borderRadius: theme.radius.md, padding: sp.xl, alignItems: 'center' },

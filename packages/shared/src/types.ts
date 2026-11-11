@@ -1,4 +1,5 @@
 import type { Diet, Meal, MealPlan } from './pricing';
+import type { PartnerCheck } from './seeker';
 import type { ISODate } from './time';
 
 export const ROLES = ['tenant', 'owner', 'admin'] as const;
@@ -207,6 +208,8 @@ export type HostelDetail = Hostel & {
   ratings: RatingBreakdown;
   /** Null until the hostel has enough issues in the window to be meaningful. */
   transparency: TransparencyStats | null;
+  /** For verified partners: what the in-person check covered. Null for everyone else. */
+  partnerCheck?: PartnerCheck | null;
 };
 
 export type VisitRequest = {

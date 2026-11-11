@@ -86,6 +86,7 @@ import type {
   PartnerStandardId,
 } from './owner-admin';
 import type { Meal } from './pricing';
+import type { Suggestions } from './seeker';
 import type { OwnerPlanTier } from './types';
 
 export class ApiError extends Error {
@@ -162,7 +163,7 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
       move: (input: MoveInput) => request<MoveRequest>('/me/moves', { body: input }),
       cancelMove: (id: string) => request<MoveRequest>(`/me/moves/${id}`, { method: 'DELETE' }),
       visits: () => request<MyVisit[]>('/me/visits'),
-      cancelVisit: (id: string) => request<VisitRequest>(`/me/visits/${id}`, { method: 'DELETE' }),
+      cancelVisit: (id: string) => request<VisitRequest>(`/me/visits/${seg(id)}`, { method: 'DELETE' }),
       residencies: () => request<MyResidency[]>('/me/residencies'),
       acceptResidency: (id: string) => request<Residency>(`/me/residencies/${id}/accept`, { method: 'POST' }),
       declineResidency: (id: string) => request<Residency>(`/me/residencies/${id}/decline`, { method: 'POST' }),
@@ -172,18 +173,21 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
     },
     hostels: {
       search: (input: SearchInput = {}) => request<SearchResult>('/hostels', { query: input as Query }),
-      get: (slug: string) => request<HostelDetail>(`/hostels/${slug}`),
-      reviews: (slug: string, page = 1) => request<Review[]>(`/hostels/${slug}/reviews`, { query: { page } }),
-      menu: (slug: string, date?: string) => request<MenuWeek | null>(`/hostels/${slug}/menu`, { query: { date } }),
+      // Slugs and ids come from URLs and form fields, so each is one encoded path segment.
+      get: (slug: string) => request<HostelDetail>(`/hostels/${seg(slug)}`),
+      reviews: (slug: string, page = 1) => request<Review[]>(`/hostels/${seg(slug)}/reviews`, { query: { page } }),
+      menu: (slug: string, date?: string) => request<MenuWeek | null>(`/hostels/${seg(slug)}/menu`, { query: { date } }),
+      /** Areas and hostel names matching what a seeker has typed so far. */
+      suggest: (q: string, limit?: number) => request<Suggestions>('/suggest', { query: { q, limit } }),
       areas: () => request<Area[]>('/areas'),
       sitemap: () => request<{ hostels: { slug: string; area: string }[]; areas: Area[] }>('/sitemap-data'),
       foodPartners: () => request<FoodPartner[]>('/food-partners'),
-      recordView: (slug: string) => request<{ ok: true }>(`/hostels/${slug}/view`, { method: 'POST' }),
-      requestVisit: (hostelId: string, input: VisitRequestInput) => request<VisitRequest>(`/hostels/${hostelId}/visits`, { body: input }),
+      recordView: (slug: string) => request<{ ok: true }>(`/hostels/${seg(slug)}/view`, { method: 'POST' }),
+      requestVisit: (hostelId: string, input: VisitRequestInput) => request<VisitRequest>(`/hostels/${seg(hostelId)}/visits`, { body: input }),
       subscribe: (hostelId: string, input: SubscribeInput) =>
-        request<{ subscription: Subscription; invoice: Invoice }>(`/hostels/${hostelId}/subscribe`, { body: input }),
+        request<{ subscription: Subscription; invoice: Invoice }>(`/hostels/${seg(hostelId)}/subscribe`, { body: input }),
       review: (hostelId: string, input: ReviewInput) => request<Review>(`/hostels/${hostelId}/review`, { method: 'PUT', body: input }),
-      flagReview: (reviewId: string, reason: string) => request<{ ok: true }>(`/reviews/${reviewId}/flag`, { body: { reason } }),
+      flagReview: (reviewId: string, reason: string) => request<{ ok: true }>(`/reviews/${seg(reviewId)}/flag`, { body: { reason } }),
     },
     resident: {
       issues: (hostelId: string, status?: IssueStatus) => request<IssueView[]>(`/hostels/${hostelId}/issues`, { query: { status } }),
@@ -300,6 +304,12 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
 }
 
 export type ApiClient = ReturnType<typeof createApiClient>;
+
+/**
+ * One path segment, so `../me` can't climb out of the route it was meant for. A bare `.` or `..` would still be
+ * read as a dot segment, and is never a real id or slug, so it becomes `...`, which matches nothing.
+ */
+const seg = (value: string) => (value === '.' || value === '..' ? '...' : encodeURIComponent(value));
 
 function safeJson(text: string): unknown {
   try {

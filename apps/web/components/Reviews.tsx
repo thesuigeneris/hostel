@@ -1,10 +1,10 @@
-import { EDITED_AFTER_REPLY, type Review, reviewEdits } from '@hostels/shared';
+import { EDITED_AFTER_REPLY, REVIEW_FLAG_REASONS, type Review, reviewEdits } from '@hostels/shared';
 import { flagReviewAction } from '@/app/hostels/[slug]/actions';
 import { dateLabel, monthLabel, reviewSource } from '@/lib/format';
 import { SubmitButton } from './SubmitButton';
 import { Badge, Card, cx, focusRing, Select, Stars } from './ui';
 
-export const FLAG_REASONS = ['Looks fake or not a real stay', 'Abusive or hateful', 'Shares personal data', 'Off-topic or spam'];
+export const FLAG_REASONS = REVIEW_FLAG_REASONS;
 
 /** One resident review: how the stay was confirmed, when, the sub-ratings and the hostel's dated reply. */
 export function ReviewCard({ r, slug, canFlag }: { r: Review; slug: string; canFlag: boolean }) {

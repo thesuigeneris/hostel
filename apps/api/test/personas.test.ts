@@ -45,8 +45,10 @@ describe('verified reviews', () => {
     expect(pub.body).toHaveLength(1);
     const detail = await call(`/hostels/${hostel.slug}`);
     expect(detail.body.ratings).toMatchObject({ rating: 5, reviewCount: 1, cleanliness: 5, responsiveness: 3 });
-    const search = await call('/hostels?minRating=4.5');
+    // Search carries the true average; a single review reads "New", so it isn't counted as "rated 4.5 and up".
+    const search = await call('/hostels?sort=rating');
     expect(search.body.items[0]).toMatchObject({ rating: 5, reviewCount: 1 });
+    expect((await call('/hostels?minRating=4.5')).body.items).toEqual([]);
 
     // Owner replies once; admin hides after a flag and the average drops out.
     const reply = await call(`/owner/reviews/${ok.body.id}/reply`, { token: ownerToken, body: { reply: 'Thanks Asha!' } });

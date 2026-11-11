@@ -1,5 +1,5 @@
 import type { Health } from '@hostels/shared';
-import { searchSchema } from '@hostels/shared';
+import { searchSchema, suggestSchema } from '@hostels/shared';
 import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -13,7 +13,7 @@ import { listFoodPartners, publicMenu } from '../services/food';
 import { listAreas, liveSlugs, publicHostelBySlug } from '../services/listings';
 import { recordView } from '../services/insights';
 import { hostelReviews } from '../services/residents';
-import { searchHostels } from '../services/search';
+import { searchHostels, suggest } from '../services/search';
 
 export const API_VERSION = '0.2.0';
 
@@ -44,6 +44,8 @@ export const publicRoutes = new Hono<AppEnv>()
     return c.json(health);
   })
   .get('/hostels', async (c) => c.json(await searchHostels(parseQuery(c, searchSchema))))
+  // Not under /hostels/: a hostel could be called "suggest".
+  .get('/suggest', async (c) => c.json(await suggest(parseQuery(c, suggestSchema))))
   .get('/areas', async (c) => c.json(await listAreas()))
   .get('/sitemap-data', async (c) => c.json({ hostels: await liveSlugs(), areas: await listAreas() }))
   .get('/food-partners', async (c) => c.json(await listFoodPartners(true)))

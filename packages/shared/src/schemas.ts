@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { passwordProblem, PASSWORD_MAX_LENGTH } from './passwords';
 import { DIETS, MEAL_PLANS, MEALS } from './pricing';
 import { hasVisibleText, textLength } from './resident';
-import { isValidDate } from './time';
+import { SEARCH_TEXT_MAX, visitDateProblem } from './seeker';
+import { type ISODate, istDate, isValidDate } from './time';
 import {
   GENDER_TYPES,
   ISSUE_CATEGORIES,
@@ -144,7 +145,7 @@ const boolParam = z
 
 export const SEARCH_SORTS = ['recommended', 'rent_asc', 'rent_desc', 'distance', 'rating'] as const;
 export const searchSchema = z.object({
-  q: shortText(80).optional(),
+  q: z.string().trim().max(SEARCH_TEXT_MAX, `Search text can be at most ${SEARCH_TEXT_MAX} characters`).optional(),
   area: shortText(60).optional(),
   minRent: rupees.optional(),
   maxRent: rupees.optional(),
@@ -162,10 +163,17 @@ export const searchSchema = z.object({
 });
 export type SearchInput = z.input<typeof searchSchema>;
 
-export const visitRequestSchema = z.object({
-  preferredDate: isoDate,
-  message: shortText(500).default(''),
-});
+/** A visit is for today up to `VISIT_MAX_DAYS_AHEAD` days ahead. The API passes its own clock; forms use today in IST. */
+export function visitRequestSchemaOn(today: () => ISODate) {
+  return z.object({
+    preferredDate: z.string().superRefine((date, ctx) => {
+      const problem = visitDateProblem(date, today());
+      if (problem) ctx.addIssue({ code: 'custom', message: problem });
+    }),
+    message: shortText(500).default(''),
+  });
+}
+export const visitRequestSchema = visitRequestSchemaOn(() => istDate());
 export type VisitRequestInput = z.input<typeof visitRequestSchema>;
 export const visitStatusSchema = z.object({ status: z.enum(VISIT_STATUSES) });
 

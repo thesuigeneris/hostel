@@ -1,13 +1,14 @@
-import { type Area, GENDER_LABEL, GENDER_TYPES, type HostelSummary, rupees, SHARING_LABEL, SHARING_TYPES } from '@hostels/shared';
+import { type Area, GENDER_LABEL, GENDER_TYPES, type HostelSummary, rupees, SHARING_LABEL, SHARING_TYPES, type Suggestion, suggestionDetail } from '@hostels/shared';
 import * as Location from 'expo-location';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { HostelCard } from '@/components/HostelCard';
 import { HostelMap } from '@/components/HostelMap';
 import { Button, Card, Chip, Empty, ErrorState, ErrorText, Field, Loading, P, Row, Screen, Segmented } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
-import { activeFilterCount, EMPTY_FILTERS, type Filters, hasMore, parseRent, RENT_STEPS, SORTS, toSearch } from '@/lib/search';
+import { activeFilterCount, EMPTY_FILTERS, type Filters, hasMore, parseRent, type Relaxation, RENT_STEPS, relaxations, rentInverted, SORTS, toSearch } from '@/lib/search';
+import { applySuggestion, latestOnly, SUGGEST_DEBOUNCE_MS, suggestQuery } from '@/lib/suggest';
 import { theme } from '@/lib/theme';
 
 type Results = { items: HostelSummary[]; total: number; page: number };
@@ -28,21 +29,25 @@ export default function Explore() {
   const [locating, setLocating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const seq = useRef(0);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [widen, setWiden] = useState<(Relaxation & { count: number })[]>([]);
+  // One counter for searches and "show more", one for suggestions: a slow, older answer never overwrites a newer one.
+  const searches = useRef(latestOnly()).current;
+  const suggests = useRef(latestOnly()).current;
 
   const set = (patch: Partial<Filters>) => setFilters((f) => ({ ...f, ...patch }));
 
   async function load(pull = false) {
-    const mine = ++seq.current;
+    const mine = searches.next();
     if (pull) setRefreshing(true);
     try {
       const r = await api.hostels.search(toSearch(filters));
-      // A slower, older search must not overwrite a newer one.
-      if (mine !== seq.current) return;
+      if (!searches.isCurrent(mine)) return;
       setResult({ items: r.items, total: r.total, page: r.page });
       setError(null);
     } catch (e) {
-      if (mine === seq.current) setError(errorMessage(e));
+      if (searches.isCurrent(mine)) setError(errorMessage(e));
     } finally {
       setRefreshing(false);
     }
@@ -50,12 +55,15 @@ export default function Explore() {
 
   async function loadMore() {
     if (!result) return;
+    // A filter change while this page loads starts a new search, and this page belongs to the old one.
+    const mine = searches.next();
     setLoadingMore(true);
     try {
       const r = await api.hostels.search(toSearch(filters, result.page + 1));
+      if (!searches.isCurrent(mine)) return;
       setResult({ items: [...result.items, ...r.items.filter((h) => !result.items.some((x) => x.id === h.id))], total: r.total, page: r.page });
     } catch (e) {
-      setError(errorMessage(e));
+      if (searches.isCurrent(mine)) setError(errorMessage(e));
     } finally {
       setLoadingMore(false);
     }
@@ -90,6 +98,57 @@ export default function Explore() {
     return () => clearTimeout(t);
   }, [query, minText, maxText]);
 
+  // Areas and hostel names for what is typed so far.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the counter is stable
+  useEffect(() => {
+    const q = suggestQuery(query);
+    const mine = suggests.next();
+    if (!q) return setSuggestions([]);
+    const t = setTimeout(() => {
+      api.hostels
+        .suggest(q)
+        .then((r) => suggests.isCurrent(mine) && setSuggestions(r.items))
+        .catch(() => suggests.isCurrent(mine) && setSuggestions([]));
+    }, SUGGEST_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  // Nothing found: count what each single relaxed filter would find, and offer the ones that find something.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: recount when the results change
+  useEffect(() => {
+    setWiden([]);
+    if (!result || result.items.length) return;
+    const options = relaxations(filters);
+    if (!options.length) return;
+    let live = true;
+    Promise.all(
+      options.map((o) =>
+        api.hostels
+          .search({ ...toSearch({ ...filters, ...o.patch }), limit: 1 })
+          .then((r) => ({ ...o, count: r.total }))
+          .catch(() => ({ ...o, count: 0 })),
+      ),
+    ).then((counted) => live && setWiden(counted.filter((c) => c.count > 0).sort((a, b) => b.count - a.count)));
+    return () => {
+      live = false;
+    };
+  }, [result]);
+
+  function pick(s: Suggestion) {
+    const next = applySuggestion(s, filters);
+    setSuggestions([]);
+    if ('open' in next) return router.push(next.open as never);
+    setQuery('');
+    setFilters(next.filters);
+  }
+
+  function relax(r: Relaxation) {
+    if ('q' in r.patch) setQuery('');
+    if ('minRent' in r.patch) setMinText('');
+    if ('maxRent' in r.patch) setMaxText('');
+    set(r.patch);
+  }
+
   async function nearMe() {
     if (filters.near) return set({ near: null, sort: filters.sort === 'distance' ? 'recommended' : filters.sort });
     setLocating(true);
@@ -115,13 +174,42 @@ export default function Explore() {
     setMinText('');
     setMaxText('');
   };
-  const count = activeFilterCount(filters);
+  const count = activeFilterCount(filters) + (filters.q.trim() ? 1 : 0);
   const extra = [filters.area, filters.minRent, filters.maxRent, filters.sort !== 'recommended'].filter(Boolean).length;
+  const showSuggestions = searchFocused && suggestions.length > 0;
 
   return (
     <Screen refreshing={refreshing} onRefresh={() => load(true)}>
-      <Field label="Search" placeholder="Hostel name or street" value={query} onChangeText={setQuery} autoCorrect={false} returnKeyType="search" />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: theme.spacing.sm }}>
+      <View style={{ gap: theme.spacing.xs }}>
+        <Field
+          label="Search"
+          placeholder="Area or hostel name"
+          value={query}
+          onChangeText={setQuery}
+          onFocus={() => setSearchFocused(true)}
+          onBlur={() => setSearchFocused(false)}
+          autoCorrect={false}
+          returnKeyType="search"
+          accessibilityHint="Suggestions for areas and hostel names appear below as you type"
+        />
+        {showSuggestions && (
+          <Card style={{ padding: theme.spacing.xs, gap: 0 }}>
+            {suggestions.map((s) => (
+              <Pressable
+                key={`${s.kind}-${s.slug}`}
+                accessibilityRole="button"
+                accessibilityLabel={`${s.label}, ${suggestionDetail(s)}`}
+                onPress={() => pick(s)}
+                style={({ pressed }) => ({ minHeight: 48, justifyContent: 'center', paddingHorizontal: theme.spacing.md, borderRadius: theme.radius.sm, backgroundColor: pressed ? theme.colors.brandSoft : 'transparent' })}
+              >
+                <Text style={{ fontWeight: '600', color: theme.colors.text }}>{s.label}</Text>
+                <Text style={{ fontSize: 12, color: theme.colors.soft }}>{suggestionDetail(s)}</Text>
+              </Pressable>
+            ))}
+          </Card>
+        )}
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: theme.spacing.sm }}>
         <Chip label={locating ? 'Locating…' : 'Near me'} active={!!filters.near} onPress={nearMe} />
         <Chip label="Verified, no advance" active={filters.verified} onPress={() => set({ verified: !filters.verified })} />
         <Chip label="Food" active={filters.food} onPress={() => set({ food: !filters.food })} />
@@ -164,7 +252,23 @@ export default function Explore() {
       {!result ? (
         error ? <ErrorState message={error} onRetry={() => load()} /> : <Loading />
       ) : result.items.length === 0 ? (
-        <Empty title="No hostels match">Try fewer filters, another area or a wider rent range.</Empty>
+        <View style={{ gap: theme.spacing.md }}>
+          <Empty title="No hostels match">
+            {rentInverted(filters)
+              ? '“From” is higher than “Up to”. Swap them, or clear one.'
+              : widen.length
+                ? 'Each of these changes finds hostels:'
+                : count
+                  ? 'Try fewer filters, another area or a wider rent range.'
+                  : 'There are no live listings here yet.'}
+          </Empty>
+          {widen.length > 0 && (
+            <Row>
+              {widen.map((w) => <Chip key={w.key} label={`${w.label} · ${w.count}`} onPress={() => relax(w)} />)}
+            </Row>
+          )}
+          {count > 0 && <Button variant="secondary" title="Clear all filters" onPress={clear} />}
+        </View>
       ) : view === 'map' ? (
         <HostelMap hostels={result.items} center={filters.near ?? undefined} />
       ) : (

@@ -2,7 +2,7 @@ import { type AuthMethods, type AuthSession, PASSWORD_MIN_LENGTH } from '@hostel
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { Button, ErrorText, Field, H1, Loading, Notice, P, Screen } from '@/components/ui';
+import { Button, ErrorState, ErrorText, Field, H1, Loading, Notice, P, Screen } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { theme } from '@/lib/theme';
@@ -24,7 +24,8 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadMethods = () => {
+    setError(null);
     api.auth
       .methods()
       .then((m) => {
@@ -33,7 +34,9 @@ export default function Login() {
         setView(m.otp !== 'off' ? 'otp' : 'password');
       })
       .catch((e) => setError(errorMessage(e)));
-  }, []);
+  };
+  // Load once on open; Try again calls it again.
+  useEffect(loadMethods, []);
 
   async function finish(session: AuthSession) {
     await signIn(session.token, session.user);
@@ -72,7 +75,7 @@ export default function Login() {
     return (
       <Screen>
         <H1>Log in</H1>
-        {error ? <ErrorText>{error}</ErrorText> : <Loading />}
+        {error ? <ErrorState title="Can't reach Hostels" message={error} onRetry={loadMethods} /> : <Loading />}
       </Screen>
     );
   }

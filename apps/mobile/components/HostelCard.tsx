@@ -2,7 +2,8 @@ import { type HostelSummary, rupees, SHARING_LABEL, GENDER_LABEL } from '@hostel
 import { router } from 'expo-router';
 import { Image, Pressable, Text, View } from 'react-native';
 import { theme } from '@/lib/theme';
-import { Badge, Row, Stars } from './ui';
+import { Rating } from './Rating';
+import { Badge, Row } from './ui';
 
 export function HostelCard({ h }: { h: HostelSummary }) {
   return (
@@ -25,11 +26,15 @@ export function HostelCard({ h }: { h: HostelSummary }) {
           {h.distanceKm !== undefined ? ` · ${h.distanceKm.toFixed(1)} km` : ''} · {h.sharingTypes.map((s) => SHARING_LABEL[s]).join(', ')}
         </Text>
         <Row style={{ justifyContent: 'space-between' }}>
-          <Text style={{ fontSize: 16, fontWeight: '700', color: theme.colors.text }}>
-            {rupees(h.minRent)}
-            <Text style={{ fontSize: 13, fontWeight: '400', color: theme.colors.muted }}> /month</Text>
-          </Text>
-          <Stars value={h.rating} />
+          {h.minRent === null ? (
+            <Text style={{ fontSize: 14, color: theme.colors.soft }}>Rent not listed yet</Text>
+          ) : (
+            <Text style={{ fontSize: 16, fontWeight: '700', color: theme.colors.text }}>
+              {rupees(h.minRent)}
+              <Text style={{ fontSize: 13, fontWeight: '400', color: theme.colors.muted }}> /month{h.isVerified ? ', no advance' : ''}</Text>
+            </Text>
+          )}
+          <Rating rating={h.rating} count={h.reviewCount} />
         </Row>
         <Text style={{ fontSize: 12, color: h.bedsAvailable ? theme.colors.brand : theme.colors.muted }}>{h.bedsAvailable ? `${h.bedsAvailable} beds free` : 'Full right now'}</Text>
       </View>

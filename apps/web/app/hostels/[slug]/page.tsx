@@ -1,15 +1,32 @@
-import { ApiError, computeBill, FOOD_PLANS, istDate, MEALS, REVIEW_MIN_STAY_DAYS, SKIP_CREDITS } from '@hostels/shared';
+import {
+  addDays,
+  ApiError,
+  computeBill,
+  FOOD_PLANS,
+  istDate,
+  MEALS,
+  newRatingLabel,
+  RATING_NEW_NOTE,
+  ratingView,
+  REVIEW_MIN_STAY_DAYS,
+  reviewCountLabel,
+  SKIP_CREDITS,
+  VISIT_MAX_DAYS_AHEAD,
+} from '@hostels/shared';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { IssueRecord, VerifiedExplainer } from '@/components/HostelTrust';
 import { ClientHostelMap } from '@/components/MapLoader';
 import { PhotoGallery } from '@/components/PhotoGallery';
+import { RatingSummary } from '@/components/Rating';
 import { RecordView } from '@/components/RecordView';
 import { SubmitButton } from '@/components/SubmitButton';
 import { ReviewCard } from '@/components/Reviews';
-import { Badge, buttonClass, Card, Field, Flash, Input, LinkButton, Pagination, Stars, Textarea, VerifiedLabel } from '@/components/ui';
+import { Badge, buttonClass, Card, Field, Flash, Input, LinkButton, Pagination, Textarea, VerifiedLabel } from '@/components/ui';
 import { api, currentUser, publicApi, SITE_URL } from '@/lib/api';
 import { dateLabel, GENDER_LABEL, phoneLink, rupees, SHARING_LABEL, timeAgo, weekday, whatsappLink } from '@/lib/format';
+import { absoluteUrl } from '@/lib/paths';
 import { requestVisitAction } from './actions';
 
 type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ error?: string; ok?: string; reviews?: string }> };
@@ -17,12 +34,8 @@ type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ error?
 /** Matches the API's page size for `/hostels/:slug/reviews`. */
 const REVIEWS_PER_PAGE = 20;
 
-/** Median response and fix times read better as "under 1 h" or days than as raw hours. */
-function hoursLabel(h: number | null) {
-  if (h === null) return '—';
-  if (h < 1) return 'under 1 h';
-  return h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} days`;
-}
+/** Photo links in structured data must be absolute; uploads may be stored as site-relative paths. */
+const absolute = (url: string) => absoluteUrl(url, SITE_URL);
 
 /** The cheapest bed, or null for a listing whose rooms were all removed. */
 const cheapest = (rooms: { monthlyRent: number }[]) => (rooms.length ? Math.min(...rooms.map((r) => r.monthlyRent)) : null);
@@ -39,13 +52,15 @@ async function load(slug: string) {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const h = await load((await params).slug);
   const minRent = cheapest(h.roomTypes);
-  const rating = h.ratings.reviewCount ? ` Rated ${h.ratings.rating}/5 by ${h.ratings.reviewCount} ${h.ratings.reviewCount === 1 ? 'resident' : 'residents'}.` : '';
+  // Below the review threshold a hostel reads "New" on the page, so the snippet doesn't claim an average either.
+  const rated = ratingView(h.ratings.rating, h.ratings.reviewCount);
+  const rating = rated.kind === 'rated' ? ` Rated ${rated.rating}/5 by ${rated.count} residents.` : '';
   const description = `${h.name} in ${h.area}, Hyderabad. ${GENDER_LABEL[h.genderType]} hostel${minRent ? ` from ${rupees(minRent)}/month` : ''}${h.isVerified ? ', no advance' : ''}${h.foodAvailable ? ', food available' : ''}.${rating}`;
   return {
     title: `${h.name}, ${h.area}`,
     description,
     alternates: { canonical: `/hostels/${h.slug}` },
-    openGraph: { title: h.name, description, images: h.photos[0] ? [{ url: h.photos[0].url }] : [] },
+    openGraph: { title: h.name, description, images: h.photos[0] ? [{ url: absolute(h.photos[0].url) }] : [] },
   };
 }
 
@@ -79,22 +94,25 @@ export default async function HostelPage({ params, searchParams }: Props) {
   const examplePlan = h.foodAvailable ? 'full' : 'none';
   const example = cheapestFree ? computeBill({ rent: cheapestFree.monthlyRent, mealPlan: examplePlan, skipCredits: 0 }) : null;
   const today = istDate();
-  // Owners can take a plan anywhere except at their own hostel; the API refuses it too.
+  const lastVisitDay = addDays(today, VISIT_MAX_DAYS_AHEAD);
+  // Owners can take a plan or ask for a visit anywhere except at their own hostel; the API refuses both too.
   const isOwn = !!user && user.id === h.ownerId;
+  const rated = ratingView(h.ratings.rating, h.ratings.reviewCount);
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'LodgingBusiness',
     name: h.name,
     description: h.description,
     url: `${SITE_URL}/hostels/${h.slug}`,
-    image: h.photos.map((p) => p.url),
+    image: h.photos.map((p) => absolute(p.url)),
     telephone: `+91${h.contactPhone}`,
     address: { '@type': 'PostalAddress', streetAddress: h.address, addressLocality: h.area, addressRegion: 'Telangana', addressCountry: 'IN' },
     geo: { '@type': 'GeoCoordinates', latitude: h.lat, longitude: h.lng },
     ...(minRent ? { priceRange: `₹${minRent}+ per month` } : {}),
     amenityFeature: h.amenities.map((a) => ({ '@type': 'LocationFeatureSpecification', name: a, value: true })),
-    ...(h.ratings.reviewCount
-      ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: h.ratings.rating, reviewCount: h.ratings.reviewCount, bestRating: 5 } }
+    // Structured data matches what the page shows: no average below the review threshold.
+    ...(rated.kind === 'rated'
+      ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: rated.rating, reviewCount: rated.count, bestRating: 5 } }
       : {}),
     ...(reviews?.length
       ? {
@@ -146,10 +164,13 @@ export default async function HostelPage({ params, searchParams }: Props) {
             <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight sm:text-4xl">{h.name}</h1>
             <p className="mt-1 text-ink-soft">{h.address}</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Stars value={h.ratings.rating} />
-              {h.ratings.reviewCount > 0 && (
+              {rated.kind === 'rated' && <RatingSummary rating={rated.rating} count={rated.count} />}
+              {rated.kind === 'new' && <span className="text-sm font-medium text-ink">New</span>}
+              {rated.kind === 'none' ? (
+                <span className="text-sm text-ink-muted">No reviews yet</span>
+              ) : (
                 <a href="#reviews" className="text-sm text-ink-soft">
-                  {h.ratings.reviewCount} {h.ratings.reviewCount === 1 ? 'review' : 'reviews'} from residents
+                  {reviewCountLabel(h.ratings.reviewCount)} from residents
                 </a>
               )}
             </div>
@@ -197,24 +218,7 @@ export default async function HostelPage({ params, searchParams }: Props) {
           <section aria-labelledby="trust-heading">
             <h2 id="trust-heading" className="text-xl font-semibold">{h.isVerified ? 'What “Verified partner” means here' : 'About free listings'}</h2>
             {h.isVerified ? (
-              <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                <Card className="p-4">
-                  <h3 className="font-medium">Checked</h3>
-                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ink-soft">
-                    <li>The listing was reviewed by the Hostels team before going live.</li>
-                    <li>Partners are verified after an in-person visit: photos match, rooms are clean, the kitchen is safe.</li>
-                    <li>Rent and food are billed through Hostels: one monthly bill, no advance.</li>
-                  </ul>
-                </Card>
-                <Card className="p-4">
-                  <h3 className="font-medium">Not covered</h3>
-                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ink-soft">
-                    <li>It is not a government licence or safety certificate.</li>
-                    <li>House rules and amenities are written by the hostel.</li>
-                    <li>Visit before you move in if you can.</li>
-                  </ul>
-                </Card>
-              </div>
+              <VerifiedExplainer check={h.partnerCheck} />
             ) : (
               <p className="mt-2 max-w-prose text-sm text-ink-soft">
                 The Hostels team reviewed this listing before it went live, but the hostel is not a verified partner. Rent, advance and terms are
@@ -290,7 +294,11 @@ export default async function HostelPage({ params, searchParams }: Props) {
 
           <section id="reviews" aria-labelledby="reviews-heading">
             <h2 id="reviews-heading" className="text-xl font-semibold">How residents rate it</h2>
-            {h.ratings.reviewCount ? (
+            {rated.kind === 'new' ? (
+              <p className="mt-2 text-sm text-ink-soft">
+                <span className="font-medium text-ink">{newRatingLabel(rated.count)}.</span> {RATING_NEW_NOTE}
+              </p>
+            ) : rated.kind === 'rated' ? (
               <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
                 {[
                   ['Overall', h.ratings.rating],
@@ -309,23 +317,7 @@ export default async function HostelPage({ params, searchParams }: Props) {
               <p className="mt-2 text-sm text-ink-soft">No reviews yet. Only people who have lived here for at least {REVIEW_MIN_STAY_DAYS} days can review.</p>
             )}
 
-            {!h.transparency && (
-              <p className="mt-4 rounded-xl border border-line bg-surface p-3 text-xs text-ink-soft">
-                Issue record: residents here reported too few issues in the last 90 days to show response and fix times yet.
-              </p>
-            )}
-            {h.transparency && (
-              <Card className="mt-4 bg-brand-soft/40">
-                <h3 className="font-medium">Issue record, last {h.transparency.windowDays} days</h3>
-                <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-                  <div className="flex flex-col-reverse"><dt className="text-ink-muted">issues reported</dt><dd className="text-lg font-semibold tabular-nums">{h.transparency.reported}</dd></div>
-                  <div className="flex flex-col-reverse"><dt className="text-ink-muted">resolved</dt><dd className="text-lg font-semibold tabular-nums">{h.transparency.resolvedPct}%</dd></div>
-                  <div className="flex flex-col-reverse"><dt className="text-ink-muted">median first response</dt><dd className="text-lg font-semibold tabular-nums">{hoursLabel(h.transparency.medianHoursToFirstResponse)}</dd></div>
-                  <div className="flex flex-col-reverse"><dt className="text-ink-muted">median time to fix</dt><dd className="text-lg font-semibold tabular-nums">{hoursLabel(h.transparency.medianHoursToResolve)}</dd></div>
-                </dl>
-                <p className="mt-3 text-xs text-ink-muted">Reported by residents in the Hostels app. Issue details stay private to residents and the hostel.</p>
-              </Card>
-            )}
+            <IssueRecord stats={h.transparency} />
 
             {reviews === null && <p className="mt-4 text-sm text-danger">Reviews could not be loaded right now. Refresh to try again.</p>}
             {reviews && reviews.length > 0 && (
@@ -336,6 +328,12 @@ export default async function HostelPage({ params, searchParams }: Props) {
                   </li>
                 ))}
               </ul>
+            )}
+            {!user && !!reviews?.length && (
+              <p className="mt-3 text-sm text-ink-soft">
+                Something wrong with a review?{' '}
+                <Link href={`/login?next=${encodeURIComponent(`/hostels/${h.slug}#reviews`)}`}>Log in to report it</Link> to our team, with a reason.
+              </p>
             )}
             <Pagination page={reviewPage} pages={reviewPages} href={(p) => `/hostels/${h.slug}${p > 1 ? `?reviews=${p}` : ''}#reviews`} />
           </section>
@@ -379,6 +377,11 @@ export default async function HostelPage({ params, searchParams }: Props) {
                   <LinkButton href={`/subscribe/${h.slug}`} size="lg" className="mt-4 w-full">Subscribe</LinkButton>
                 )}
               </>
+            ) : isOwn ? (
+              <div id="visit" className="mt-4 rounded-xl bg-bg p-3 text-sm">
+                <p className="text-ink-soft">This is your hostel. Visitors request visits here, and you answer them from your visit inbox.</p>
+                <LinkButton href="/owner/visits" variant="secondary" className="mt-3 w-full">Open visit requests</LinkButton>
+              </div>
             ) : openVisit ? (
               <div id="visit" className="mt-4 rounded-xl bg-brand-soft p-3 text-sm">
                 <p className="font-medium text-ink">Visit requested for {dateLabel(openVisit.preferredDate)}</p>
@@ -390,9 +393,18 @@ export default async function HostelPage({ params, searchParams }: Props) {
                 <input type="hidden" name="slug" value={h.slug} />
                 <h2 className="font-medium">Request a visit</h2>
                 <p className="text-xs text-ink-muted">The hostel gets your request and calls you to confirm a time. Nothing is booked or paid yet.</p>
-                <Field label="Preferred date"><Input type="date" name="preferredDate" min={today} defaultValue={today} required /></Field>
-                <Field label="Note for the owner" optional><Textarea name="message" maxLength={500} placeholder="Evening after 6 works best" /></Field>
-                {user ? <SubmitButton className="w-full">Request visit</SubmitButton> : <LinkButton href={`/login?next=/hostels/${h.slug}`} className="w-full">Log in to request a visit</LinkButton>}
+                {user ? (
+                  <>
+                    <Field label="Preferred date" hint={`Today up to ${dateLabel(lastVisitDay)}.`}>
+                      <Input type="date" name="preferredDate" min={today} max={lastVisitDay} defaultValue={today} required />
+                    </Field>
+                    <Field label="Note for the owner" optional><Textarea name="message" maxLength={500} placeholder="Evening after 6 works best" /></Field>
+                    <SubmitButton className="w-full" pendingText="Sending…">Request visit</SubmitButton>
+                  </>
+                ) : (
+                  // A date and note typed before logging in would be lost, so they are asked for after.
+                  <LinkButton href={`/login?next=${encodeURIComponent(`/hostels/${h.slug}#visit`)}`} className="w-full">Log in to request a visit</LinkButton>
+                )}
               </form>
             )}
             <div className="mt-4 grid grid-cols-2 gap-2">

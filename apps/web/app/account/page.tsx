@@ -1,7 +1,24 @@
-import { MEAL_LABEL, NO_CREDIT_REASON, PASSWORD_MIN_LENGTH, skipCreditText, skipCutoffText } from '@hostels/shared';
+import {
+  istDate,
+  MEAL_LABEL,
+  NO_CREDIT_REASON,
+  PASSWORD_MIN_LENGTH,
+  PENDING_SUBSCRIPTION_TTL_MINUTES,
+  skipCreditText,
+  skipCutoffText,
+  visitNextStep,
+} from '@hostels/shared';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { cancelMoveAction, cancelSubscriptionAction, cancelVisitAction, changePasswordAction, skipMealAction, updateProfileAction } from '@/app/account/actions';
+import {
+  cancelMoveAction,
+  cancelSubscriptionAction,
+  cancelVisitAction,
+  changePasswordAction,
+  releaseHoldAction,
+  skipMealAction,
+  updateProfileAction,
+} from '@/app/account/actions';
 import { SubmitButton } from '@/components/SubmitButton';
 import { Back, Badge, Card, Empty, Field, Flash, Input, LinkButton, PageHeader, StatusBadge, Table, Td } from '@/components/ui';
 import { api, requireUser } from '@/lib/api';
@@ -10,13 +27,6 @@ import { dateLabel, planLabel, rupees, SHARING_LABEL, titleCase, weekday } from 
 export const metadata: Metadata = { title: 'My plan', robots: { index: false } };
 
 type Props = { searchParams: Promise<{ error?: string; ok?: string }> };
-
-/** What happens next with a visit request, in the visitor's words. */
-const VISIT_NEXT: Record<string, string> = {
-  new: 'Sent. The hostel will call you to confirm a time.',
-  contacted: 'The hostel has been in touch about this visit.',
-  closed: 'This request is closed. Request again from the hostel page if you still want to visit.',
-};
 
 export default async function AccountPage({ searchParams }: Props) {
   const q = await searchParams;
@@ -32,6 +42,7 @@ export default async function AccountPage({ searchParams }: Props) {
   const sub = mine?.subscription;
   const isTenant = user.role === 'tenant' || !!sub || invoices.length > 0;
   const dueBill = invoices.find((i) => i.status === 'due');
+  const today = istDate();
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
@@ -106,8 +117,16 @@ export default async function AccountPage({ searchParams }: Props) {
                       </form>
                     </div>
                   )}
-                  {sub.status === 'pending' && dueBill && (
-                    <p className="mt-4 text-sm text-ink-soft">Pay the first bill to confirm your bed. Unpaid holds are released after 30 minutes.</p>
+                  {sub.status === 'pending' && (
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-bg p-3 text-sm">
+                      <p className="text-ink-soft">
+                        Pay the first bill to confirm your bed. Unpaid holds are released after {PENDING_SUBSCRIPTION_TTL_MINUTES} minutes.
+                      </p>
+                      <form action={releaseHoldAction}>
+                        <input type="hidden" name="subscriptionId" value={sub.id} />
+                        <SubmitButton variant="secondary" size="sm" pendingText="Releasing…">Release the bed</SubmitButton>
+                      </form>
+                    </div>
                   )}
                 </Card>
               ) : (
@@ -208,7 +227,7 @@ export default async function AccountPage({ searchParams }: Props) {
                     <div>
                       <Link href={`/hostels/${v.hostel.slug}`} className="font-medium">{v.hostel.name}</Link>
                       <div className="text-sm text-ink-soft">{dateLabel(v.preferredDate)}{v.message && ` · ${v.message}`}</div>
-                      <div className="mt-1 text-xs text-ink-muted">{VISIT_NEXT[v.status]}</div>
+                      <div className="mt-1 text-xs text-ink-muted">{visitNextStep(v, today)}</div>
                     </div>
                     <div className="flex items-center gap-2">
                       <StatusBadge kind="visit" status={v.status} />
