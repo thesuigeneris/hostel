@@ -78,6 +78,13 @@
       "when": 1794378360073,
       "tag": "0010_resident_fixes",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794389170495,
+      "tag": "0012_admin_oversight",
+      "breakpoints": true
     }
   ]
 }

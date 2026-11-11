@@ -27,6 +27,7 @@ import { AppError, notFound } from '../lib/errors';
 import { claimUpload } from '../lib/uploads';
 import { isBookable, ownedHostel, planFor } from './access';
 import { toHostel, toPhoto, toRoomType } from './mappers';
+import { recordMaterialEdit } from './listing-changes';
 import { closeApplication, openApplication } from './partners';
 import { switchPlan } from './plans';
 
@@ -74,12 +75,17 @@ export async function createHostel(owner: User, input: z.output<typeof hostelInp
 /** Editing keeps a live listing live; a rejected one goes back to draft so it can be resubmitted. */
 export async function updateHostel(user: User, hostelId: string, patch: HostelUpdateInput) {
   const h = await ownedHostel(user, hostelId);
-  const [row] = await getDb()
-    .update(schema.hostels)
-    .set({ ...patch, ...(h.status === 'rejected' ? { status: 'draft' as const, rejectionReason: null } : {}) })
-    .where(eq(schema.hostels.id, h.id))
-    .returning();
-  return toHostel(row!);
+  return getDb().transaction(async (tx) => {
+    // Locked, so the trail of a live listing's edits records what each save really replaced (edge case O3).
+    const [before] = await tx.select().from(schema.hostels).where(eq(schema.hostels.id, h.id)).for('update');
+    const [row] = await tx
+      .update(schema.hostels)
+      .set({ ...patch, ...(before!.status === 'rejected' ? { status: 'draft' as const, rejectionReason: null } : {}) })
+      .where(eq(schema.hostels.id, h.id))
+      .returning();
+    await recordMaterialEdit(tx, before!, row!, user.id);
+    return toHostel(row!);
+  });
 }
 
 export async function submitHostel(user: User, hostelId: string) {
@@ -358,7 +364,12 @@ export async function transparencyFor(hostelId: string): Promise<TransparencySta
 }
 
 /** What the decision that verified this partner covered: the standards that apply to it and were ticked. */
-export async function partnerCheckFor(hostel: { id: string; partnerStatus: string; foodAvailable: boolean }): Promise<PartnerCheck | null> {
+export async function partnerCheckFor(hostel: {
+  id: string;
+  partnerStatus: string;
+  foodAvailable: boolean;
+  partnerRecheckSince?: Date | null;
+}): Promise<PartnerCheck | null> {
   if (hostel.partnerStatus !== 'verified') return null;
   const a = schema.partnerApplications;
   const [row] = await getDb()
@@ -373,6 +384,8 @@ export async function partnerCheckFor(hostel: { id: string; partnerStatus: strin
     checks: standardsFor(hostel.foodAvailable)
       .map((s) => s.id)
       .filter((id): id is PartnerStandardId => ticked.has(id)),
+    // The place moved after the check: say so rather than vouch for the new one.
+    ...(hostel.partnerRecheckSince ? { recheckSince: istDate(hostel.partnerRecheckSince) } : {}),
   };
 }
 

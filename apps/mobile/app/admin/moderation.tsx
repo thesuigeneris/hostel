@@ -40,8 +40,8 @@ function AdminModeration() {
       {flagged.length === 0 ? <Empty title="No flagged reviews" /> : flagged.map((f) => <FlaggedCard key={f.review.id} f={f} a={a} onDone={s.reload} />)}
       <H2>Reported community posts</H2>
       {reports.length === 0 ? <Empty title="No open reports" /> : reports.map((r) => (
-        <Card key={r.id}>
-          <P><Text style={{ fontWeight: '600' }}>{r.targetType}</Text> in {r.hostelName} · {timeAgo(r.createdAt)}: {r.reason}</P>
+        <Card key={`${r.targetType}-${r.targetId}`}>
+          <P><Text style={{ fontWeight: '600' }}>{r.targetType}</Text> in {r.hostelName} · {timeAgo(r.firstReportedAt)}: {r.reasons.join('; ')}</P>
           <Button small variant="secondary" title="Open the board" onPress={() => router.push(`/owner/hostels/${r.hostelId}/community`)} />
         </Card>
       ))}

@@ -40,8 +40,8 @@ export default async function AdminModeration({ searchParams }: { searchParams: 
       {reports.length === 0 ? <Empty title="No open reports" /> : (
         <div className="space-y-2">
           {reports.map((r) => (
-            <Card key={r.id} className="p-4 text-sm">
-              <span className="font-medium">{r.targetType}</span> in {r.hostelName} · {timeAgo(r.createdAt)}: {r.reason}{' '}
+            <Card key={`${r.targetType}-${r.targetId}`} className="p-4 text-sm">
+              <span className="font-medium">{r.targetType}</span> in {r.hostelName} · {timeAgo(r.firstReportedAt)}: {r.reasons.join('; ')}{' '}
               <Link href={`/owner/hostels/${r.hostelId}/community`}>Open the board</Link>
             </Card>
           ))}

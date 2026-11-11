@@ -1,14 +1,17 @@
 import {
   AUDIT_ACTIONS,
+  contentTargetSchema,
   foodPartnerInputSchema,
   foodPartnerUpdateSchema,
   HOSTEL_STATUSES,
   INVOICE_STATUSES,
+  moderationSchema,
   monthSchema,
   newId,
   OWNER_PLAN_TIERS,
   ownerInvoiceVoidSchema,
   partnerChecklistSchema,
+  partnerRecheckSchema,
   PARTNER_STATUSES,
   PAYMENT_EXCEPTION_STATUSES,
   PAYMENT_MODES,
@@ -20,28 +23,31 @@ import {
   SUBSCRIPTION_STATUSES,
   verifyPartnerSchema,
 } from '@hostels/shared';
-import { and, asc, eq, ilike, or, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, ilike, isNotNull, or, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb, schema } from '../db';
 import { clock } from '../lib/clock';
 import { notFound } from '../lib/errors';
+import { escapeLike } from '../services/search';
 import { parseBody, parseQuery } from '../lib/validate';
 import { type AppEnv, requireAuth } from '../middleware/auth';
 import { audit, listAudit } from '../services/audit';
 import { adminSubscriptions, overdueInvoices } from '../services/billing';
-import { escalatedIssues, openReports } from '../services/community';
+import { escalatedIssues } from '../services/community';
 import { listFoodPartners } from '../services/food';
 import { runJobs } from '../services/jobs';
 import { decidePartner, hostelDetail, reviewListing, setPlatformFee } from '../services/listings';
-import { toHostel } from '../services/mappers';
+import { listingChanges, recheckPartner } from '../services/listing-changes';
+import { toAdminHostel } from '../services/mappers';
+import { flaggedQueue, hiddenContent, hiddenReviews, keepReview, moderateContent, reportQueue } from '../services/moderation';
 import { adminRevenue, platformRevenue } from '../services/money';
 import { adminMoves } from '../services/moves';
 import { generatePayouts, listPayouts, markPayoutPaid } from '../services/payouts';
 import { adminApplications, saveChecklist } from '../services/partners';
 import { adminOwnerInvoices, adminOwnerPlans, voidOwnerInvoice } from '../services/plans';
 import { countRefundsDue, listPaymentExceptions, markRefunded } from '../services/refunds';
-import { flaggedReviews, moderateReview } from '../services/residents';
+import { moderateReview } from '../services/residents';
 
 export const adminRoutes = new Hono<AppEnv>()
   .use('/admin/*', requireAuth('admin'))
@@ -54,26 +60,34 @@ export const adminRoutes = new Hono<AppEnv>()
       partnersApplied: await count(db.select({ n }).from(schema.hostels).where(eq(schema.hostels.partnerStatus, 'applied'))),
       liveHostels: await count(db.select({ n }).from(schema.hostels).where(eq(schema.hostels.status, 'live'))),
       activeSubscriptions: await count(db.select({ n }).from(schema.subscriptions).where(eq(schema.subscriptions.status, 'active'))),
-      flaggedReviews: (await flaggedReviews()).length,
-      openReports: (await openReports()).length,
+      flaggedReviews: (await flaggedQueue()).length,
+      openReports: (await reportQueue()).length,
       overdueBills: (await overdueInvoices()).length,
       escalatedIssues: (await escalatedIssues(c.get('user'))).length,
       refundsDue: await countRefundsDue(),
       revenue: await adminRevenue(),
       overdueOwnerBills: (await adminOwnerInvoices({ overdue: true })).length,
       suspendedHostels: await count(db.select({ n }).from(schema.ownerPlans).where(eq(schema.ownerPlans.suspended, true))),
+      listingChanges7d: await count(
+        db.select({ n }).from(schema.listingChanges).where(gte(schema.listingChanges.createdAt, new Date(clock.now().getTime() - 7 * 86_400_000))),
+      ),
+      partnerRechecks: await count(db.select({ n }).from(schema.hostels).where(isNotNull(schema.hostels.partnerRecheckSince))),
     });
   })
   .get('/admin/hostels', async (c) => {
-    const { status, partnerStatus, q } = parseQuery(
+    const { status, partnerStatus, q, recheck, limit, offset } = parseQuery(
       c,
       z.object({
         status: z.enum(HOSTEL_STATUSES).optional(),
         partnerStatus: z.enum(PARTNER_STATUSES).optional(),
         q: z.string().trim().max(80).optional(),
+        recheck: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
+        limit: z.coerce.number().int().min(1).max(200).default(100),
+        offset: z.coerce.number().int().min(0).max(100_000).default(0),
       }),
     );
     const h = schema.hostels;
+    const like = q ? `%${escapeLike(q)}%` : '';
     const rows = await getDb()
       .select()
       .from(schema.hostels)
@@ -81,11 +95,15 @@ export const adminRoutes = new Hono<AppEnv>()
         and(
           status ? eq(schema.hostels.status, status) : undefined,
           partnerStatus ? eq(schema.hostels.partnerStatus, partnerStatus) : undefined,
-          q ? or(ilike(h.name, `%${q}%`), ilike(h.area, `%${q}%`), ilike(h.slug, `%${q}%`), ilike(h.contactPhone, `%${q}%`)) : undefined,
+          recheck ? isNotNull(h.partnerRecheckSince) : undefined,
+          q ? or(ilike(h.name, like), ilike(h.area, like), ilike(h.slug, like), ilike(h.contactPhone, like)) : undefined,
         ),
       )
-      .orderBy(asc(schema.hostels.createdAt));
-    return c.json(rows.map(toHostel));
+      // Oldest first, so the queue is worked in the order owners submitted; id breaks ties for stable pages.
+      .orderBy(asc(schema.hostels.createdAt), asc(schema.hostels.id))
+      .limit(limit)
+      .offset(offset);
+    return c.json(rows.map(toAdminHostel));
   })
   .get('/admin/hostels/:id', async (c) => {
     const [h] = await getDb().select().from(schema.hostels).where(eq(schema.hostels.id, c.req.param('id')));
@@ -126,6 +144,25 @@ export const adminRoutes = new Hono<AppEnv>()
     const row = await decidePartner(c.req.param('id'), { verify: false, reason }, c.get('user').id);
     await audit(c.get('user').id, 'partner.reject', { type: 'hostel', id: row.id }, `Declined ${row.name}: ${reason}`);
     return c.json(row);
+  })
+  // Material edits of live listings (edge case O3), and the in-person check of a partner that moved.
+  .get('/admin/listing-changes', async (c) => {
+    const filter = parseQuery(
+      c,
+      z.object({
+        recheck: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
+        hostelId: z.string().max(64).optional(),
+        before: z.string().datetime().optional(),
+        limit: z.coerce.number().int().min(1).max(200).optional(),
+      }),
+    );
+    return c.json(await listingChanges(filter));
+  })
+  .post('/admin/hostels/:id/partner/recheck', async (c) => {
+    const input = await parseBody(c, partnerRecheckSchema);
+    const row = await recheckPartner(c.req.param('id'), input, c.get('user').id);
+    await audit(c.get('user').id, 'partner.recheck', { type: 'hostel', id: row.id }, `Checked ${row.name} again after it moved: ${input.note}`);
+    return c.json(toAdminHostel(row));
   })
   .patch('/admin/hostels/:id/fee', async (c) => {
     const { platformFeePct } = await parseBody(c, verifyPartnerSchema);
@@ -227,8 +264,15 @@ export const adminRoutes = new Hono<AppEnv>()
     return c.json(row);
   })
 
-  // Moderation.
-  .get('/admin/reviews/flagged', async (c) => c.json(await flaggedReviews()))
+  // Moderation. Every decision resolves the open flags or reports and is audited with its reason.
+  .get('/admin/reviews/flagged', async (c) => c.json(await flaggedQueue()))
+  .get('/admin/reviews/hidden', async (c) => c.json(await hiddenReviews()))
+  .post('/admin/reviews/:id/keep', async (c) => {
+    const { reason } = await parseBody(c, moderationSchema);
+    const row = await keepReview(c.req.param('id'));
+    await audit(c.get('user').id, 'review.keep', { type: 'review', id: row.id }, `Kept (${row.dismissed} flags dismissed): ${reason}`);
+    return c.json(row);
+  })
   .post('/admin/reviews/:id/hide', async (c) => {
     const { reason } = await parseBody(c, reasonSchema);
     const row = await moderateReview(c.req.param('id'), true, reason);
@@ -241,7 +285,19 @@ export const adminRoutes = new Hono<AppEnv>()
     return c.json(row);
   })
   .get('/admin/issues/escalated', async (c) => c.json(await escalatedIssues(c.get('user'))))
-  .get('/admin/reports', async (c) => c.json(await openReports()))
+  .get('/admin/reports', async (c) => c.json(await reportQueue()))
+  .get('/admin/content/hidden', async (c) => c.json(await hiddenContent()))
+  .post('/admin/content/:type/:id/:action{hide|unhide|keep}', async (c) => {
+    const type = contentTargetSchema.parse(c.req.param('type'));
+    const action = c.req.param('action') as 'hide' | 'unhide' | 'keep';
+    // Hiding and keeping say why; showing again is the undo.
+    const { reason } = action === 'unhide' ? { reason: '' } : await parseBody(c, moderationSchema);
+    const row = await moderateContent({ type, id: c.req.param('id') }, action);
+    const what = type === 'post' ? 'Post' : 'Comment';
+    const summary = action === 'hide' ? `${what} hidden: ${reason}` : action === 'keep' ? `${what} kept (${row.resolved} reports dismissed): ${reason}` : `${what} shown again`;
+    await audit(c.get('user').id, `content.${action}`, { type, id: c.req.param('id') }, summary);
+    return c.json(row);
+  })
 
   // Runs the background jobs now (handy in dev and for the admin "run jobs" button).
   .post('/admin/jobs/run', async (c) => {

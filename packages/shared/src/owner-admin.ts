@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ISODate } from './time';
-import type { OwnerInvoice, OwnerPlanTier, PartnerStatus } from './types';
+import type { Hostel, OwnerInvoice, OwnerPlanTier, PartnerStatus } from './types';
 
 // ---------------------------------------------------------------------------
 // Partner brand standards: what our team checks in person before a hostel carries the brand.
@@ -109,17 +109,131 @@ export const AUDIT_ACTIONS = [
   'partner.verify',
   'partner.reject',
   'partner.fee',
+  'partner.recheck',
   'food_partner.add',
   'food_partner.update',
   'payouts.generate',
   'payout.paid',
   'review.hide',
   'review.unhide',
+  'review.keep',
+  'content.hide',
+  'content.unhide',
+  'content.keep',
   'owner_invoice.void',
   'payment.refunded',
   'jobs.run',
+  'owner.admin_action',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
+
+/** How each action reads in the console. */
+export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
+  'listing.approve': 'Listing approved',
+  'listing.reject': 'Listing rejected',
+  'partner.checklist': 'Partner checklist saved',
+  'partner.verify': 'Partner verified',
+  'partner.reject': 'Partner declined',
+  'partner.fee': 'Platform fee changed',
+  'partner.recheck': 'Partner checked again',
+  'food_partner.add': 'Food partner added',
+  'food_partner.update': 'Food partner changed',
+  'payouts.generate': 'Payouts generated',
+  'payout.paid': 'Payout marked paid',
+  'review.hide': 'Review hidden',
+  'review.unhide': 'Review shown again',
+  'review.keep': 'Review kept (flags dismissed)',
+  'content.hide': 'Post or comment hidden',
+  'content.unhide': 'Post or comment shown again',
+  'content.keep': 'Post or comment kept (reports dismissed)',
+  'owner_invoice.void': 'Owner bill waived',
+  'payment.refunded': 'Payment refunded',
+  'jobs.run': 'Jobs run',
+  'owner.admin_action': "Acted in an owner's workspace",
+};
+
+// ---------------------------------------------------------------------------
+// Moderation.
+
+/** Why an admin hides a review, post or comment (personas addendum §3: abuse, personal data, off-topic). */
+export const HIDE_REASONS = ['Abusive or hateful', 'Shares personal details', 'Not about a stay (off-topic)', 'Spam or advertising'] as const;
+
+/** A review with open flags, for the admin queue. */
+export type AdminFlaggedReview = {
+  review: { id: string; hostelId: string; rating: number; body: string; author: string; hidden: boolean; createdAt: string; updatedAt: string };
+  hostelName: string;
+  hostelSlug: string;
+  flags: number;
+  reasons: string[];
+  firstFlaggedAt: string;
+};
+
+export type AdminHiddenReview = {
+  review: { id: string; hostelId: string; rating: number; body: string; author: string; hiddenReason: string | null; updatedAt: string };
+  hostelName: string;
+};
+
+/** Open reports about one post or comment. `content` is null when its author has since deleted it. */
+export type AdminReport = {
+  targetType: 'post' | 'comment';
+  targetId: string;
+  hostelId: string;
+  hostelName: string;
+  reports: number;
+  reasons: string[];
+  firstReportedAt: string;
+  content: { body: string; author: string; hidden: boolean; createdAt: string } | null;
+};
+
+export type AdminHiddenContent = {
+  targetType: 'post' | 'comment';
+  targetId: string;
+  hostelId: string;
+  hostelName: string;
+  body: string;
+  author: string;
+  createdAt: string;
+};
+
+export const moderationSchema = z.object({ reason: z.string().trim().min(3).max(300) });
+export const contentTargetSchema = z.enum(['post', 'comment']);
+
+// ---------------------------------------------------------------------------
+// Material edits of live listings (edge case O3).
+
+/** Fields whose change after approval an admin should see: who and where the listing says it is. */
+export const MATERIAL_LISTING_FIELDS = {
+  name: 'Name',
+  address: 'Address',
+  area: 'Area',
+  lat: 'Map pin (latitude)',
+  lng: 'Map pin (longitude)',
+  genderType: 'Who can stay',
+  foodAvailable: 'Food',
+  contactPhone: 'Contact phone',
+  whatsappPhone: 'WhatsApp',
+} as const;
+export type MaterialListingField = keyof typeof MATERIAL_LISTING_FIELDS;
+
+/** A hostel as admins see it: with the partner re-check flag (set when a verified partner moved). */
+export type AdminHostel = Hostel & { partnerRecheckSince: string | null };
+
+export type ListingChange = {
+  id: string;
+  hostel: { id: string; name: string; slug: string; area: string; status: string; partnerStatus: PartnerStatus; recheckSince: string | null };
+  /** Who saved the edit: the owner, or an admin working in the owner's workspace. Null if the account is gone. */
+  changedBy: { id: string; name: string; phone: string; isOwner: boolean } | null;
+  changes: { field: MaterialListingField; label: string; before: string | number | boolean | null; after: string | number | boolean | null }[];
+  /** This edit moved a verified partner (address, pin, or food turned on), so its in-person check is due again. */
+  partnerRecheck: boolean;
+  createdAt: string;
+};
+
+/** Checking a moved partner again: the whole checklist, as for a first verification. */
+export const partnerRecheckSchema = z.object({
+  checklist: z.array(z.enum(PARTNER_STANDARD_IDS)).max(PARTNER_STANDARDS.length).default([]),
+  note: z.string().trim().min(3).max(1000),
+});
 
 export type AuditEvent = {
   id: string;

@@ -2,6 +2,7 @@ import type { OwnerPlanTier, User } from '@hostels/shared';
 import { and, eq } from 'drizzle-orm';
 import { getDb, schema, type Tx } from '../db';
 import { AppError, forbidden, notFound } from '../lib/errors';
+import { noteAdminActing } from '../lib/request-context';
 
 type HostelRow = typeof schema.hostels.$inferSelect;
 
@@ -9,6 +10,8 @@ type HostelRow = typeof schema.hostels.$inferSelect;
 export async function ownedHostel(user: User, hostelId: string, db: Tx = getDb()): Promise<HostelRow> {
   const [h] = await db.select().from(schema.hostels).where(eq(schema.hostels.id, hostelId));
   if (!h || (h.ownerId !== user.id && user.role !== 'admin')) throw notFound('Hostel');
+  // An admin working in someone else's hostel: the change is audited with the admin as the actor (edge case O7).
+  noteAdminActing(user, h);
   return h;
 }
 
@@ -56,7 +59,10 @@ export async function activeResidency(userId: string, hostelId: string, db: Tx =
 export async function requireMember(user: User, hostelId: string, db: Tx = getDb()) {
   const [h] = await db.select().from(schema.hostels).where(eq(schema.hostels.id, hostelId));
   if (!h) throw notFound('Hostel');
-  if (user.role === 'admin' || h.ownerId === user.id) return { hostel: h, residency: null, isOwner: true };
+  if (user.role === 'admin' || h.ownerId === user.id) {
+    noteAdminActing(user, h);
+    return { hostel: h, residency: null, isOwner: true };
+  }
   const residency = await activeResidency(user.id, hostelId, db);
   if (!residency) throw new AppError('not_a_resident', 'Only current residents of this hostel can do this', 403);
   return { hostel: h, residency, isOwner: false };

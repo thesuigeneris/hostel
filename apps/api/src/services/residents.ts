@@ -400,8 +400,15 @@ export async function replyToReview(user: User, reviewId: string, reply: string)
 
 export async function flagReview(user: User, reviewId: string, reason: string) {
   const db = getDb();
-  const [review] = await db.select().from(schema.reviews).where(eq(schema.reviews.id, reviewId));
-  if (!review || review.hidden) throw notFound('Review');
+  const [found] = await db
+    .select({ review: schema.reviews, hostelStatus: schema.hostels.status })
+    .from(schema.reviews)
+    .innerJoin(schema.hostels, eq(schema.hostels.id, schema.reviews.hostelId))
+    .where(eq(schema.reviews.id, reviewId));
+  // A hidden review, or one on a listing that is no longer public, can't be seen, so it can't be flagged either.
+  if (!found || found.review.hidden || found.hostelStatus !== 'live') throw notFound('Review');
+  // One open flag per person (partial unique index): flagging twice is a no-op, and a fresh flag is taken once an
+  // admin has acted on the earlier ones.
   await db.insert(schema.reviewFlags).values({ id: newId('flg'), reviewId, userId: user.id, reason }).onConflictDoNothing();
   return { ok: true as const };
 }

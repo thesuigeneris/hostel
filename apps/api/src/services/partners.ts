@@ -147,7 +147,8 @@ export async function brandKit(user: User, hostelId: string): Promise<BrandKit> 
   const [verified] = await db
     .select()
     .from(schema.partnerApplications)
-    .where(and(eq(schema.partnerApplications.hostelId, h.id), eq(schema.partnerApplications.status, 'verified')))
+    // A re-check after a move renews the check, not the partnership.
+    .where(and(eq(schema.partnerApplications.hostelId, h.id), eq(schema.partnerApplications.status, 'verified'), eq(schema.partnerApplications.recheck, false)))
     .orderBy(desc(schema.partnerApplications.decidedAt))
     .limit(1);
   return {

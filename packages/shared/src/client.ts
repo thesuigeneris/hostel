@@ -75,9 +75,15 @@ import type {
   VisitStatus,
 } from './types';
 import type {
+  AdminFlaggedReview,
+  AdminHiddenContent,
+  AdminHiddenReview,
+  AdminHostel,
   AdminOwnerInvoice,
   AdminOwnerPlan,
   AdminPartnerApplication,
+  AdminReport,
+  ListingChange,
   AuditAction,
   AuditEvent,
   BrandKit,
@@ -258,7 +264,8 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
     admin: {
       stats: () => request<AdminStats>('/admin/stats'),
       escalatedIssues: () => request<EscalatedIssue[]>('/admin/issues/escalated'),
-      hostels: (filter: { status?: string; partnerStatus?: string; q?: string } = {}) => request<Hostel[]>('/admin/hostels', { query: filter }),
+      hostels: (filter: { status?: string; partnerStatus?: string; q?: string; recheck?: boolean; limit?: number; offset?: number } = {}) =>
+        request<AdminHostel[]>('/admin/hostels', { query: filter }),
       hostel: (id: string) => request<HostelDetail>(`/admin/hostels/${id}`),
       approve: (id: string) => request<Hostel>(`/admin/hostels/${id}/approve`, { method: 'POST' }),
       reject: (id: string, reason: string) => request<Hostel>(`/admin/hostels/${id}/reject`, { body: { reason } }),
@@ -269,6 +276,10 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
       saveChecklist: (id: string, checklist: PartnerStandardId[], note = '') =>
         request<PartnerApplication>(`/admin/hostels/${id}/partner/checklist`, { method: 'PUT', body: { checklist, note } }),
       rejectPartner: (id: string, reason: string) => request<Hostel>(`/admin/hostels/${id}/partner/reject`, { body: { reason } }),
+      listingChanges: (filter: { recheck?: boolean; hostelId?: string; before?: string; limit?: number } = {}) =>
+        request<ListingChange[]>('/admin/listing-changes', { query: filter }),
+      recheckPartner: (id: string, checklist: PartnerStandardId[], note: string) =>
+        request<AdminHostel>(`/admin/hostels/${seg(id)}/partner/recheck`, { body: { checklist, note } }),
       setFee: (id: string, platformFeePct: number) => request<Hostel>(`/admin/hostels/${id}/fee`, { method: 'PATCH', body: { platformFeePct } }),
       foodPartners: () => request<FoodPartner[]>('/admin/food-partners'),
       addFoodPartner: (input: { name: string; cuisine?: string; logoUrl?: string | null; active?: boolean }) =>
@@ -291,11 +302,20 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
       payouts: (month?: string) => request<PayoutView[]>('/admin/payouts', { query: { month } }),
       generatePayouts: (month: string) => request<PayoutView[]>('/admin/payouts/generate', { body: { month } }),
       markPayoutPaid: (id: string) => request('/admin/payouts/' + id + '/paid', { method: 'POST' }),
-      flaggedReviews: () =>
-        request<{ review: Review & { userId: string }; hostelName: string; flags: number; reasons: string[] }[]>('/admin/reviews/flagged'),
-      hideReview: (id: string, reason: string) => request(`/admin/reviews/${id}/hide`, { body: { reason } }),
-      unhideReview: (id: string) => request(`/admin/reviews/${id}/unhide`, { method: 'POST' }),
-      reports: () => request<{ id: string; targetType: string; targetId: string; reason: string; hostelName: string; hostelId: string; createdAt: string }[]>('/admin/reports'),
+      flaggedReviews: () => request<AdminFlaggedReview[]>('/admin/reviews/flagged'),
+      hiddenReviews: () => request<AdminHiddenReview[]>('/admin/reviews/hidden'),
+      hideReview: (id: string, reason: string) => request(`/admin/reviews/${seg(id)}/hide`, { body: { reason } }),
+      unhideReview: (id: string) => request(`/admin/reviews/${seg(id)}/unhide`, { method: 'POST' }),
+      /** Keeps a flagged review up and dismisses its flags, with the reason. */
+      keepReview: (id: string, reason: string) => request<{ id: string; dismissed: number }>(`/admin/reviews/${seg(id)}/keep`, { body: { reason } }),
+      reports: () => request<AdminReport[]>('/admin/reports'),
+      hiddenContent: () => request<AdminHiddenContent[]>('/admin/content/hidden'),
+      /** Hide (with a reason), show again, or keep (dismiss the reports, with a reason) a post or comment. */
+      moderateContent: (type: 'post' | 'comment', id: string, action: 'hide' | 'unhide' | 'keep', reason?: string) =>
+        request<{ hostelId: string; resolved: number }>(`/admin/content/${type}/${seg(id)}/${action}`, {
+          method: 'POST',
+          body: action === 'unhide' ? undefined : { reason },
+        }),
       runJobs: () => request<Record<string, number>>('/admin/jobs/run', { method: 'POST' }),
       audit: (filter: { action?: AuditAction; targetId?: string; q?: string; before?: string; limit?: number } = {}) =>
         request<AuditEvent[]>('/admin/audit', { query: filter }),

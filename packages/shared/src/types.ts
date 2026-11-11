@@ -352,6 +352,7 @@ export const ERROR_CODES = [
   'meal_not_in_plan',
   'otp_invalid',
   'otp_rate_limited',
+  'rate_limited',
   'invoice_already_paid',
   'signature_invalid',
   'move_not_allowed',
@@ -651,6 +652,10 @@ export type AdminStats = {
   overdueOwnerBills: number;
   suspendedHostels: number;
   escalatedIssues: number;
+  /** Material edits of live listings in the last 7 days. */
+  listingChanges7d: number;
+  /** Verified partners that moved address or pin and need checking again. */
+  partnerRechecks: number;
   /** Payments received that could not be applied and still have to be refunded. */
   refundsDue: number;
   /** This month so far, in rupees, counting real money only. */

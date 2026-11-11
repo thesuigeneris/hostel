@@ -59,7 +59,15 @@ export function suggestionDetail(s: Suggestion): string {
  * What our team checked before verifying a partner, from the inspection record: the standards ticked and the day of
  * the decision. Public, so the "Verified partner" label can say what it rests on. The inspector's notes stay private.
  */
-export type PartnerCheck = { checkedOn: ISODate | null; checks: PartnerStandardId[] };
+export type PartnerCheck = {
+  checkedOn: ISODate | null;
+  checks: PartnerStandardId[];
+  /**
+   * Set when the hostel moved its address or map pin (or started serving food) after the check: what is listed was
+   * checked at the earlier place, and our team will check again. Absent otherwise.
+   */
+  recheckSince?: ISODate;
+};
 
 /** Why a seeker reports a review. The admin queue shows the reason with the review. */
 export const REVIEW_FLAG_REASONS = ['Looks fake or not a real stay', 'Abusive or hateful', 'Shares personal data', 'Off-topic or spam'] as const;

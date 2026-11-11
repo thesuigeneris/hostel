@@ -149,6 +149,11 @@ export const hostels = pgTable(
     partnerStatus: partnerStatusEnum('partner_status').notNull().default('none'),
     platformFeePct: doublePrecision('platform_fee_pct').notNull().default(10),
     rejectionReason: text('rejection_reason'),
+    /**
+     * Set when a verified partner moves its address or map pin: the in-person check was made somewhere else. The
+     * badge stays (editing keeps a listing live) and admins see the flag until someone checks the place again.
+     */
+    partnerRecheckSince: timestamp('partner_recheck_since', { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [
@@ -482,7 +487,9 @@ export const reviewFlags = pgTable(
     resolved: boolean('resolved').notNull().default(false),
     createdAt: createdAt(),
   },
-  (t) => [unique('review_flags_review_user').on(t.reviewId, t.userId)],
+  // One open flag per person per review. Once an admin acts on a review its flags are resolved, and the same person
+  // may flag it again (for example after it is shown again).
+  (t) => [uniqueIndex('review_flags_one_open').on(t.reviewId, t.userId).where(sql`not ${t.resolved}`)],
 );
 
 export const issues = pgTable(
@@ -594,7 +601,8 @@ export const contentReports = pgTable(
     resolved: boolean('resolved').notNull().default(false),
     createdAt: createdAt(),
   },
-  (t) => [unique('content_reports_target_user').on(t.targetType, t.targetId, t.userId)],
+  // One open report per person per post or comment; resolved reports don't stop a fresh one.
+  (t) => [uniqueIndex('content_reports_one_open').on(t.targetType, t.targetId, t.userId).where(sql`not ${t.resolved}`)],
 );
 
 export const ownerPlans = pgTable('owner_plans', {
@@ -753,6 +761,8 @@ export const partnerApplications = pgTable(
     checklist: jsonb('checklist').$type<string[]>().notNull().default([]),
     note: text('note').notNull().default(''),
     reason: text('reason'),
+    /** A visit after a verified partner moved (not an application): it renews the check, not the partnership. */
+    recheck: boolean('recheck').notNull().default(false),
     decidedBy: text('decided_by').references(() => users.id, { onDelete: 'set null' }),
     appliedAt: timestamp('applied_at', { withTimezone: true }).notNull().defaultNow(),
     decidedAt: timestamp('decided_at', { withTimezone: true }),
@@ -776,4 +786,25 @@ export const auditEvents = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index('audit_events_created_idx').on(t.createdAt), index('audit_events_target_idx').on(t.targetType, t.targetId)],
+);
+
+/**
+ * Material edits of live listings (name, address, area, map pin, gender, food, contact numbers), with what each field
+ * was and became, so admins can see a listing change after they approved it.
+ */
+export const listingChanges = pgTable(
+  'listing_changes',
+  {
+    id: text('id').primaryKey(),
+    hostelId: text('hostel_id')
+      .notNull()
+      .references(() => hostels.id, { onDelete: 'cascade' }),
+    changedBy: text('changed_by').references(() => users.id, { onDelete: 'set null' }),
+    /** Field name → [before, after]. */
+    changes: jsonb('changes').$type<Record<string, [unknown, unknown]>>().notNull(),
+    /** The address or pin of a verified partner moved, so its in-person check needs doing again. */
+    partnerRecheck: boolean('partner_recheck').notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [index('listing_changes_created_idx').on(t.createdAt), index('listing_changes_hostel_idx').on(t.hostelId, t.createdAt)],
 );
