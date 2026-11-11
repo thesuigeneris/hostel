@@ -2,9 +2,9 @@ import { OWNER_PLANS } from '@hostels/shared';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { RoleGate } from '@/components/owner/Gate';
 import { HostelHeader, NavRow, whileLoading } from '@/components/owner/parts';
-import { Button, Card, ErrorText, H2, Notice, P, Screen } from '@/components/ui';
+import { Badge, Button, Card, ErrorText, H2, Notice, P, Screen } from '@/components/ui';
 import { api } from '@/lib/api';
-import { HOSTEL_SECTIONS, missingForSubmit, sectionLocked } from '@/lib/owner';
+import { HOSTEL_SECTIONS, missingForSubmit, sectionLocked, waitingLabel } from '@/lib/owner';
 import { useAction } from '@/lib/ownerAction';
 import { useLoad } from '@/lib/useLoad';
 
@@ -19,7 +19,10 @@ export default function OwnerHostelScreen() {
 
 function OwnerHostel() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const s = useLoad(() => api.owner.hostel(id), [id]);
+  const s = useLoad(async () => {
+    const [h, summary] = await Promise.all([api.owner.hostel(id), api.owner.issueSummary().catch(() => null)]);
+    return { ...h, waiting: summary?.byHostel[id] ?? 0 };
+  }, [id]);
   const a = useAction();
   const gate = whileLoading(s);
   if (gate) return gate;
@@ -55,7 +58,9 @@ function OwnerHostel() {
           key={sec.path}
           title={sec.label}
           hint={sec.hint}
-          locked={sectionLocked(sec, h.plan.effective) ? OWNER_PLANS[sec.needs!].label : undefined}
+          locked={sectionLocked(sec, h.plan) ? OWNER_PLANS[sec.needs!].label : undefined}
+          badge={sec.path === 'community' && h.waiting > 0 ? <Badge label={`${h.waiting} waiting`} tone="red" /> : undefined}
+          accessibilityHint={sec.path === 'community' && h.waiting > 0 ? waitingLabel(h.waiting) : undefined}
           onPress={() => router.push(`/owner/hostels/${id}/${sec.path}`)}
         />
       ))}

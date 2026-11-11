@@ -296,6 +296,54 @@ renumbering; e2e on ports 4106/3106), after merging `claude/eager-hawking-4exijr
 | RES-MOBILE | App parity for the resident screens | `app/(tabs)/stay.tsx`, `app/home/[hostelId].tsx`, `app/issue/[id].tsx`, `app/move.tsx`, `components/Community.tsx`, `lib/stay.ts` | `apps/mobile/test/stay.test.ts` (screen logic); typecheck; `expo export --platform android` | unverified: no device or emulator (screen logic verified) |
 | RES-E2E-CLOCK | Browser tests can run the API clock ahead; production can't | `apps/api/src/e2e-server.ts`, `lib/clock.ts` `setClockOffset`; `playwright.config.ts` | `e2e-server.test.ts`; `resident-journey.spec.ts` 4 | verified @010bd11 |
 
+## Owner persona audit (branch `persona-owner`)
+
+Branch `persona-owner` from `claude/eager-hawking-4exijr`; audit and screen checklist in `docs/product/audit-owner.md`.
+Commits: `27f7729` (API, shared, migration), `c33b431` (web), `ca3da9d` + `d188e00` (app, shared tests), `dc158e9`,
+`f1ce8f7`, `80585aa` (e2e), `7d1e2c7` (docs), `49effd3` (phone-width overflow), merges `efb8ca3`, `7c05ed9`, `988d9e4`,
+`592bdf2` (resident work: issues now live in `services/issues.ts`, where the needs-response rule is applied). One migration: **`0011_owner_fixes`** (after the
+seeker's `0009_visit_one_open` and the resident's `0010_resident_fixes`; regenerated after merging).
+
+Decisions (reversible; each is in the audit):
+- A move-out date ahead keeps the stay active, with access, until that day; a job ends it then (T10).
+- Owners may edit their review reply; the card shows "edited" with the date (O2). Replying needs Pro, as the spec's
+  plan table says; existing replies stay public on any plan. Answering issues stays open on every plan.
+- Upgrade credit = the paid old bill's amount × unused days ÷ period days, rounded, capped at the new bill; only paid
+  bills count (waived and unpaid earn nothing); an unpaid month is voided and re-billed for the days used with its
+  original due date, so an overdue pause stands; the first bill of the new plan is created at once (M8).
+- One free month per hostel: inside it, a paid plan bills from its end, whatever is switched (M9).
+- A paused Partner keeps the menu, kitchen headcount and subscriber list, since its subscriptions continue (M10).
+- The T8 unique index covers owner-added stays only: a subscription stay is created while a payment is applied, which
+  must never fail on it; adding a phone that has any open stay is still refused.
+
+Gates: see the table's last row.
+
+| Req | Requirement | Implementation | Test | Status |
+|---|---|---|---|---|
+| OWN-I1 | "Needs response" from one rule: an owner comment or status move answers; a reopen asks again from the reopen; Issues tab badge | `@hostels/shared` `issueNeedsResponse`, `awaitingReplySince`; `services/issue-response.ts` `responseStates`, `ownerIssueSummary`; `issues.ts` `toIssue`, `decorate`; `insights.ts`; `GET /owner/issues/summary`; web `OwnerTabs`, owner home; app hostel screen, home | API `owner-replies.test.ts` › needs response (3); shared `owner.test.ts` (3); e2e `owner-journeys.spec.ts` › I1 | verified @988d9e4; revert-checked (list and insights separately); app badge unverified on a device |
+| OWN-O1 | Reply returns the replied review; owner list paged, unreplied first | `residents.ts` `replyToReview`, `reviewView`, `ownerReviews`; `GET …/reviews?page` | API › older than the newest 20 | verified @988d9e4; revert-checked |
+| OWN-O2 | One reply per double tap; editable reply shown as edited | `replyToReview` (conditional), `editReviewReply`, `PUT /owner/reviews/:id/reply`, `reviews.owner_reply_edited_at`; web reviews page, `Reviews.tsx`; app reviews | API › double tap, edit, Pro gate; e2e › reply edit; `personas.spec.ts` 5 | verified @988d9e4; revert-checked (race, Pro gate) |
+| OWN-O4 | A live or in-review listing keeps a photo | `listings.ts` `deletePhoto` (row lock); web listing page; app `canRemovePhoto` | API › listing photos (2) | verified @988d9e4; revert-checked |
+| OWN-O5 | Headcount filtered in SQL by hostel, moves included | `food.ts` `headcount` | API › kitchen headcount | verified @988d9e4; revert-checked |
+| OWN-O6 | A next step for every owner state | `@hostels/shared` `ownerNextStep`; web `app/owner/page.tsx`; app `owner/index.tsx` | shared › next step (4); e2e › O2 and O6 | verified @988d9e4 (web); paused state: rule and API only |
+| OWN-O8 | Pay and waive at the same moment: one outcome | `payments.ts`, `plans.ts` `voidOwnerInvoice` (unchanged) | API › paying at the moment an admin waives | verified @988d9e4 |
+| OWN-S4 | Visit inbox one way, conditional | `visits.ts` `setVisitStatus`, `VISIT_NEXT`; web visits page; app visits | API › visit inbox (3); e2e › S4 | verified @988d9e4; revert-checked (2) |
+| OWN-T8 | One invite per phone under concurrency | index `residencies_one_open_owner_stay` (0011), `addResident` | API › two "add resident" taps | verified @988d9e4; revert-checked (index dropped) |
+| OWN-T10 | Move-out dates ahead keep access; job ends them | `endResident` (conditional), `endDueResidencies` in `runJobs`; `residencyLabel`; roster returns past stays | API › move-out ahead / today; e2e › O4 and T10 | verified @988d9e4; revert-checked |
+| OWN-M8 | Upgrade credits, used-days bill, early-paid month | `plans.ts` `switchPlan`; `owner_invoices.credit_amount`, `note`, index `owner_invoices_plan_tier_period` (0011); shared `splitPeriod`, `prorate`; plan pages | API › upgrading never charges twice (7); shared (2); e2e › M8 | verified @988d9e4; revert-checked |
+| OWN-M9 | One free month per hostel | `switchPlan` start date; `getPlan`/`adminOwnerPlans` `inTrial` | API › one free month per hostel (2) | verified @988d9e4; revert-checked (both) |
+| OWN-DOWN | A downgrade after paying next month early waits for it; an unpaid next-month bill is dropped (back if called off) | `plans.ts` `changePlan` | API › downgrades (2) | verified @988d9e4; revert-checked |
+| OWN-M10 | Pause at day 16, restore on payment; paused Partner keeps subscriber tools | `refreshSuspensions` (unchanged), `access.ts` `requirePlanTier`, `food.ts` `saveMenu`; web and app menu, kitchen; insights `planBill` | API › the 15-day pause (2) | verified @988d9e4; revert-checked (menu) |
+| OWN-MONEY | What the owner owes us on every plan, with the pause date; money net of fee, real money only | `insights.ts` `planBill`; web dashboard `PlanBill`; app `dashboard.tsx` (new) | API › 15-day pause (planBill); e2e sweep of the dashboard | verified @988d9e4 (web); app unverified on a device |
+| OWN-O1-PAGE | `/for-owners` and the plan page: features and prices from shared, billing rules, Verified-partner checklist | `@hostels/shared` `OWNER_PLAN_FEATURES`, `planPriceLine`, `OWNER_BILLING_RULES`, `PARTNER_REQUIREMENTS`; `app/for-owners/page.tsx`, plan pages | shared › owner copy; e2e › O1, `owners.spec.ts` | verified @988d9e4 |
+| OWN-O7 | Brand kit names: wrap at spaces, Devanagari fonts and lang, held to the print, UTF-8 download names | `apps/web/lib/brand-kit.ts` `layoutName`, `emWidth`, `brandFileName` | web unit `brand-kit.test.ts` (7); e2e › O7 | verified @988d9e4; revert-checked (6 of 7 fail on the old file); print rendering unverified |
+| OWN-RENT | The rent tracker's "still unpaid" is rupees (closes P6-RENT's gap) | `app/owner/hostels/[id]/rent/page.tsx` (unchanged) | e2e › O4 and T10 (amount asserted) | verified @988d9e4 |
+| OWN-UI | Owner screens: states, labels, targets, contrast, overflow | web owner pages; app owner screens | e2e `workspaces.spec.ts` (owner sweep), `owner-journeys.spec.ts` (axe on 8 pages) | verified @49effd3 (web); app: typecheck and Android export only |
+| OWN-OVERFLOW | Screen-reader text inside a horizontal scroller no longer widens the page (plan page with a due bill: 286 px at 360; a Free hostel's tab bar: 698 px) | `components/ui.tsx` `Table`, `OwnerTabs` (`relative` scrollers); plan page Pay link `aria-label` | `workspaces.spec.ts` owner sweep (failed before); `owner-journeys.spec.ts` › O2 and O6, › M8 (360/390 px) | verified @49effd3; revert-checked (tab bar) |
+| OWN-ISSUE-FROM | The app's owner issue buttons send the status they showed (`from`), like the web form | `apps/mobile/app/owner/issue/[id].tsx` | typecheck | unverified: no device run |
+| OWN-GATES | Final gates on the merged branch (base `2f2a17f`) | — | typecheck 4/4; lint clean (319 files); shared 59 (46 + 13); web unit 18 (11 + 7); mobile 51 (50 + 1); API 237 (206 + 31) at `592bdf2`; `e2e:fresh` 78/78 (69 + 9) at `49effd3`; `npx expo export --platform android` exit 0 | verified; databases `hostels_test_o`, `hostels_e2e_o` (recreated after the migration renumbering) |
+
+
 ## Later PRPs (rows filled when each PRP is generated)
 
 | PRP | Area | Status |

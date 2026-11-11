@@ -3,7 +3,7 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Text } from 'react-native';
 import { RoleGate } from '@/components/owner/Gate';
-import { HostelHeader, Muted, Stat, StatGrid, Stepper, Upsell, whileLoading } from '@/components/owner/parts';
+import { HostelHeader, Muted, PausedPartnerNotice, Stat, StatGrid, Stepper, Upsell, whileLoading } from '@/components/owner/parts';
 import { Card, Empty, ErrorText, H2, P, Row, Screen, StatusBadge } from '@/components/ui';
 import { api } from '@/lib/api';
 import { hasPlan } from '@/lib/owner';
@@ -25,7 +25,8 @@ function Kitchen() {
   const [date, setDate] = useState(today);
   const s = useLoad(async () => {
     const h = await api.owner.hostel(id);
-    if (!hasPlan(h.plan.effective, 'partner')) return { h, count: null, subs: [] };
+    // The plan tier, not the effective plan: a paused Partner still feeds its existing subscribers.
+    if (!hasPlan(h.plan.plan, 'partner')) return { h, count: null, subs: [] };
     const [count, subs] = await Promise.all([api.owner.headcount(id, date), api.owner.subscribers(id)]);
     return { h, count, subs };
   }, [id, date]);
@@ -36,8 +37,9 @@ function Kitchen() {
   return (
     <Screen refreshing={s.refreshing} onRefresh={s.refresh}>
       <HostelHeader h={h} />
-      {!count ? <Upsell hostelId={id} plan="partner" feature="Subscriptions and kitchen headcount" suspended={h.plan.suspended} /> : (
+      {!count ? <Upsell hostelId={id} plan="partner" feature="Subscriptions and kitchen headcount" /> : (
         <>
+          {h.plan.suspended && <PausedPartnerNotice hostelId={id} />}
           <ErrorText>{s.error}</ErrorText>
           <H2>Headcount</H2>
           <Stepper label={`${weekday(date)}, ${dateLabel(date)}${date === today ? ' (today)' : ''}`} onPrev={() => setDate(addDays(date, -1))} onNext={() => setDate(addDays(date, 1))} />

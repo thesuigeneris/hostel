@@ -8,7 +8,7 @@ export function Upsell({ hostelId, plan, feature, suspended }: { hostelId: strin
       <p className="mx-auto mt-1 max-w-md text-sm text-ink-soft">
         {suspended
           ? 'Your plan is paused because a bill is overdue. Pay it to turn everything back on.'
-          : `Upgrade this hostel to ${OWNER_PLANS[plan].label}. The first month is free.`}
+          : `Upgrade this hostel to ${OWNER_PLANS[plan].label}. A hostel's first paid plan starts with a free month.`}
       </p>
       <LinkButton href={`/owner/hostels/${hostelId}/plan`} className="mt-4">{suspended ? 'Pay the bill' : 'See plans'}</LinkButton>
     </Card>

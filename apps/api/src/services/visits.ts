@@ -1,5 +1,5 @@
 import type { User, VisitStatus } from '@hostels/shared';
-import { newId, visitDateProblem } from '@hostels/shared';
+import { newId, VISIT_NEXT, visitDateProblem } from '@hostels/shared';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db';
 import { clock } from '../lib/clock';
@@ -78,11 +78,30 @@ export async function ownerVisits(user: User, status?: VisitStatus) {
   return rows.map((r) => ({ ...toVisit(r.visit), hostelName: r.hostelName, visitor: r.visitor }));
 }
 
+/**
+ * The owner's inbox moves a request forward only (`VISIT_NEXT`): closed is final, so a request the seeker withdrew
+ * can't be reopened. Asking for the status it already has is a repeat tap and changes nothing. The update is
+ * conditional on the status read here, so a seeker withdrawing at the same moment wins or loses as a whole.
+ */
 export async function setVisitStatus(user: User, visitId: string, status: VisitStatus) {
   const db = getDb();
   const [v] = await db.select().from(schema.visitRequests).where(eq(schema.visitRequests.id, visitId));
   if (!v) throw notFound('Visit request');
   await ownedHostel(user, v.hostelId);
-  const [row] = await db.update(schema.visitRequests).set({ status }).where(eq(schema.visitRequests.id, v.id)).returning();
-  return toVisit(row!);
+  if (v.status === status) return toVisit(v);
+  if (!VISIT_NEXT[v.status].includes(status)) {
+    throw new AppError(
+      'invalid_state',
+      v.status === 'closed'
+        ? 'This request is closed, so it can’t be reopened. The seeker can send a new one.'
+        : 'A visit request only moves forward: from contacted it can only be closed.',
+    );
+  }
+  const [row] = await db
+    .update(schema.visitRequests)
+    .set({ status })
+    .where(and(eq(schema.visitRequests.id, v.id), eq(schema.visitRequests.status, v.status)))
+    .returning();
+  if (!row) throw new AppError('invalid_state', 'This request just changed (the seeker may have withdrawn it). Refresh to see where it stands.');
+  return toVisit(row);
 }

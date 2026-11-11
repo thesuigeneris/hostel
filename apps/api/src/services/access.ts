@@ -39,6 +39,18 @@ export async function requirePlan(hostelId: string, needed: OwnerPlanTier, db: T
   return state;
 }
 
+/**
+ * Like `requirePlan`, but a plan paused for an overdue bill still counts: for tools that existing subscribers depend
+ * on (the weekly menu), which keep working while a Partner hostel is paused.
+ */
+export async function requirePlanTier(hostelId: string, needed: OwnerPlanTier, db: Tx = getDb()) {
+  const state = await planFor(hostelId, db);
+  if (RANK[state.plan] < RANK[needed]) {
+    throw new AppError('plan_required', `This needs the ${needed === 'pro' ? 'Pro' : 'Partner'} plan`, 402);
+  }
+  return state;
+}
+
 /** A hostel can take subscriptions when it is live, verified, and its owner plan is not suspended. */
 export function isBookable(h: HostelRow, plan: PlanState): boolean {
   return h.status === 'live' && h.partnerStatus === 'verified' && !plan.suspended;

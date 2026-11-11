@@ -46,7 +46,13 @@ export function ReviewCard({ r, slug, canFlag }: { r: Review; slug: string; canF
       {r.ownerReply && (
         <div className="mt-3 rounded-xl bg-bg p-3 text-sm">
           <p className="text-xs font-medium text-ink">
-            Reply from the hostel{r.ownerRepliedAt && <span className="font-normal text-ink-muted"> · {dateLabel(r.ownerRepliedAt)}</span>}
+            Reply from the hostel
+            {r.ownerRepliedAt && (
+              <span className="font-normal text-ink-muted">
+                {' '}· {dateLabel(r.ownerRepliedAt)}
+                {r.ownerReplyEditedAt && ` · edited ${dateLabel(r.ownerReplyEditedAt)}`}
+              </span>
+            )}
           </p>
           <p className="mt-1 whitespace-pre-line text-ink-soft [overflow-wrap:anywhere]">{r.ownerReply}</p>
           {/* The reply answers an earlier version of the review; say so, so it isn't read out of context. */}

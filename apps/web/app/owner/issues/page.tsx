@@ -13,7 +13,8 @@ export default async function OwnerIssuesPage() {
   const name = new Map(hostels.map((h) => [h.id, h.name]));
   const byHostel = [...new Set(issues.map((i) => i.hostelId))];
   const open = issues.filter((i) => i.status !== 'resolved' && i.status !== 'closed');
-  const waiting = open.filter((i) => i.needsResponse).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  // Longest wait first. A reopened issue waits from the reopen, not from the first report.
+  const waiting = open.filter((i) => i.needsResponse).sort((a, b) => (a.awaitingReplySince ?? a.createdAt).localeCompare(b.awaitingReplySince ?? b.createdAt));
   const now = Date.now();
   const olderThan = (days: number) => open.filter((i) => now - new Date(i.createdAt).getTime() > days * DAY).length;
   const categories = ISSUE_CATEGORIES.map((c) => [c, open.filter((i) => i.category === c).length] as const).filter(([, n]) => n > 0);
@@ -25,7 +26,7 @@ export default async function OwnerIssuesPage() {
         <div className="mb-8 space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Stat label="Open" value={open.length} />
-            <Stat label="Needs a reply" value={waiting.length} hint="No reply within 24 hours" />
+            <Stat label="Needs a reply" value={waiting.length} hint="Waiting over 24 hours for your first answer, or since a resident reopened it" />
             <Stat label="Open over 3 days" value={olderThan(3)} />
             <Stat label="Open over a week" value={olderThan(7)} />
           </div>
@@ -41,7 +42,10 @@ export default async function OwnerIssuesPage() {
                 {waiting.map((i) => (
                   <li key={i.id} className="flex flex-wrap justify-between gap-2">
                     <Link href={`/issues/${i.id}`}>{i.title}</Link>
-                    <span className="text-ink-soft">{name.get(i.hostelId)} · reported {timeAgo(i.createdAt)}</span>
+                    <span className="text-ink-soft">
+                      {name.get(i.hostelId)} · {i.awaitingReplySince && i.awaitingReplySince !== i.createdAt ? 'reopened' : 'reported'}{' '}
+                      {timeAgo(i.awaitingReplySince ?? i.createdAt)}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -49,7 +53,7 @@ export default async function OwnerIssuesPage() {
           )}
         </div>
       )}
-      {byHostel.length === 0 && <IssueList issues={[]} />}
+      {byHostel.length === 0 && <IssueList issues={[]} emptyText="No issues reported yet. When residents report one, it shows here and on your dashboard." />}
       <div className="space-y-8">
         {byHostel.map((hid) => (
           <section key={hid}>

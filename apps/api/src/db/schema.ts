@@ -435,6 +435,11 @@ export const residencies = pgTable(
     index('residencies_hostel_idx').on(t.hostelId, t.status),
     index('residencies_user_idx').on(t.userId),
     index('residencies_phone_idx').on(t.phone),
+    // One open owner invite or stay per phone per hostel, so two "add resident" taps at once make one invite.
+    // Stays from subscriptions are left out: activating a paid plan must never fail on this index.
+    uniqueIndex('residencies_one_open_owner_stay')
+      .on(t.hostelId, t.phone)
+      .where(sql`${t.source} = 'owner' and ${t.status} in ('invited', 'active')`),
   ],
 );
 
@@ -459,6 +464,8 @@ export const reviews = pgTable(
     body: text('body').notNull(),
     ownerReply: text('owner_reply'),
     ownerRepliedAt: timestamp('owner_replied_at', { withTimezone: true }),
+    /** Set when the owner edits their reply; the public card then says "edited" with this date. */
+    ownerReplyEditedAt: timestamp('owner_reply_edited_at', { withTimezone: true }),
     hidden: boolean('hidden').notNull().default(false),
     hiddenReason: text('hidden_reason'),
     createdAt: createdAt(),
@@ -639,7 +646,12 @@ export const ownerInvoices = pgTable(
     plan: ownerPlanTierEnum('plan').notNull(),
     periodStart: day('period_start').notNull(),
     periodEnd: day('period_end').notNull(),
+    /** What is payable: the plan price less `creditAmount`, or the used share of a month an upgrade cut short. */
     amount: integer('amount').notNull(),
+    /** Unused days already paid for on the previous plan, taken off this bill (upgrades). */
+    creditAmount: integer('credit_amount').notNull().default(0),
+    /** What a credit or a shortened period is for, shown on the bill. */
+    note: text('note'),
     status: invoiceStatusEnum('status').notNull().default('due'),
     dueDate: day('due_date').notNull(),
     razorpayOrderId: text('razorpay_order_id').unique(),
@@ -650,9 +662,12 @@ export const ownerInvoices = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
-    uniqueIndex('owner_invoices_plan_period')
-      .on(t.ownerPlanId, t.periodStart)
+    // One live bill per plan tier and period. The tier is part of the key because an upgrade on the first day of a
+    // paid month starts the new plan's month on the same day as the old one (the old bill's unused days are credited).
+    uniqueIndex('owner_invoices_plan_tier_period')
+      .on(t.ownerPlanId, t.periodStart, t.plan)
       .where(sql`${t.status} <> 'void'`),
+    check('owner_invoices_amounts_nonneg', sql`${t.amount} >= 0 and ${t.creditAmount} >= 0`),
     // Paid bills say how they were paid; a void bill is either waived by an admin or dropped by the system (null).
     check(
       'owner_invoices_payment_mode_status',

@@ -11,7 +11,7 @@ import {
   type residentInputSchema,
   type reviewInputSchema,
 } from '@hostels/shared';
-import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 import { getDb, schema } from '../db';
 import { clock } from '../lib/clock';
@@ -126,14 +126,21 @@ export async function residentDirectory(hostelId: string) {
 
 // --- owner roster ------------------------------------------------------------
 
+/** Current stays and invites, then the 50 most recent past ones (moved out or declined). */
 export async function roster(user: User, hostelId: string) {
   const h = await ownedHostel(user, hostelId);
-  const rows = await getDb()
-    .select()
-    .from(schema.residencies)
-    .where(and(eq(schema.residencies.hostelId, h.id), inArray(schema.residencies.status, ['invited', 'active'])))
-    .orderBy(asc(schema.residencies.startDate));
-  return rows.map(toResidency);
+  const r = schema.residencies;
+  const db = getDb();
+  const [current, past] = await Promise.all([
+    db.select().from(r).where(and(eq(r.hostelId, h.id), inArray(r.status, ['invited', 'active']))).orderBy(asc(r.startDate), asc(r.id)),
+    db
+      .select()
+      .from(r)
+      .where(and(eq(r.hostelId, h.id), inArray(r.status, ['ended', 'declined'])))
+      .orderBy(sql`${r.endDate} desc nulls last`, desc(r.createdAt))
+      .limit(50),
+  ]);
+  return [...current, ...past].map(toResidency);
 }
 
 export async function addResident(user: User, hostelId: string, input: z.output<typeof residentInputSchema>) {
@@ -157,9 +164,10 @@ export async function addResident(user: User, hostelId: string, input: z.output<
         inArray(schema.residencies.status, ['invited', 'active']),
       ),
     );
-  if (existing) throw new AppError('invalid_state', 'This phone is already on your roster');
+  if (existing) throw onRoster();
   const [owner] = await db.select().from(schema.users).where(eq(schema.users.phone, input.phone));
   if (owner?.id === h.ownerId) throw new AppError('invalid_state', 'You cannot add yourself as a resident');
+  // The check above can't see an invite being added at the same moment (a double tap); the unique index can.
   const [row] = await db
     .insert(schema.residencies)
     .values({
@@ -176,25 +184,52 @@ export async function addResident(user: User, hostelId: string, input: z.output<
       // The day the hostel added this person starts their review clock (see `reviewClockStart`), so it comes from the clock.
       createdAt: clock.now(),
     })
-    .returning();
+    .returning()
+    .catch((e) => {
+      throw isUniqueViolation(e, 'residencies_one_open_owner_stay') ? onRoster() : e;
+    });
   return toResidency(row!);
 }
 
+const onRoster = () => new AppError('invalid_state', 'This phone is already on your roster');
+
+/**
+ * Ends an owner-added stay. A move-out date after today keeps the stay active (the resident keeps access) until that
+ * date, when `endDueResidencies` ends it; the roster shows "Leaving on …" meanwhile. An unanswered invite is withdrawn.
+ * Each change is conditional on the status read here, so a resident moving out at the same moment wins or loses whole.
+ */
 export async function endResident(user: User, hostelId: string, residencyId: string, endDate: string) {
   const h = await ownedHostel(user, hostelId);
   const db = getDb();
-  const [r] = await db.select().from(schema.residencies).where(and(eq(schema.residencies.id, residencyId), eq(schema.residencies.hostelId, h.id)));
-  if (!r) throw notFound('Resident');
-  if (r.source === 'subscription') throw new AppError('invalid_state', 'Subscriber stays end when their plan ends or moves');
-  if (r.status === 'ended' || r.status === 'declined') return toResidency(r);
-  if (endDate < r.startDate) throw new AppError('validation', 'Move-out date is before the start date', 400);
-  const [row] = await db
-    .update(schema.residencies)
-    .set(r.status === 'invited' ? { status: 'declined' } : { status: 'ended', endDate })
-    .where(eq(schema.residencies.id, r.id))
+  const r = schema.residencies;
+  const [row] = await db.select().from(r).where(and(eq(r.id, residencyId), eq(r.hostelId, h.id)));
+  if (!row) throw notFound('Resident');
+  if (row.source === 'subscription') throw new AppError('invalid_state', 'Subscriber stays end when their plan ends or moves');
+  if (row.status === 'ended' || row.status === 'declined') return toResidency(row);
+  if (row.status === 'active' && endDate < row.startDate) {
+    throw new AppError('validation', `The move-out date is before they moved in (${dateLabel(row.startDate)}). Pick that day or later.`, 400);
+  }
+  const set = row.status === 'invited' ? { status: 'declined' as const } : endDate <= clock.today() ? { status: 'ended' as const, endDate } : { endDate };
+  const [updated] = await db
+    .update(r)
+    .set(set)
+    .where(and(eq(r.id, row.id), eq(r.status, row.status)))
     .returning();
-  return toResidency(row!);
+  if (!updated) throw new AppError('invalid_state', 'This stay just changed. Refresh to see where it stands.');
+  return toResidency(updated);
 }
+
+/** Job: owner-added stays whose move-out date has come end today. */
+export async function endDueResidencies(today = clock.today()) {
+  const r = schema.residencies;
+  const rows = await getDb()
+    .update(r)
+    .set({ status: 'ended' })
+    .where(and(eq(r.source, 'owner'), eq(r.status, 'active'), isNotNull(r.endDate), lte(r.endDate, today)))
+    .returning({ id: r.id });
+  return rows.length;
+}
+
 
 // --- rent tracker ------------------------------------------------------------
 
@@ -364,6 +399,7 @@ function toReview(r: typeof schema.reviews.$inferSelect, extra: { name: string; 
     body: r.body,
     ownerReply: r.ownerReply,
     ownerRepliedAt: r.ownerRepliedAt?.toISOString() ?? null,
+    ownerReplyEditedAt: r.ownerReplyEditedAt?.toISOString() ?? null,
     hidden: r.hidden,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
@@ -388,14 +424,68 @@ export async function hostelReviews(hostelId: string, opts: { includeHidden?: bo
   return rows.map((r) => toReview(r.review, { name: r.name, residency: r.residency }));
 }
 
-export async function replyToReview(user: User, reviewId: string, reply: string) {
-  const db = getDb();
-  const [review] = await db.select().from(schema.reviews).where(eq(schema.reviews.id, reviewId));
+/** The owner's reviews, unreplied first, 20 a page. Hidden ones are included so the owner sees what moderators hid. */
+export async function ownerReviews(user: User, hostelId: string, page = 1) {
+  const h = await ownedHostel(user, hostelId);
+  const limit = 20;
+  const rows = await getDb()
+    .select({ review: schema.reviews, name: schema.users.name, residency: schema.residencies })
+    .from(schema.reviews)
+    .innerJoin(schema.users, eq(schema.users.id, schema.reviews.userId))
+    .leftJoin(schema.residencies, eq(schema.residencies.id, schema.reviews.residencyId))
+    .where(eq(schema.reviews.hostelId, h.id))
+    .orderBy(sql`${schema.reviews.ownerReply} is null desc`, desc(schema.reviews.createdAt), desc(schema.reviews.id))
+    .limit(limit)
+    .offset((page - 1) * limit);
+  return rows.map((r) => toReview(r.review, { name: r.name, residency: r.residency }));
+}
+
+/** One review as the lists show it, wherever it sits in them. */
+async function reviewView(reviewId: string) {
+  const [r] = await getDb()
+    .select({ review: schema.reviews, name: schema.users.name, residency: schema.residencies })
+    .from(schema.reviews)
+    .innerJoin(schema.users, eq(schema.users.id, schema.reviews.userId))
+    .leftJoin(schema.residencies, eq(schema.residencies.id, schema.reviews.residencyId))
+    .where(eq(schema.reviews.id, reviewId));
+  if (!r) throw notFound('Review');
+  return toReview(r.review, { name: r.name, residency: r.residency });
+}
+
+/** A review of a hostel the caller owns (404 otherwise); replying is part of Pro. */
+async function reviewToAnswer(user: User, reviewId: string) {
+  const [review] = await getDb().select().from(schema.reviews).where(eq(schema.reviews.id, reviewId));
   if (!review) throw notFound('Review');
-  await ownedHostel(user, review.hostelId);
-  if (review.ownerReply) throw new AppError('invalid_state', 'You have already replied to this review');
-  await db.update(schema.reviews).set({ ownerReply: reply, ownerRepliedAt: clock.now() }).where(eq(schema.reviews.id, reviewId));
-  return (await hostelReviews(review.hostelId, { includeHidden: true })).find((r) => r.id === reviewId)!;
+  const h = await ownedHostel(user, review.hostelId);
+  await requirePlan(h.id, 'pro');
+  return review;
+}
+
+/** The owner's one public reply. One conditional update, so a double tap posts once and the second is told. */
+export async function replyToReview(user: User, reviewId: string, reply: string) {
+  const review = await reviewToAnswer(user, reviewId);
+  const r = schema.reviews;
+  const [done] = await getDb()
+    .update(r)
+    .set({ ownerReply: reply, ownerRepliedAt: clock.now() })
+    .where(and(eq(r.id, review.id), isNull(r.ownerReply)))
+    .returning({ id: r.id });
+  if (!done) throw new AppError('invalid_state', 'You have already replied to this review. Refresh to see your reply; you can edit it there.');
+  return reviewView(review.id);
+}
+
+/** Changes the owner's reply. The review then says it was edited, and when; resending the same words changes nothing. */
+export async function editReviewReply(user: User, reviewId: string, reply: string) {
+  const review = await reviewToAnswer(user, reviewId);
+  const r = schema.reviews;
+  const now = clock.now();
+  const [done] = await getDb()
+    .update(r)
+    .set({ ownerReply: reply, ownerReplyEditedAt: sql`case when ${r.ownerReply} = ${reply} then ${r.ownerReplyEditedAt} else ${now.toISOString()}::timestamptz end` })
+    .where(and(eq(r.id, review.id), isNotNull(r.ownerReply)))
+    .returning({ id: r.id });
+  if (!done) throw new AppError('invalid_state', 'There is no reply to edit yet. Post one first.');
+  return reviewView(review.id);
 }
 
 export async function flagReview(user: User, reviewId: string, reason: string) {

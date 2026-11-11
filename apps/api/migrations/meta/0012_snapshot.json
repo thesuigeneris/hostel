@@ -1,6 +1,6 @@
 {
-  "id": "847a6bc2-846d-4e7d-889b-0fe8c3c4c68e",
-  "prevId": "78f530f0-5a4f-4099-b06d-ba694a86858e",
+  "id": "eddf62d1-e40a-4870-9393-002dd31c1ebf",
+  "prevId": "3c87dc05-7dcd-48ff-8a2d-b8afe9237aa1",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2173,6 +2173,19 @@
           "primaryKey": false,
           "notNull": true
         },
+        "credit_amount": {
+          "name": "credit_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "status": {
           "name": "status",
           "type": "invoice_status",
@@ -2221,8 +2234,8 @@
         }
       },
       "indexes": {
-        "owner_invoices_plan_period": {
-          "name": "owner_invoices_plan_period",
+        "owner_invoices_plan_tier_period": {
+          "name": "owner_invoices_plan_tier_period",
           "columns": [
             {
               "expression": "owner_plan_id",
@@ -2232,6 +2245,12 @@
             },
             {
               "expression": "period_start",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "plan",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2297,6 +2316,10 @@
       },
       "policies": {},
       "checkConstraints": {
+        "owner_invoices_amounts_nonneg": {
+          "name": "owner_invoices_amounts_nonneg",
+          "value": "\"owner_invoices\".\"amount\" >= 0 and \"owner_invoices\".\"credit_amount\" >= 0"
+        },
         "owner_invoices_payment_mode_status": {
           "name": "owner_invoices_payment_mode_status",
           "value": "(\"owner_invoices\".\"status\" = 'paid' and \"owner_invoices\".\"payment_mode\" is not null and \"owner_invoices\".\"payment_mode\" <> 'waived') or (\"owner_invoices\".\"status\" = 'void' and (\"owner_invoices\".\"payment_mode\" is null or \"owner_invoices\".\"payment_mode\" = 'waived')) or (\"owner_invoices\".\"status\" = 'due' and \"owner_invoices\".\"payment_mode\" is null)"
@@ -3110,6 +3133,28 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "residencies_one_open_owner_stay": {
+          "name": "residencies_one_open_owner_stay",
+          "columns": [
+            {
+              "expression": "hostel_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "phone",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"residencies\".\"source\" = 'owner' and \"residencies\".\"status\" in ('invited', 'active')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -3345,6 +3390,12 @@
         },
         "owner_replied_at": {
           "name": "owner_replied_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "owner_reply_edited_at": {
+          "name": "owner_reply_edited_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false

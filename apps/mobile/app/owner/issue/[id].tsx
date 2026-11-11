@@ -33,7 +33,8 @@ function OwnerIssue() {
 
   const send = (status?: (typeof moves)[number]) =>
     a.run(status ?? 'comment', async () => {
-      s.setData(await api.resident.updateIssue(id, { status, message: message.trim() || undefined }));
+      // `from`: the status this screen showed, so a double tap or someone else's change in between moves it once.
+      s.setData(await api.resident.updateIssue(id, { status, from: status ? issue.status : undefined, message: message.trim() || undefined }));
       setMessage('');
     }, status ? `Moved to ${status.replace(/_/g, ' ')}` : 'Comment added');
 

@@ -387,6 +387,8 @@ export type Review = {
   body: string;
   ownerReply: string | null;
   ownerRepliedAt: string | null;
+  /** Set when the owner changed their reply after posting it; the card says "edited" with this date. */
+  ownerReplyEditedAt: string | null;
   hidden: boolean;
   createdAt: string;
   updatedAt: string;
@@ -440,7 +442,10 @@ export type IssueView = {
   readOnly: boolean;
   upvotes: number;
   upvotedByMe: boolean;
+  /** Open, unanswered by the hostel since it was reported or last reopened, for over a day (`issueNeedsResponse`). */
   needsResponse: boolean;
+  /** When the hostel's answer has been awaited since (the report or the latest reopen); null once answered. */
+  awaitingReplySince: string | null;
 };
 
 export type IssueDetail = IssueView & {
@@ -523,7 +528,12 @@ export type OwnerInvoice = {
   plan: OwnerPlanTier;
   periodStart: ISODate;
   periodEnd: ISODate;
+  /** What is payable: the plan price less `creditAmount` (or the used share of a month cut short by an upgrade). */
   amount: number;
+  /** Unused days already paid on the previous plan, taken off this bill. */
+  creditAmount: number;
+  /** What the credit or a shortened period is for, in words. */
+  note: string | null;
   status: InvoiceStatus;
   dueDate: ISODate;
   razorpayOrderId: string | null;
@@ -721,4 +731,15 @@ export type OwnerInsights = {
   };
   reviews: { rating: number | null; count: number; awaitingReply: number };
   visits: { new: number; contacted: number };
+  /** What the owner owes us for this hostel's plan, shown on every plan (a paused hostel most of all). */
+  planBill: {
+    /** Unpaid plan bills, in rupees. */
+    due: number;
+    /** The oldest unpaid bill, which decides overdue and the pause. */
+    oldest: { id: string; amount: number; dueDate: ISODate; isOverdue: boolean; pausesOn: ISODate } | null;
+    suspended: boolean;
+  };
 };
+
+/** Owner Issues tab badges: issues waiting over a day for the hostel's first answer, in total and per hostel. */
+export type OwnerIssueSummary = { needsResponse: number; byHostel: Record<string, number> };

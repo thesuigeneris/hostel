@@ -1,10 +1,11 @@
 import type { IssueCategory, OwnerInsights, User } from '@hostels/shared';
-import { addDays, computePayout, istInstant, TRANSPARENCY_WINDOW_DAYS } from '@hostels/shared';
+import { addDays, computePayout, isOverdue, istInstant, pausesOn, TRANSPARENCY_WINDOW_DAYS } from '@hostels/shared';
 import { and, asc, eq, gte, isNull, lt, sql } from 'drizzle-orm';
 import { getDb, schema } from '../db';
 import { clock } from '../lib/clock';
 import { seenWithin } from '../lib/rate-limit';
 import { ownedHostel, planFor } from './access';
+import { responseStates } from './issue-response';
 import { ratingsFor } from './listings';
 import { monthBounds, realTenantMoney, tenantNotCounted } from './money';
 import { rentSheet } from './residents';
@@ -57,7 +58,7 @@ export async function ownerInsights(user: User, hostelId: string, month = clock.
   const viewsSince = addDays(today, -(INSIGHT_DAYS - 1));
   const issuesSince = istInstant(addDays(today, -TRANSPARENCY_WINDOW_DAYS), 0);
 
-  const [plan, ratings, rooms, [visits30d], [residents], issues, views, [unreplied], visitCounts] = await Promise.all([
+  const [plan, ratings, rooms, [visits30d], [residents], issues, views, [unreplied], visitCounts, unpaidBills] = await Promise.all([
     planFor(h.id),
     ratingsFor(h.id),
     db.select().from(schema.roomTypes).where(eq(schema.roomTypes.hostelId, h.id)).orderBy(asc(schema.roomTypes.monthlyRent)),
@@ -83,6 +84,11 @@ export async function ownerInsights(user: User, hostelId: string, month = clock.
       .from(schema.visitRequests)
       .where(eq(schema.visitRequests.hostelId, h.id))
       .groupBy(schema.visitRequests.status),
+    db
+      .select()
+      .from(schema.ownerInvoices)
+      .where(and(eq(schema.ownerInvoices.hostelId, h.id), eq(schema.ownerInvoices.status, 'due')))
+      .orderBy(asc(schema.ownerInvoices.dueDate)),
   ]);
   const locked = plan.effective === 'free';
   const totalBeds = rooms.reduce((n, r) => n + r.totalBeds, 0);
@@ -97,6 +103,7 @@ export async function ownerInsights(user: User, hostelId: string, month = clock.
 
   // Issues: open ones by age, plus 90-day response times and categories.
   const open = issues.filter((i) => i.status !== 'resolved' && i.status !== 'closed');
+  const responses = await responseStates(open, now);
   const openByAge = { under1Day: 0, days1to3: 0, days3to7: 0, over7Days: 0 };
   for (const i of open) {
     const hours = (now.getTime() - i.createdAt.getTime()) / HOUR;
@@ -169,7 +176,7 @@ export async function ownerInsights(user: User, hostelId: string, month = clock.
     revenue,
     issues: {
       open: open.length,
-      needsResponse: open.filter((i) => i.status === 'open' && now.getTime() - i.createdAt.getTime() > 24 * HOUR).length,
+      needsResponse: open.filter((i) => responses.get(i.id)?.needsResponse).length,
       openByAge,
       byCategory,
       reportedLast90Days: recent.length,
@@ -178,5 +185,18 @@ export async function ownerInsights(user: User, hostelId: string, month = clock.
     },
     reviews: { rating: ratings.rating, count: ratings.reviewCount, awaitingReply: unreplied?.n ?? 0 },
     visits: { new: visitsByStatus.new ?? 0, contacted: visitsByStatus.contacted ?? 0 },
+    planBill: {
+      due: unpaidBills.reduce((n, b) => n + b.amount, 0),
+      oldest: unpaidBills[0]
+        ? {
+            id: unpaidBills[0].id,
+            amount: unpaidBills[0].amount,
+            dueDate: unpaidBills[0].dueDate,
+            isOverdue: isOverdue(unpaidBills[0], now),
+            pausesOn: pausesOn(unpaidBills[0].dueDate),
+          }
+        : null,
+      suspended: plan.suspended,
+    },
   };
 }

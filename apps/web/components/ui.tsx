@@ -194,7 +194,9 @@ export function Stars({ value, size = 'sm' }: { value: number | null; size?: 'sm
 
 export function Table({ head, children }: { head: string[]; children: ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
+    // `relative`: screen-reader-only text in a cell is positioned absolutely; without a positioned scroller it escapes
+    // the scroll box and widens the whole page on phones.
+    <div className="relative overflow-x-auto rounded-2xl border border-line bg-surface">
       <table className="w-full text-left text-sm">
         <thead className="border-b border-line bg-bg text-xs uppercase tracking-wide text-ink-muted">
           <tr>{head.map((h) => <th key={h} scope="col" className="whitespace-nowrap px-4 py-3 font-medium">{h}</th>)}</tr>

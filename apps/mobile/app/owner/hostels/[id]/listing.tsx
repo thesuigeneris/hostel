@@ -5,7 +5,7 @@ import { HostelForm } from '@/components/owner/HostelForm';
 import { HostelHeader, whileLoading } from '@/components/owner/parts';
 import { Button, Card, ErrorText, H2, Notice, P, Screen } from '@/components/ui';
 import { api } from '@/lib/api';
-import { coverOrder } from '@/lib/owner';
+import { canRemovePhoto, coverOrder } from '@/lib/owner';
 import { confirm, useAction } from '@/lib/ownerAction';
 import { pickAndUploadPhoto } from '@/lib/ownerUpload';
 import { theme } from '@/lib/theme';
@@ -46,7 +46,10 @@ function Listing() {
 
       <Card>
         <H2>Photos</H2>
-        <P muted>Real photos of rooms, bathrooms and the kitchen get the most calls. The first photo is the cover.</P>
+        <P muted>
+          Real photos of rooms, bathrooms and the kitchen get the most calls. The first photo is the cover.
+          {canRemovePhoto(h) ? '' : ' A live listing keeps at least one photo, so add another before removing this one.'}
+        </P>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
           {h.photos.map((p, i) => (
             <View key={p.id} style={{ width: '48%', borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.sm, overflow: 'hidden' }}>
@@ -55,22 +58,33 @@ function Listing() {
                 {i === 0 ? (
                   <Text style={{ color: theme.colors.brand, fontSize: 12, fontWeight: '600' }}>Cover</Text>
                 ) : (
-                  <Pressable accessibilityRole="button" onPress={() => a.run(`cover-${p.id}`, async () => s.setData({ ...h, photos: await api.owner.reorderPhotos(id, coverOrder(ids, p.id)) }), 'Cover photo set')}>
-                    <Text style={{ color: theme.colors.soft, fontSize: 12 }}>Make cover</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Make photo ${i + 1} the cover`}
+                    style={{ minHeight: 44, justifyContent: 'center' }}
+                    onPress={() => a.run(`cover-${p.id}`, async () => s.setData({ ...h, photos: await api.owner.reorderPhotos(id, coverOrder(ids, p.id)) }), 'Cover photo set')}
+                  >
+                    <Text style={{ color: theme.colors.soft, fontSize: 13 }}>Make cover</Text>
                   </Pressable>
                 )}
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={async () => {
-                    if (!(await confirm('Remove this photo from your listing?', 'Remove'))) return;
-                    a.run(`del-${p.id}`, async () => {
-                      await api.owner.deletePhoto(id, p.id);
-                      s.setData({ ...h, photos: h.photos.filter((x) => x.id !== p.id) });
-                    }, 'Photo removed');
-                  }}
-                >
-                  <Text style={{ color: theme.colors.danger, fontSize: 12 }}>Remove</Text>
-                </Pressable>
+                {canRemovePhoto(h) ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove photo ${i + 1}`}
+                    style={{ minHeight: 44, justifyContent: 'center' }}
+                    onPress={async () => {
+                      if (!(await confirm('Remove this photo from your listing?', 'Remove'))) return;
+                      a.run(`del-${p.id}`, async () => {
+                        await api.owner.deletePhoto(id, p.id);
+                        s.setData({ ...h, photos: h.photos.filter((x) => x.id !== p.id) });
+                      }, 'Photo removed');
+                    }}
+                  >
+                    <Text style={{ color: theme.colors.danger, fontSize: 13 }}>Remove</Text>
+                  </Pressable>
+                ) : (
+                  <Text style={{ color: theme.colors.muted, fontSize: 12, alignSelf: 'center' }}>Needed</Text>
+                )}
               </View>
             </View>
           ))}
