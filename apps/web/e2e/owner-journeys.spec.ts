@@ -87,7 +87,7 @@ test('O2 and O6: every listing state on the owner home has a next step, from no 
   await expect(owner.getByText(/Draft, ready to go/)).toBeVisible();
   await call(NEW_OWNER, `/owner/hostels/${hostel.id}/submit`, { method: 'POST' });
   await owner.goto('/owner');
-  await expect(owner.getByText(/^In review\. We usually approve within a day/)).toBeVisible();
+  await expect(owner.getByText(/In review\. We usually approve within a day/)).toBeVisible();
 
   // The team sends it back with a reason the owner can act on.
   await call(ADMIN, `/admin/hostels/${hostel.id}/reject`, { body: { reason: 'Add a photo of the bathroom' } });
@@ -156,7 +156,7 @@ test('O4 and T10: a move-out date ahead reads "Leaving on", and the rent tracker
   const sheet = await apiGet<{ totals: { due: number; collected: number; unpaid: number } }>(RAVI, `${base}/rent`);
   await owner.goto(`${base}/rent`);
   const unpaid = Math.max(0, sheet.totals.due - sheet.totals.collected);
-  const stillUnpaid = owner.locator('div', { has: owner.getByText('Still unpaid', { exact: true }) }).last();
+  const stillUnpaid = owner.locator('div.rounded-2xl', { hasText: 'Still unpaid' }).last();
   await expect(stillUnpaid).toContainText(`₹${unpaid.toLocaleString('en-IN')}`);
   expect(await axe(owner)).toEqual([]);
   await owner.context().close();
