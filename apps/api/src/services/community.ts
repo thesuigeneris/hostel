@@ -1,12 +1,13 @@
 import type { User } from '@hostels/shared';
 import { newId, type postInputSchema, publicFirstName } from '@hostels/shared';
-import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 import { getDb, schema } from '../db';
 import { clock } from '../lib/clock';
 import { AppError, forbidden, notFound } from '../lib/errors';
 import { claimUpload, photoUrl } from '../lib/uploads';
 import { requireMember, requirePlan } from './access';
+import { createOnce } from './dedupe';
 
 // Issues live in ./issues; these names are still imported from here by routes and jobs.
 export {
@@ -119,20 +120,28 @@ export async function feed(user: User, hostelId: string) {
 export async function createPost(user: User, hostelId: string, input: z.output<typeof postInputSchema>) {
   const { isOwner } = await requireBoard(user, hostelId);
   if (input.kind === 'announcement' && !isOwner) throw forbidden('Only the hostel can post announcements');
-  const [row] = await getDb()
-    .insert(schema.communityPosts)
-    .values({
-      id: newId('pst'),
-      hostelId,
-      authorId: user.id,
-      kind: input.kind,
-      body: input.body,
-      photoUrl: input.photo ? claimUpload(user, input.photo, 'attachment', 'photo') : null,
-      pinned: input.kind === 'announcement',
-      createdAt: clock.now(),
-    })
-    .returning();
-  return { ...row!, photoUrl: photoUrl(row!.photoUrl), createdAt: row!.createdAt.toISOString() };
+  const photo = input.photo ? claimUpload(user, input.photo, 'attachment', 'photo') : null;
+  const p = schema.communityPosts;
+  // The same post sent twice at once (a double tap, a retry) is saved once; both sends get that post back.
+  const row = await createOnce(
+    `post:${user.id}:${hostelId}:${input.kind}:${input.body}`,
+    async (tx, since) =>
+      (
+        await tx
+          .select()
+          .from(p)
+          .where(and(eq(p.authorId, user.id), eq(p.hostelId, hostelId), eq(p.kind, input.kind), eq(p.body, input.body), photo ? eq(p.photoUrl, photo) : isNull(p.photoUrl), gte(p.createdAt, since)))
+          .limit(1)
+      )[0],
+    async (tx) =>
+      (
+        await tx
+          .insert(p)
+          .values({ id: newId('pst'), hostelId, authorId: user.id, kind: input.kind, body: input.body, photoUrl: photo, pinned: input.kind === 'announcement', createdAt: clock.now() })
+          .returning()
+      )[0]!,
+  );
+  return { ...row, photoUrl: photoUrl(row.photoUrl), createdAt: row.createdAt.toISOString() };
 }
 
 async function loadPost(user: User, postId: string) {
@@ -161,11 +170,15 @@ export async function setPostLike(user: User, postId: string, on: boolean) {
 
 export async function addComment(user: User, postId: string, body: string) {
   const { post } = await loadPost(user, postId);
-  const [row] = await getDb()
-    .insert(schema.communityComments)
-    .values({ id: newId('cmt'), postId: post.id, authorId: user.id, body, createdAt: clock.now() })
-    .returning();
-  return { ...row!, createdAt: row!.createdAt.toISOString() };
+  const c = schema.communityComments;
+  // As with posts: one comment for a burst of identical sends.
+  const row = await createOnce(
+    `comment:${user.id}:${post.id}:${body}`,
+    async (tx, since) =>
+      (await tx.select().from(c).where(and(eq(c.authorId, user.id), eq(c.postId, post.id), eq(c.body, body), gte(c.createdAt, since))).limit(1))[0],
+    async (tx) => (await tx.insert(c).values({ id: newId('cmt'), postId: post.id, authorId: user.id, body, createdAt: clock.now() }).returning())[0]!,
+  );
+  return { ...row, createdAt: row.createdAt.toISOString() };
 }
 
 export async function deletePost(user: User, postId: string) {
