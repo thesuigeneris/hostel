@@ -1,4 +1,4 @@
-import { type AdminPartnerApplication, DEFAULT_PLATFORM_FEE_PCT, dateLabel, type Hostel, type PartnerStandardId, rupees, standardsFor } from '@hostels/shared';
+import { type AdminHostel, type AdminPartnerApplication, DEFAULT_PLATFORM_FEE_PCT, dateLabel, type Hostel, type PartnerStandardId, rupees, standardsFor } from '@hostels/shared';
 import { router, Stack } from 'expo-router';
 import { useState } from 'react';
 import { Text } from 'react-native';
@@ -22,13 +22,17 @@ export default function AdminPartnersScreen() {
 
 function AdminPartners() {
   const s = useLoad(async () => {
-    const [applied, verified] = await Promise.all([api.admin.partnerApplications('applied'), api.admin.hostels({ partnerStatus: 'verified' })]);
-    return { applied, verified };
+    const [applied, verified, recheck] = await Promise.all([
+      api.admin.partnerApplications('applied'),
+      api.admin.hostels({ partnerStatus: 'verified' }),
+      api.admin.hostels({ partnerStatus: 'verified', recheck: true }),
+    ]);
+    return { applied, verified, recheck };
   });
   const a = useAction();
   const gate = whileLoading(s);
   if (gate) return gate;
-  const { applied, verified } = s.data!;
+  const { applied, verified, recheck } = s.data!;
 
   return (
     <Screen refreshing={s.refreshing} onRefresh={s.refresh}>
@@ -37,6 +41,13 @@ function AdminPartners() {
       <Notice>{a.ok}</Notice>
       <H2>Applications</H2>
       {applied.length === 0 ? <Empty title="No pending applications" /> : applied.map((app) => <Application key={app.id} app={app} a={a} onDone={s.reload} />)}
+      {recheck.length > 0 && (
+        <>
+          <H2>Moved: check again ({recheck.length})</H2>
+          <P muted>These partners changed their address, map pin or started serving food after their check. They keep the badge; visit and record the new check.</P>
+          {recheck.map((h) => <Recheck key={h.id} h={h} a={a} onDone={s.reload} />)}
+        </>
+      )}
       <H2>Verified partners</H2>
       {verified.length === 0 ? <P muted>None yet.</P> : verified.map((h) => <FeeRow key={`${h.id}-${h.platformFeePct}`} h={h} a={a} onDone={s.reload} />)}
     </Screen>
@@ -99,6 +110,31 @@ function FeeRow({ h, a, onDone }: { h: Hostel; a: ReturnType<typeof useAction>; 
         <Button small title="Save" variant="secondary" disabled={pct === null || pct === h.platformFeePct} busy={a.busy === `f-${h.id}`} onPress={() => a.run(`f-${h.id}`, async () => { await api.admin.setFee(h.id, pct!); await onDone(); }, 'Fee updated')} />
       </Row>
       {pct !== null && <Muted>On {rupees(10000)} rent = {rupees(feeOn(10000, pct))}</Muted>}
+    </Card>
+  );
+}
+
+function Recheck({ h, a, onDone }: { h: AdminHostel; a: ReturnType<typeof useAction>; onDone: () => void }) {
+  const standards = standardsFor(h.foodAvailable);
+  const [checked, setChecked] = useState<PartnerStandardId[]>([]);
+  const [note, setNote] = useState('');
+  const done = standards.filter((st) => checked.includes(st.id)).length;
+  const toggle = (id: PartnerStandardId, on: boolean) => setChecked((c) => (on ? [...c, id] : c.filter((x) => x !== id)));
+  return (
+    <Card>
+      <Text style={{ fontWeight: '700', color: theme.colors.text, fontSize: 16 }}>{h.name}</Text>
+      <P muted>{h.area} · {h.address || 'no address'} · check due since {h.partnerRecheckSince ? dateLabel(h.partnerRecheckSince) : '—'}</P>
+      <Button small variant="ghost" title="See what changed" onPress={() => router.push('/admin/changes')} />
+      <Text style={{ fontWeight: '600', color: theme.colors.text }}>Brand standards at the new place · {done} of {standards.length} checked</Text>
+      {standards.map((st) => <Toggle key={st.id} label={st.label} value={checked.includes(st.id)} onChange={(on) => toggle(st.id, on)} />)}
+      <Field label="What you checked" hint="Saved with the check; only admins see it." value={note} onChangeText={setNote} multiline maxLength={1000} />
+      <Button
+        title="Record the new check"
+        disabled={done < standards.length || note.trim().length < 3}
+        busy={a.busy === `r-${h.id}`}
+        onPress={() => a.run(`r-${h.id}`, async () => { await api.admin.recheckPartner(h.id, checked, note.trim()); await onDone(); }, 'New check recorded')}
+      />
+      {done < standards.length && <Muted>Tick every standard to record the check.</Muted>}
     </Card>
   );
 }

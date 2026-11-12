@@ -37,6 +37,8 @@ function AdminHome() {
         <Stat label="Active subscriptions" value={st.activeSubscriptions} />
         <Stat label="Overdue bills" value={st.overdueBills} onPress={go('/admin/billing')} />
         <Stat label="Refunds due" value={st.refundsDue} onPress={go('/admin/billing')} />
+        <Stat label="Listing changes, 7 days" value={st.listingChanges7d} onPress={go('/admin/changes')} />
+        <Stat label="Partners to check again" value={st.partnerRechecks} onPress={go('/admin/partners')} />
       </StatGrid>
 
       <NavRow title="Listings" hint="Approve or send back new listings" onPress={go('/admin/listings')} />
@@ -44,6 +46,7 @@ function AdminHome() {
       <NavRow title="Subscriptions and bills" hint="Overdue bills, moves, owner plan bills" onPress={go('/admin/billing')} />
       <NavRow title="Payouts" hint="Generate and mark payouts paid" onPress={go('/admin/payouts')} />
       <NavRow title="Moderation" hint="Flagged reviews and reported posts" onPress={go('/admin/moderation')} />
+      <NavRow title="Recently changed listings" hint="Name, address, pin and phone edits of live listings" onPress={go('/admin/changes')} />
       <NavRow title="Food partners" hint="Cloud kitchens for partner menus" onPress={go('/admin/food')} />
 
       <Card>

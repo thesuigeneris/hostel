@@ -244,3 +244,22 @@ export type AuditEvent = {
   actor: { id: string; name: string; phone: string } | null;
   createdAt: string;
 };
+
+/** The reason recorded for a moderation decision: the chosen rule, plus the admin's own words when given. */
+export function moderationReason(choice: string, note = ''): string {
+  const c = choice.trim();
+  const n = note.trim();
+  return c && n ? `${c}: ${n}` : c || n;
+}
+
+const GENDER_WORDS: Record<string, string> = { boys: 'Boys', girls: 'Girls', coliving: 'Co-living' };
+
+/** One side of a listing change, as the admin feed shows it. */
+export function changeValueText(field: MaterialListingField, value: string | number | boolean | null): string {
+  if (value === null || value === '') return 'none';
+  if (field === 'foodAvailable') return value ? 'Serves food' : 'No food';
+  if (field === 'genderType') return GENDER_WORDS[String(value)] ?? String(value);
+  if (field === 'lat' || field === 'lng') return Number(value).toFixed(5);
+  if (field === 'contactPhone' || field === 'whatsappPhone') return `+91 ${value}`;
+  return String(value);
+}

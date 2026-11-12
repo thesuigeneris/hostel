@@ -1,6 +1,6 @@
 'use server';
 
-import type { PartnerStandardId } from '@hostels/shared';
+import { moderationReason, type PartnerStandardId } from '@hostels/shared';
 import { revalidatePath } from 'next/cache';
 import { num, run, safePath, str } from '@/lib/actions';
 import { api } from '@/lib/api';
@@ -59,12 +59,49 @@ export async function generatePayoutsAction(form: FormData) {
 export async function markPayoutPaidAction(form: FormData) {
   await run(back(form, '/admin/payouts'), async () => (await api()).admin.markPayoutPaid(str(form, 'id')), { ok: 'Marked as paid' });
 }
-export async function hideReviewAction(form: FormData) {
-  await run('/admin/moderation', async () => {
-    const client = await api();
-    return publicChange(
-      str(form, 'unhide') === '1' ? client.admin.unhideReview(str(form, 'id')) : client.admin.hideReview(str(form, 'id'), str(form, 'reason') || 'Breaks review guidelines'),
-    );
+const KEEP_REASON = 'Does not break the rules';
+
+/** Hide (a rule and note), show again, or keep (a note) a flagged review. Public pages update at once. */
+export async function moderateReviewAction(form: FormData) {
+  const id = str(form, 'id');
+  const action = str(form, 'action');
+  // Keeping needs no rule: the note, or a plain default, is the reason on the record.
+  const reason = action === 'keep' ? str(form, 'note') || KEEP_REASON : moderationReason(str(form, 'rule'), str(form, 'note'));
+  await run(
+    back(form, '/admin/moderation'),
+    async () => {
+      const client = await api();
+      if (action === 'unhide') return publicChange(client.admin.unhideReview(id));
+      if (action === 'keep') return client.admin.keepReview(id, reason);
+      return publicChange(client.admin.hideReview(id, reason));
+    },
+    { ok: action === 'unhide' ? 'Review is visible again' : action === 'keep' ? 'Review kept; its flags are dismissed' : 'Review hidden' },
+  );
+}
+/** The same for a reported post or comment. */
+export async function moderateContentAction(form: FormData) {
+  const action = str(form, 'action') as 'hide' | 'unhide' | 'keep';
+  const type = str(form, 'type') === 'comment' ? 'comment' : 'post';
+  await run(
+    back(form, '/admin/moderation'),
+    async () =>
+      (await api()).admin.moderateContent(
+        type,
+        str(form, 'id'),
+        action,
+        action === 'keep' ? str(form, 'note') || KEEP_REASON : moderationReason(str(form, 'rule'), str(form, 'note')),
+      ),
+    { ok: action === 'unhide' ? 'Visible again' : action === 'keep' ? 'Kept; its reports are dismissed' : 'Hidden from the board' },
+  );
+}
+export async function recheckPartnerAction(form: FormData) {
+  await run(back(form, '/admin/partners'), async () => publicChange((await api()).admin.recheckPartner(str(form, 'hostelId'), checklist(form), str(form, 'note'))), {
+    ok: 'New check recorded',
+  });
+}
+export async function updateFoodPartnerAction(form: FormData) {
+  await run('/admin/food', async () => (await api()).admin.updateFoodPartner(str(form, 'id'), { name: str(form, 'name'), cuisine: str(form, 'cuisine'), logoUrl: str(form, 'logoUrl') || null }), {
+    ok: 'Food partner saved',
   });
 }
 export async function runJobsAction() {
