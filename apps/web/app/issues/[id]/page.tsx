@@ -1,9 +1,9 @@
-import { ApiError, type IssueStatus } from '@hostels/shared';
+import { ApiError, canReopen as reopenable, type IssueDetail, type IssueStatus, reopenDeadline } from '@hostels/shared';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { updateIssueAction, upvoteAction } from '@/app/stay/actions';
 import { SubmitButton } from '@/components/SubmitButton';
-import { Back, Badge, Card, Flash, PageHeader, StatusBadge, Textarea } from '@/components/ui';
+import { Back, Badge, Card, cx, Field, Flash, PageHeader, StatusBadge, Textarea } from '@/components/ui';
 import { api, requireUser } from '@/lib/api';
 import { dateLabel, timeAgo, titleCase } from '@/lib/format';
 
@@ -19,6 +19,47 @@ const OWNER_NEXT: Record<IssueStatus, IssueStatus[]> = {
   closed: [],
 };
 
+const STEPS: { status: IssueStatus; label: string; at: (i: IssueDetail) => string | null }[] = [
+  { status: 'open', label: 'Reported', at: (i) => i.createdAt },
+  { status: 'acknowledged', label: 'Seen by the hostel', at: (i) => i.acknowledgedAt },
+  { status: 'in_progress', label: 'Being fixed', at: (i) => [...i.updates].reverse().find((u) => u.toStatus === 'in_progress')?.createdAt ?? null },
+  { status: 'resolved', label: 'Marked fixed', at: (i) => i.resolvedAt },
+  { status: 'closed', label: 'Closed', at: (i) => i.closedAt },
+];
+const ORDER: IssueStatus[] = ['open', 'acknowledged', 'in_progress', 'resolved', 'closed'];
+
+function hoursBetween(from: string, to: string) {
+  const h = (Date.parse(to) - Date.parse(from)) / 3_600_000;
+  return h < 1 ? 'under an hour' : h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} days`;
+}
+
+/** Where the issue is in its life, with when each step happened. */
+function Timeline({ issue }: { issue: IssueDetail }) {
+  const reached = ORDER.indexOf(issue.status);
+  return (
+    <ol aria-label="Issue progress" className="mt-6 grid gap-2 sm:grid-cols-5">
+      {STEPS.map((step, idx) => {
+        const at = step.at(issue);
+        const done = idx <= reached || !!at;
+        return (
+          <li
+            key={step.status}
+            aria-current={step.status === issue.status ? 'step' : undefined}
+            className={cx('rounded-xl border p-3 text-xs', done ? 'border-brand/40 bg-brand-soft/50 text-ink' : 'border-line bg-surface text-ink-muted')}
+          >
+            <div className={cx('font-medium', done && 'text-brand')}>
+              {done && <span aria-hidden>✓ </span>}
+              {step.label}
+              <span className="sr-only">{done ? ' (done)' : ' (not yet)'}</span>
+            </div>
+            <div className="mt-0.5">{at ? dateLabel(at) : done ? '' : 'Not yet'}</div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 export default async function IssuePage({ params, searchParams }: Props) {
   const { id } = await params;
   const q = await searchParams;
@@ -31,7 +72,11 @@ export default async function IssuePage({ params, searchParams }: Props) {
   });
   const owned = user.role !== 'tenant' && (await client.owner.hostels().catch(() => [])).some((h) => h.id === issue.hostelId);
   const ownerMoves = owned || user.role === 'admin' ? OWNER_NEXT[issue.status] : [];
-  const reporterMoves: IssueStatus[] = issue.mine && issue.status === 'resolved' ? ['closed', 'open'] : [];
+  // The reporter can confirm a fix any time, and reopen it only within the window before it closes on its own.
+  const reopenUntil = reopenDeadline(issue.resolvedAt);
+  const canReopen = reopenable(issue);
+  const reporterMoves: IssueStatus[] = issue.mine && !issue.readOnly && issue.status === 'resolved' ? (canReopen ? ['closed', 'open'] : ['closed']) : [];
+  const canAct = !issue.readOnly && issue.status !== 'closed';
   const moveLabel: Record<string, string> = {
     acknowledged: 'Acknowledge', in_progress: 'Start work', resolved: 'Mark resolved', closed: 'Confirm fixed', open: 'Still broken, reopen',
   };
@@ -40,22 +85,37 @@ export default async function IssuePage({ params, searchParams }: Props) {
     <div className="mx-auto max-w-3xl px-4 py-10">
       <PageHeader title={issue.title} subtitle={<>{titleCase(issue.category)} · reported by {issue.reporter?.name ?? 'a resident'} on {dateLabel(issue.createdAt)}</>} actions={<StatusBadge kind="issue" status={issue.status} />} />
       <Flash error={q.error} ok={q.ok} />
+      {issue.readOnly && (
+        <p role="note" className="mb-4 rounded-xl bg-info-soft px-4 py-3 text-sm text-info">
+          You've moved out, so this issue is read-only for you. It stays on the hostel's record, and the hostel can still fix it.
+        </p>
+      )}
       <Card>
         {issue.description && <p className="whitespace-pre-line text-sm">{issue.description}</p>}
         {issue.photoUrl && <img src={issue.photoUrl} alt={issue.title} className="mt-3 max-h-96 rounded-xl object-cover" />}
         <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
           <span>{issue.upvotes} {issue.upvotes === 1 ? 'person has' : 'people have'} this too</span>
-          {!issue.mine && !owned && issue.status !== 'closed' && (
+          {!issue.mine && !owned && canAct && (
             <form action={upvoteAction}>
               <Back to={path} />
               <input type="hidden" name="issueId" value={id} />
               <input type="hidden" name="on" value={issue.upvotedByMe ? '0' : '1'} />
-              <SubmitButton size="sm" variant="secondary">{issue.upvotedByMe ? 'Remove me-too' : 'Me too'}</SubmitButton>
+              <SubmitButton size="sm" variant="secondary" pendingText="Saving…" aria-pressed={issue.upvotedByMe}>
+                {issue.upvotedByMe ? 'Remove me-too' : 'Me too'}
+              </SubmitButton>
             </form>
           )}
           {issue.needsResponse && <Badge tone="red">Waiting on the hostel</Badge>}
         </div>
       </Card>
+
+      <Timeline issue={issue} />
+      <p className="mt-2 text-xs text-ink-muted">
+        {issue.acknowledgedAt ? `The hostel responded in ${hoursBetween(issue.createdAt, issue.acknowledgedAt)}.` : 'The hostel has not responded yet.'}
+        {issue.resolvedAt && ` Fixed in ${hoursBetween(issue.createdAt, issue.resolvedAt)}.`}
+        {issue.mine && !issue.readOnly && issue.status === 'resolved' && canReopen && reopenUntil &&
+          ` Confirm the fix or reopen it by ${dateLabel(new Date(reopenUntil).toISOString())}; after that it closes on its own.`}
+      </p>
 
       <h2 className="mb-3 mt-8 text-lg font-semibold">Updates</h2>
       <ol className="space-y-3">
@@ -73,20 +133,27 @@ export default async function IssuePage({ params, searchParams }: Props) {
         {issue.updates.length === 0 && <li className="text-sm text-ink-soft">No updates yet.</li>}
       </ol>
 
-      {issue.status !== 'closed' && (
+      {canAct && (
         <Card className="mt-6">
           <form action={updateIssueAction} className="space-y-3">
             <Back to={path} />
             <input type="hidden" name="issueId" value={id} />
-            <Textarea name="message" maxLength={1000} placeholder={owned ? 'Tell residents what you are doing about it' : 'Add a comment'} />
+            {/* The status this page showed: a change only applies if the issue is still there. */}
+            <input type="hidden" name="from" value={issue.status} />
+            <Field label={owned ? 'Update for residents' : 'Comment'} optional>
+              <Textarea name="message" maxLength={1000} placeholder={owned ? 'Tell residents what you are doing about it' : 'Add a comment'} />
+            </Field>
             <div className="flex flex-wrap gap-2">
-              <SubmitButton variant="secondary" name="status" value="">Comment</SubmitButton>
+              <SubmitButton variant="secondary" name="status" value="" pendingText="Sending…">Comment</SubmitButton>
               {[...ownerMoves, ...reporterMoves].map((s) => (
-                <SubmitButton key={s} name="status" value={s} variant={s === 'open' ? 'ghost' : 'primary'}>{moveLabel[s]}</SubmitButton>
+                <SubmitButton key={s} name="status" value={s} variant={s === 'open' ? 'ghost' : 'primary'} pendingText="Saving…">{moveLabel[s]}</SubmitButton>
               ))}
             </div>
           </form>
         </Card>
+      )}
+      {issue.status === 'closed' && (
+        <p className="mt-6 text-sm text-ink-soft">This issue is closed{issue.closedAt ? ` since ${dateLabel(issue.closedAt)}` : ''}. If it comes back, report it again.</p>
       )}
     </div>
   );

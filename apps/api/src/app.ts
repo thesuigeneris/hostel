@@ -6,7 +6,9 @@ import { HTTPException } from 'hono/http-exception';
 import { logger } from 'hono/logger';
 import { env } from './lib/env';
 import { AppError } from './lib/errors';
+import { auditAdminActing } from './middleware/admin-audit';
 import type { AppEnv } from './middleware/auth';
+import { applyRateLimits } from './middleware/rate-limit';
 import { adminRoutes } from './routes/admin';
 import { authRoutes } from './routes/auth';
 import { ownerRoutes } from './routes/owner';
@@ -28,6 +30,10 @@ export function createApp(opts: { log?: boolean } = {}) {
     if (c.req.path === '/uploads') return next();
     return bodyLimit({ maxSize: 1024 * 1024, onError: (cx) => cx.json({ error: 'validation', message: 'Request body is too large' }, 413) })(c, next);
   });
+  // Admins working in an owner's workspace are audited here, whichever route they used.
+  app.use('*', auditAdminActing);
+  // Request limits for sign-up, login, writes, uploads, search and views (middleware/rate-limit.ts).
+  applyRateLimits(app);
 
   app.route('/', publicRoutes);
   app.route('/', authRoutes);

@@ -1,12 +1,58 @@
 import type { User } from '@hostels/shared';
 import { addDays, newId } from '@hostels/shared';
-import { and, eq, lte } from 'drizzle-orm';
-import { getDb, schema } from '../db';
+import { and, eq, gte, lte } from 'drizzle-orm';
+import { getDb, schema, type Tx } from '../db';
 import { clock } from '../lib/clock';
 import { isUniqueViolation } from '../lib/db-errors';
 import { AppError, notFound } from '../lib/errors';
-import { isBookable, planFor } from './access';
+import type { ReceivedMode } from '../lib/razorpay';
+import { isBookable, type PlanState, planFor } from './access';
 import { openSubscription, regenerateUnpaidFrom, releaseBed, reserveBed } from './billing';
+import { recordPaymentException } from './refunds';
+
+type MoveRow = typeof schema.moveRequests.$inferSelect;
+
+/**
+ * A move was cancelled after bills for periods from the move date on were already paid at the new room's rent. Those
+ * bills go back to the hostel the payer stays in (so its payout counts them), with the rent cut to the room they are
+ * actually in, and any rent paid above that is owed back as a `move_cancelled` refund. A room that costs more than
+ * the one they paid for is never charged extra: the bill keeps what was paid. Runs in the cancelling transaction,
+ * which only one caller can win, so it happens once per move.
+ */
+async function settlePaidBillsOfCancelledMove(tx: Tx, move: MoveRow) {
+  const paid = await tx
+    .select()
+    .from(schema.invoices)
+    .where(
+      and(
+        eq(schema.invoices.subscriptionId, move.subscriptionId),
+        eq(schema.invoices.status, 'paid'),
+        eq(schema.invoices.hostelId, move.toHostelId),
+        gte(schema.invoices.periodStart, move.moveDate),
+      ),
+    )
+    .for('update');
+  if (!paid.length) return;
+  const [room] = await tx.select().from(schema.roomTypes).where(eq(schema.roomTypes.id, move.fromRoomTypeId));
+  if (!room) throw new Error(`room ${move.fromRoomTypeId} missing`);
+  for (const bill of paid) {
+    const over = Math.max(0, bill.rentAmount - room.monthlyRent);
+    const [row] = await tx
+      .update(schema.invoices)
+      .set({ hostelId: move.fromHostelId, rentAmount: bill.rentAmount - over, totalAmount: bill.totalAmount - over })
+      .where(and(eq(schema.invoices.id, bill.id), eq(schema.invoices.hostelId, move.toHostelId)))
+      .returning();
+    // Waived bills took no money, so there is nothing to give back.
+    if (!row || over === 0 || row.paymentMode === 'waived' || !row.razorpayOrderId || !row.razorpayPaymentId) continue;
+    await recordPaymentException(
+      tx,
+      { kind: 'tenant', row },
+      { orderId: row.razorpayOrderId, paymentId: row.razorpayPaymentId, mode: row.paymentMode as ReceivedMode },
+      'move_cancelled',
+      over,
+    );
+  }
+}
 
 function toMove(m: typeof schema.moveRequests.$inferSelect) {
   return { ...m, createdAt: m.createdAt.toISOString() };
@@ -29,6 +75,10 @@ export async function scheduleMove(user: User, input: { toRoomTypeId: string; mo
       if (!hostel || !isBookable(hostel, await planFor(hostel.id, tx))) {
         throw new AppError('not_verified', 'You can only move to a verified partner hostel');
       }
+      // Same rule as subscribing: never a plan at your own hostel.
+      if (hostel.ownerId === user.id) {
+        throw new AppError('cannot_subscribe_own_hostel', 'You own that hostel, so you can’t move your plan there.', 409);
+      }
       if (sub.mealPlan !== 'none' && !hostel.foodAvailable) throw new AppError('move_not_allowed', 'That hostel does not serve food');
       if (!(await reserveBed(tx, room.id))) throw new AppError('no_beds_available', 'No beds left in that room type');
       const [move] = await tx
@@ -41,6 +91,7 @@ export async function scheduleMove(user: User, input: { toRoomTypeId: string; mo
           toHostelId: hostel.id,
           toRoomTypeId: room.id,
           moveDate: input.moveDate,
+          createdAt: clock.now(),
         })
         .returning();
       // Bills already generated for periods from the move date on now use the new room.
@@ -71,6 +122,7 @@ export async function cancelMove(user: User, moveId: string) {
     if (!cancelled) throw new AppError('move_not_allowed', 'This move is no longer scheduled');
     await releaseBed(tx, move.toRoomTypeId);
     await regenerateUnpaidFrom(tx, sub, move.moveDate);
+    await settlePaidBillsOfCancelledMove(tx, move);
     return toMove(cancelled);
   });
 }
@@ -82,7 +134,19 @@ export async function myMoves(user: User) {
   return rows.map(toMove);
 }
 
-/** Job: on the move date, switch the subscription, release the old bed and move the residency. */
+/** Why a hostel can't take a move-in, in the tenant's words (never the owner's unpaid bill); null when it can. */
+function closedReason(hostel: typeof schema.hostels.$inferSelect | undefined, plan: PlanState): string | null {
+  if (!hostel || hostel.status !== 'live') return `${hostel?.name ?? 'That hostel'} is no longer listed on Hostels`;
+  if (hostel.partnerStatus !== 'verified') return `${hostel.name} is no longer a verified partner`;
+  if (plan.suspended) return `${hostel.name} isn't taking new residents right now`;
+  return null;
+}
+
+/**
+ * Job: on the move date, switch the subscription, release the old bed and move the residency. A move into a hostel
+ * that stopped taking residents (delisted, no longer verified, or paused) is cancelled instead: the bed held there
+ * is released, unpaid bills go back to the current room, the reason is kept for the tenant, and they stay put.
+ */
 export async function completeDueMoves(today = clock.today()) {
   const db = getDb();
   const due = await db
@@ -90,8 +154,26 @@ export async function completeDueMoves(today = clock.today()) {
     .from(schema.moveRequests)
     .where(and(eq(schema.moveRequests.status, 'scheduled'), lte(schema.moveRequests.moveDate, today)));
   let done = 0;
+  let cancelled = 0;
   for (const m of due) {
     await db.transaction(async (tx) => {
+      const [hostel] = await tx.select().from(schema.hostels).where(eq(schema.hostels.id, m.toHostelId));
+      const reason = closedReason(hostel, await planFor(m.toHostelId, tx));
+      if (reason) {
+        const [row] = await tx
+          .update(schema.moveRequests)
+          .set({ status: 'cancelled', cancelReason: reason })
+          .where(and(eq(schema.moveRequests.id, m.id), eq(schema.moveRequests.status, 'scheduled')))
+          .returning();
+        if (!row) return;
+        await releaseBed(tx, m.toRoomTypeId);
+        const [sub] = await tx.select().from(schema.subscriptions).where(eq(schema.subscriptions.id, m.subscriptionId));
+        // With the move gone, bills from the move date on are made again for the room they're in now.
+        if (sub) await regenerateUnpaidFrom(tx, sub, m.moveDate);
+        await settlePaidBillsOfCancelledMove(tx, m);
+        cancelled++;
+        return;
+      }
       const [row] = await tx
         .update(schema.moveRequests)
         .set({ status: 'completed' })
@@ -126,7 +208,7 @@ export async function completeDueMoves(today = clock.today()) {
       done++;
     });
   }
-  return done;
+  return { completed: done, cancelled };
 }
 
 export async function adminMoves() {

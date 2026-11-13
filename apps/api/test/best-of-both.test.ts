@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { setClock } from '../src/lib/clock';
-import { activeSubscriber, admin, liveHostel, newOwner, newTenant } from './fixtures';
+import { runJobs } from '../src/services/jobs';
+import { activeSubscriber, admin, liveHostel, liveSubscriber, newOwner, newTenant, payByCheckout, withRazorpay } from './fixtures';
 import { call, resetDb } from './helpers';
 
 let ownerToken: string;
@@ -42,16 +43,18 @@ describe('board likes', () => {
     expect((await call(`/posts/${post.body.id}/like`, { token: b.token, method: 'DELETE' })).body).toEqual({ likes: 1, likedByMe: false });
 
     const outsider = await newTenant('Out');
-    expect((await call(`/posts/${post.body.id}/like`, { token: outsider.token, method: 'PUT' })).body.error).toBe('not_a_resident');
+    // Outsiders get 404, so a post id confirms nothing.
+    expect((await call(`/posts/${post.body.id}/like`, { token: outsider.token, method: 'PUT' })).status).toBe(404);
     expect((await call('/posts/pst_missing/like', { token: b.token, method: 'PUT' })).status).toBe(404);
   });
 });
 
 describe('page views and owner insights', () => {
   test('anyone can record a view; owners on Pro/Partner see 30-day views, Free sees them locked', async () => {
-    for (let k = 0; k < 3; k++) expect((await call(`/hostels/${hostel.slug}/view`, { method: 'POST' })).status).toBe(200);
+    // Three visitors (a visitor counts once per half hour; see admin-limits.test.ts), then one more the next day.
+    for (let k = 1; k <= 3; k++) expect((await call(`/hostels/${hostel.slug}/view`, { method: 'POST', ip: `203.0.113.${k}` })).status).toBe(200);
     setClock('2026-11-10T06:00:00Z');
-    await call(`/hostels/${hostel.slug}/view`, { method: 'POST' });
+    await call(`/hostels/${hostel.slug}/view`, { method: 'POST', ip: '203.0.113.1' });
     // Unknown slugs are ignored, not errors (the page may be stale).
     expect((await call('/hostels/no-such-hostel/view', { method: 'POST' })).status).toBe(200);
 
@@ -104,15 +107,26 @@ describe('admin escalations', () => {
 });
 
 describe('admin revenue', () => {
-  test('subscription gross, platform fees, and owner plans once the trial ends', async () => {
+  test('money received this month: fees on tenant bills paid with real money, and paid owner plans', async () => {
     const t = await newTenant('Asha');
-    await activeSubscriber(t.token, hostel.id, room.id, 'full');
+    await liveSubscriber(t.token, hostel.id, room.id, 'full');
     const now = (await call('/admin/stats', { token: adminToken })).body.revenue;
     // ₹10,000 rent + ₹6,000 full food plan; 10% platform fee. The partner plan is in its free month.
-    expect(now).toEqual({ subscriptionGross: 16000, platformFees: 1600, ownerPlans: 0, trialHostels: 1 });
+    expect(now).toEqual({
+      month: '2026-11',
+      subscriptionGross: 16000,
+      platformFees: 1600,
+      ownerPlans: 0,
+      trialHostels: 1,
+      notCounted: { tenant: { simulated: 0, test: 0 }, owner: { simulated: 0, test: 0 } },
+    });
 
     setClock('2026-12-10T06:00:00Z');
-    const later = (await call('/admin/stats', { token: adminToken })).body.revenue;
-    expect(later).toMatchObject({ ownerPlans: 1999, trialHostels: 0 });
+    await runJobs(); // bills the first month after the free one
+    // Billed is not received: the plan bill counts once it is paid.
+    expect((await call('/admin/stats', { token: adminToken })).body.revenue).toMatchObject({ month: '2026-12', subscriptionGross: 0, ownerPlans: 0, trialHostels: 0 });
+    const bill = (await call(`/owner/hostels/${hostel.id}/plan`, { token: ownerToken })).body.bills.find((b: { status: string }) => b.status === 'due');
+    await withRazorpay('live', () => payByCheckout(ownerToken, bill.id));
+    expect((await call('/admin/stats', { token: adminToken })).body.revenue).toMatchObject({ ownerPlans: 1999 });
   });
 });

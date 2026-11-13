@@ -36,17 +36,25 @@ export function Card({ children, style, tone }: { children: ReactNode; style?: V
 }
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'food' | 'danger';
-export function Button({ title, onPress, variant = 'primary', disabled, busy, small, style }: { title: string; onPress: () => void; variant?: Variant; disabled?: boolean; busy?: boolean; small?: boolean; style?: ViewStyle }) {
+/**
+ * `label` is the screen-reader name when the visible title needs context ("Skip (save ₹80): lunch on Tue 10 Nov").
+ * Small buttons are 34 pt tall and reach out 5 pt each way, so the touch target is 44 pt.
+ */
+export function Button({ title, onPress, variant = 'primary', disabled, busy, small, style, label }: { title: string; onPress: () => void; variant?: Variant; disabled?: boolean; busy?: boolean; small?: boolean; style?: ViewStyle; label?: string }) {
   const v = {
     primary: { bg: c.brand, fg: c.white, border: c.brand },
     secondary: { bg: c.surface, fg: c.text, border: c.border },
     ghost: { bg: 'transparent', fg: c.soft, border: 'transparent' },
-    food: { bg: c.food, fg: c.white, border: c.food },
+    // White on amber is 2.7:1, so amber buttons carry dark text (5.9:1), as on the web.
+    food: { bg: c.food, fg: c.text, border: c.food },
     danger: { bg: c.danger, fg: c.white, border: c.danger },
   }[variant];
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label ?? title}
+      accessibilityState={{ disabled: !!(disabled || busy), busy: !!busy }}
+      hitSlop={small ? 5 : undefined}
       onPress={onPress}
       disabled={disabled || busy}
       style={({ pressed }) => [
@@ -73,7 +81,7 @@ export function P({ children, muted, style, numberOfLines }: { children: ReactNo
 
 const BADGE = {
   green: { bg: c.brandSoft, fg: c.brand },
-  food: { bg: c.foodSoft, fg: c.food },
+  food: { bg: c.foodSoft, fg: c.foodInk },
   gray: { bg: c.bg, fg: c.soft },
   red: { bg: c.dangerSoft, fg: c.danger },
 };
@@ -88,15 +96,16 @@ export function Badge({ label, tone = 'gray' }: { label: string; tone?: keyof ty
 const STATUS_TONE: Record<string, keyof typeof BADGE> = {
   live: 'green', active: 'green', paid: 'green', resolved: 'green', contacted: 'green', verified: 'green',
   pending: 'food', due: 'food', invited: 'food', acknowledged: 'food', in_progress: 'food', scheduled: 'food', new: 'food',
-  overdue: 'red', open: 'red', rejected: 'red',
+  overdue: 'red', open: 'red', rejected: 'red', refund_due: 'red',
 };
 export function StatusBadge({ status }: { status: string }) {
   return <Badge label={status.replace(/_/g, ' ')} tone={STATUS_TONE[status] ?? 'gray'} />;
 }
 
 export function Chip({ label, active, onPress }: { label: string; active?: boolean; onPress: () => void }) {
+  // The chip is 34 px tall; the hit area reaches 46 px, above the 44 px touch target.
   return (
-    <Pressable accessibilityRole="button" accessibilityState={{ selected: !!active }} onPress={onPress} style={[styles.chip, active && { backgroundColor: c.brand, borderColor: c.brand }]}>
+    <Pressable accessibilityRole="button" accessibilityState={{ selected: !!active }} onPress={onPress} hitSlop={{ top: 6, bottom: 6 }} style={[styles.chip, active && { backgroundColor: c.brand, borderColor: c.brand }]}>
       <Text style={{ color: active ? c.white : c.soft, fontSize: 13, fontWeight: '500' }}>{label}</Text>
     </Pressable>
   );
@@ -106,7 +115,8 @@ export function Field({ label, hint, ...props }: TextInputProps & { label: strin
   return (
     <View style={{ gap: sp.xs }}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput placeholderTextColor={c.muted} {...props} style={[styles.input, props.multiline && { minHeight: 90, textAlignVertical: 'top', paddingTop: sp.sm }, props.style]} />
+      {/* The visible label is also the field's name for screen readers. */}
+      <TextInput placeholderTextColor={c.muted} accessibilityLabel={label} {...props} style={[styles.input, props.multiline && { minHeight: 90, textAlignVertical: 'top', paddingTop: sp.sm }, props.style]} />
       {hint ? <Text style={{ color: c.muted, fontSize: 12 }}>{hint}</Text> : null}
     </View>
   );
@@ -131,6 +141,17 @@ export function Empty({ title, children }: { title: string; children?: ReactNode
     <View style={styles.empty}>
       <Text style={{ fontWeight: '600', color: c.text, textAlign: 'center' }}>{title}</Text>
       {children ? <Text style={{ color: c.soft, textAlign: 'center', marginTop: sp.xs }}>{children}</Text> : null}
+    </View>
+  );
+}
+
+/** A screen that failed to load: the reason and a way to try again. */
+export function ErrorState({ message, onRetry, title = "Couldn't load this" }: { message: string | null | undefined; onRetry?: () => void; title?: string }) {
+  return (
+    <View style={[styles.empty, { borderColor: c.dangerSoft, gap: sp.sm }]}>
+      <Text style={{ fontWeight: '600', color: c.text, textAlign: 'center' }}>{title}</Text>
+      {message ? <Text accessibilityRole="alert" style={{ color: c.danger, textAlign: 'center' }}>{message}</Text> : null}
+      {onRetry && <Button small variant="secondary" title="Try again" onPress={onRetry} />}
     </View>
   );
 }
@@ -172,7 +193,7 @@ const styles = StyleSheet.create({
   h2: { fontSize: 18, fontWeight: '700', color: c.text },
   p: { fontSize: 15, color: c.soft, lineHeight: 21 },
   badge: { borderRadius: theme.radius.pill, paddingHorizontal: 10, paddingVertical: 3, alignSelf: 'flex-start' },
-  chip: { borderRadius: theme.radius.pill, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, paddingHorizontal: 14, paddingVertical: 7 },
+  chip: { minHeight: 34, justifyContent: 'center', borderRadius: theme.radius.pill, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, paddingHorizontal: 14, paddingVertical: 7 },
   label: { fontSize: 14, fontWeight: '600', color: c.text },
   input: { borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, borderRadius: theme.radius.sm, paddingHorizontal: sp.md, height: 44, fontSize: 15, color: c.text },
   empty: { borderWidth: 1, borderStyle: 'dashed', borderColor: c.border, borderRadius: theme.radius.md, padding: sp.xl, alignItems: 'center' },

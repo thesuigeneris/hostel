@@ -53,7 +53,7 @@ On a physical phone with Expo Go, point the app at your laptop's LAN address for
 
 ## Configuration
 
-This section is the reference for every setting. For the step-by-step run and the checklist before real users, see [docs/RUN.md](docs/RUN.md).
+This section is the reference for every setting. For the step-by-step run and the checklist before real users, see [docs/RUN.md](docs/RUN.md); to deploy on a server with Docker, HTTPS and backups, see [docs/DEPLOY.md](docs/DEPLOY.md).
 
 To see what is live, check the API's startup lines or `GET /`:
 
@@ -72,12 +72,16 @@ To see what is live, check the API's startup lines or `GET /`:
 | `NODE_ENV` | unset | `production` refuses stub OTP logins and simulated payments. |
 | `APP_MODE` | `standard` | `standard` serves real users. `demo` is a public demo: only seeded demo accounts can sign in (one tap), nobody can sign up, no SMS is sent, Razorpay keys and webhooks are ignored, and payments are simulated. |
 | `DEMO_LOGIN` | on outside production | Demo accounts (everyone the seed creates) in development. Ignored on a production standard instance, where demo accounts can never sign in. |
-| `ADMIN_PHONES` | none (`.env.example` sets the demo admin `9000000001`) | Comma-separated 10-digit phones that become admin after an **OTP-verified** login. A password sign-up never becomes admin this way. Without SMS, grant admin on the server with `bun run admin:grant <phone>` (in `apps/api`). |
+| `ADMIN_PHONES` | none (`.env.example` sets the demo admin `9000000001`) | Comma-separated 10-digit phones that become admin after an **OTP-verified** login. A password sign-up never becomes admin this way. Removing a phone takes admin away on its next request (it drops to owner). Without SMS, grant admin on the server with `bun run admin:grant <phone>` (in `apps/api`). |
 | `OTP_PEPPER` | `dev-otp-pepper` | Secret mixed into stored OTP hashes. Set a long random value anywhere but your laptop. |
+| `UPLOAD_SIGNING_SECRET` | `dev-upload-signing-secret` | Signs upload receipts and private photo links. A different long random value from `OTP_PEPPER`. With `NODE_ENV=production` the API won't start on either development value; see [Production settings](docs/RUN.md#production-settings). |
 | `CORS_ORIGINS` | `http://localhost:3000,http://localhost:8081` | Browser origins allowed to call the API directly, such as the Expo web preview. The website calls the API from its server, so it needs no entry. |
 | `API_PUBLIC_URL` | `http://localhost:<PORT>` | Public base URL of the API. Used in links to uploaded photos. |
 | `WEB_URL` | `http://localhost:3000` | Website URL. Not read by the API yet. |
 | `JOBS` | on | `off` stops the background jobs inside the API. |
+| `TRUST_PROXY` | unset | `1` when the API is reached only through your own proxy (Caddy) and the website: the last `X-Forwarded-For` entry is then the client's address for rate limits. Unset, the header is ignored and the connection's address counts, so a made-up header can't dodge a limit. `deploy/compose.prod.yml` sets it. |
+| `RATE_LIMITS` | none | Per-rule overrides of the request limits in `apps/api/src/lib/rate-limit.ts`, as `rule=requests/seconds` (e.g. `login=30/600`). Rules: `signup`, `login`, `otp`, `write`, `upload`, `search`, `suggest`, `view`. |
+| `RATE_LIMIT_FACTOR` | `1` | Multiplies every limit. The API and browser tests raise it because all their traffic comes from one machine; production refuses a value above 1. |
 | `UPLOAD_DIR` | `apps/api/uploads` | Where uploaded photos are stored. |
 | `MSG91_AUTH_KEY`, `MSG91_TEMPLATE_ID` | empty | Set both to send real OTP texts. See [MSG91](#msg91-otp-texts). |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | empty | Set both for real Razorpay orders and Checkout. See [Razorpay](#razorpay-payments). |

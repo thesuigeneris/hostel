@@ -1,14 +1,10 @@
 import 'server-only';
-import { ApiError } from '@hostels/shared';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { PUBLIC_DATA_TAG } from './api';
+import { errorText } from './errors';
 
-/** A same-site path to come back to; anything else falls back to the home page. */
-export function safePath(value: FormDataEntryValue | string | null | undefined, fallback = '/'): string {
-  const v = typeof value === 'string' ? value : '';
-  return v.startsWith('/') && !v.startsWith('//') ? v : fallback;
-}
+export { safePath } from './paths';
 
 function withParam(path: string, key: string, value: string) {
   const [base, query = ''] = path.split('?');
@@ -28,10 +24,9 @@ export async function run<T>(back: string, fn: () => Promise<T>, opts: { ok?: st
   try {
     result = await fn();
   } catch (e) {
-    if (e instanceof ApiError) {
-      const detail = e.issues?.length ? `${e.message}: ${e.issues.map((i) => `${i.path} ${i.message}`).join(', ')}` : e.message;
-      redirect(withParam(back, 'error', detail));
-    }
+    // API answers and an unreachable API come back as plain words on the page; anything else is a real bug.
+    const detail = errorText(e);
+    if (detail) redirect(withParam(back, 'error', detail));
     throw e;
   }
   revalidatePath(back.split('?')[0]!);

@@ -73,7 +73,10 @@ test('1. owner lists a hostel; admin approves it and verifies the partner', asyn
   await owner2.context().close();
 
   await admin.goto('/admin/partners');
-  await admin.locator('div.rounded-2xl', { hasText: HOSTEL }).last().getByRole('button', { name: 'Verify' }).click();
+  const application = admin.locator('div.rounded-2xl', { hasText: HOSTEL }).last();
+  // Verifying needs every brand standard ticked after the in-person visit.
+  for (const box of await application.getByRole('checkbox').all()) await box.check();
+  await application.getByRole('button', { name: 'Verify' }).click();
   await expect(admin.getByText('Partner verified')).toBeVisible();
   await admin.context().close();
 
@@ -121,8 +124,8 @@ test('3. owner moves a Free hostel to Pro and pays a plan bill', async ({ browse
   const owner = await signIn(browser, PRO_OWNER, { next: `/owner/hostels/${free.id}/plan` });
   await owner.getByRole('button', { name: 'Switch to Pro' }).click();
   await expect(owner.getByText('Plan updated')).toBeVisible();
-  await expect(owner.getByText(/Free trial until/)).toBeVisible();
-  await expect(owner.locator('div.rounded-2xl', { hasText: 'Adds the resident register' }).getByText('Current')).toBeVisible();
+  await expect(owner.getByText(/Free month until/)).toBeVisible();
+  await expect(owner.locator('div.rounded-2xl', { hasText: 'Resident register' }).getByText('Current')).toBeVisible();
 
   // The Pro hostel's trial ended last month; running the billing job issues this period's plan bill.
   const admin = await signIn(browser, ADMIN, { next: '/admin' });
@@ -208,7 +211,7 @@ test('5. resident reviews the hostel; the owner replies publicly', async ({ brow
   const review = visitor.locator('div.rounded-2xl', { hasText: body });
   await expect(review).toBeVisible();
   await expect(review.getByText(reply)).toBeVisible();
-  await expect(review.getByText('Reply from the hostel:')).toBeVisible();
+  await expect(review.getByText(/Reply from the hostel/)).toBeVisible();
   await visitor.context().close();
 });
 

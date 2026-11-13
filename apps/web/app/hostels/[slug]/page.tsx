@@ -1,17 +1,44 @@
-import { ApiError, computeBill, FOOD_PLANS, istDate, MEALS, REVIEW_MIN_STAY_DAYS, SKIP_CREDITS } from '@hostels/shared';
+import {
+  addDays,
+  ApiError,
+  computeBill,
+  FOOD_PLANS,
+  istDate,
+  MEALS,
+  newRatingLabel,
+  RATING_NEW_NOTE,
+  ratingView,
+  REVIEW_MIN_STAY_DAYS,
+  reviewCountLabel,
+  SKIP_CREDITS,
+  VISIT_MAX_DAYS_AHEAD,
+} from '@hostels/shared';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { IssueRecord, VerifiedExplainer } from '@/components/HostelTrust';
 import { ClientHostelMap } from '@/components/MapLoader';
 import { PhotoGallery } from '@/components/PhotoGallery';
+import { RatingSummary } from '@/components/Rating';
 import { RecordView } from '@/components/RecordView';
 import { SubmitButton } from '@/components/SubmitButton';
-import { Badge, buttonClass, Card, Field, Flash, Input, LinkButton, Stars, Textarea, VerifiedLabel } from '@/components/ui';
-import { currentUser, publicApi, SITE_URL } from '@/lib/api';
-import { dateLabel, GENDER_LABEL, monthLabel, phoneLink, reviewSource, rupees, SHARING_LABEL, timeAgo, weekday, whatsappLink } from '@/lib/format';
-import { flagReviewAction, requestVisitAction } from './actions';
+import { ReviewCard } from '@/components/Reviews';
+import { Badge, buttonClass, Card, Field, Flash, Input, LinkButton, Pagination, Textarea, VerifiedLabel } from '@/components/ui';
+import { api, currentUser, publicApi, SITE_URL } from '@/lib/api';
+import { dateLabel, GENDER_LABEL, phoneLink, rupees, SHARING_LABEL, timeAgo, weekday, whatsappLink } from '@/lib/format';
+import { absoluteUrl } from '@/lib/paths';
+import { requestVisitAction } from './actions';
 
-type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ error?: string; ok?: string }> };
+type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ error?: string; ok?: string; reviews?: string }> };
+
+/** Matches the API's page size for `/hostels/:slug/reviews`. */
+const REVIEWS_PER_PAGE = 20;
+
+/** Photo links in structured data must be absolute; uploads may be stored as site-relative paths. */
+const absolute = (url: string) => absoluteUrl(url, SITE_URL);
+
+/** The cheapest bed, or null for a listing whose rooms were all removed. */
+const cheapest = (rooms: { monthlyRent: number }[]) => (rooms.length ? Math.min(...rooms.map((r) => r.monthlyRent)) : null);
 
 async function load(slug: string) {
   try {
@@ -24,13 +51,16 @@ async function load(slug: string) {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const h = await load((await params).slug);
-  const minRent = Math.min(...h.roomTypes.map((r) => r.monthlyRent));
-  const description = `${h.name} in ${h.area}, Hyderabad. ${GENDER_LABEL[h.genderType]} hostel from ${rupees(minRent)}/month${h.isVerified ? ', no advance' : ''}${h.foodAvailable ? ', food available' : ''}.`;
+  const minRent = cheapest(h.roomTypes);
+  // Below the review threshold a hostel reads "New" on the page, so the snippet doesn't claim an average either.
+  const rated = ratingView(h.ratings.rating, h.ratings.reviewCount);
+  const rating = rated.kind === 'rated' ? ` Rated ${rated.rating}/5 by ${rated.count} residents.` : '';
+  const description = `${h.name} in ${h.area}, Hyderabad. ${GENDER_LABEL[h.genderType]} hostel${minRent ? ` from ${rupees(minRent)}/month` : ''}${h.isVerified ? ', no advance' : ''}${h.foodAvailable ? ', food available' : ''}.${rating}`;
   return {
     title: `${h.name}, ${h.area}`,
     description,
     alternates: { canonical: `/hostels/${h.slug}` },
-    openGraph: { title: h.name, description, images: h.photos[0] ? [{ url: h.photos[0].url }] : [] },
+    openGraph: { title: h.name, description, images: h.photos[0] ? [{ url: absolute(h.photos[0].url) }] : [] },
   };
 }
 
@@ -43,33 +73,57 @@ export default async function HostelPage({ params, searchParams }: Props) {
   const { slug } = await params;
   const q = await searchParams;
   const [h, user] = await Promise.all([load(slug), currentUser()]);
-  const [reviews, menu, areas] = await Promise.all([
-    publicApi(30).hostels.reviews(slug).catch(() => []),
+  const reviewPages = Math.max(1, Math.ceil(h.ratings.reviewCount / REVIEWS_PER_PAGE));
+  const reviewPage = Math.min(Math.max(1, Number(q.reviews) || 1), reviewPages);
+  const client = user ? await api() : null;
+  const [reviews, menu, areas, stays, visits] = await Promise.all([
+    publicApi(30).hostels.reviews(slug, reviewPage).catch(() => null),
     h.isVerified ? publicApi(300).hostels.menu(slug).catch(() => null) : Promise.resolve(null),
     publicApi(300).hostels.areas().catch(() => []),
+    client ? client.me.residencies().catch(() => []) : Promise.resolve([]),
+    client ? client.me.visits().catch(() => []) : Promise.resolve([]),
   ]);
+  // Someone who lives (or lived) here gets a way into their hostel; a pending visit request replaces the form.
+  const myStay = stays.find((s) => s.hostel.id === h.id && (s.status === 'active' || s.status === 'ended'));
+  const openVisit = visits.find((v) => v.hostelId === h.id && v.status === 'new');
   const areaSlug = areas.find((a) => a.area === h.area)?.slug;
   const rooms = [...h.roomTypes].sort((a, b) => a.monthlyRent - b.monthlyRent);
-  const minRent = rooms[0]?.monthlyRent ?? 0;
+  const minRent = cheapest(rooms);
   const bedsFree = rooms.reduce((n, r) => n + r.bedsAvailable, 0);
   const cheapestFree = rooms.find((r) => r.bedsAvailable > 0) ?? rooms[0];
   const examplePlan = h.foodAvailable ? 'full' : 'none';
   const example = cheapestFree ? computeBill({ rent: cheapestFree.monthlyRent, mealPlan: examplePlan, skipCredits: 0 }) : null;
   const today = istDate();
+  const lastVisitDay = addDays(today, VISIT_MAX_DAYS_AHEAD);
+  // Owners can take a plan or ask for a visit anywhere except at their own hostel; the API refuses both too.
+  const isOwn = !!user && user.id === h.ownerId;
+  const rated = ratingView(h.ratings.rating, h.ratings.reviewCount);
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'LodgingBusiness',
     name: h.name,
     description: h.description,
     url: `${SITE_URL}/hostels/${h.slug}`,
-    image: h.photos.map((p) => p.url),
+    image: h.photos.map((p) => absolute(p.url)),
     telephone: `+91${h.contactPhone}`,
     address: { '@type': 'PostalAddress', streetAddress: h.address, addressLocality: h.area, addressRegion: 'Telangana', addressCountry: 'IN' },
     geo: { '@type': 'GeoCoordinates', latitude: h.lat, longitude: h.lng },
-    priceRange: `₹${minRent}+ per month`,
+    ...(minRent ? { priceRange: `₹${minRent}+ per month` } : {}),
     amenityFeature: h.amenities.map((a) => ({ '@type': 'LocationFeatureSpecification', name: a, value: true })),
-    ...(h.ratings.reviewCount
-      ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: h.ratings.rating, reviewCount: h.ratings.reviewCount, bestRating: 5 } }
+    // Structured data matches what the page shows: no average below the review threshold.
+    ...(rated.kind === 'rated'
+      ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: rated.rating, reviewCount: rated.count, bestRating: 5 } }
+      : {}),
+    ...(reviews?.length
+      ? {
+          review: reviews.slice(0, 5).map((r) => ({
+            '@type': 'Review',
+            author: { '@type': 'Person', name: r.author },
+            datePublished: r.createdAt.slice(0, 10),
+            reviewBody: r.body,
+            reviewRating: { '@type': 'Rating', ratingValue: r.rating, bestRating: 5 },
+          })),
+        }
       : {}),
   };
   const whatsapp = whatsappLink(h.whatsappPhone ?? h.contactPhone, `Hi, I found ${h.name} on Hostels.`);
@@ -88,6 +142,14 @@ export default async function HostelPage({ params, searchParams }: Props) {
         </ol>
       </nav>
       <Flash error={q.error} ok={q.ok} />
+      {myStay && (
+        <Card className="mb-4 flex flex-wrap items-center justify-between gap-3 border-brand/40 bg-brand-soft/50 p-4">
+          <p className="text-sm text-ink">
+            {myStay.status === 'active' ? 'You live here.' : 'You lived here.'} Residents can report issues, talk to neighbours and review their stay.
+          </p>
+          <LinkButton href={`/stay/${h.id}`} size="sm">{myStay.status === 'active' ? 'Open my hostel' : 'Review your stay'}</LinkButton>
+        </Card>
+      )}
       <PhotoGallery photos={h.photos} name={h.name} />
 
       <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_360px]">
@@ -102,10 +164,13 @@ export default async function HostelPage({ params, searchParams }: Props) {
             <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight sm:text-4xl">{h.name}</h1>
             <p className="mt-1 text-ink-soft">{h.address}</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Stars value={h.ratings.rating} />
-              {h.ratings.reviewCount > 0 && (
+              {rated.kind === 'rated' && <RatingSummary rating={rated.rating} count={rated.count} />}
+              {rated.kind === 'new' && <span className="text-sm font-medium text-ink">New</span>}
+              {rated.kind === 'none' ? (
+                <span className="text-sm text-ink-muted">No reviews yet</span>
+              ) : (
                 <a href="#reviews" className="text-sm text-ink-soft">
-                  {h.ratings.reviewCount} {h.ratings.reviewCount === 1 ? 'review' : 'reviews'} from residents
+                  {reviewCountLabel(h.ratings.reviewCount)} from residents
                 </a>
               )}
             </div>
@@ -115,8 +180,13 @@ export default async function HostelPage({ params, searchParams }: Props) {
           <section aria-labelledby="rooms-heading">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 id="rooms-heading" className="text-xl font-semibold">Rooms and prices</h2>
-              <p className="text-sm text-ink-muted">{bedsFree > 0 ? `${bedsFree} ${bedsFree === 1 ? 'bed' : 'beds'} free in total` : 'Full right now'}</p>
+              {rooms.length > 0 && (
+                <p className="text-sm text-ink-muted">{bedsFree > 0 ? `${bedsFree} ${bedsFree === 1 ? 'bed' : 'beds'} free in total` : 'Full right now'}</p>
+              )}
             </div>
+            {rooms.length === 0 && (
+              <p className="mt-2 text-sm text-ink-soft">The hostel hasn&apos;t listed its rooms and rent yet. Call or message them to ask.</p>
+            )}
             <ul className="mt-3 grid gap-3 sm:grid-cols-2">
               {rooms.map((r) => (
                 <li key={r.id}>
@@ -148,24 +218,7 @@ export default async function HostelPage({ params, searchParams }: Props) {
           <section aria-labelledby="trust-heading">
             <h2 id="trust-heading" className="text-xl font-semibold">{h.isVerified ? 'What “Verified partner” means here' : 'About free listings'}</h2>
             {h.isVerified ? (
-              <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                <Card className="p-4">
-                  <h3 className="font-medium">Checked</h3>
-                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ink-soft">
-                    <li>The listing was reviewed by the Hostels team before going live.</li>
-                    <li>Partners are verified after an in-person visit: photos match, rooms are clean, the kitchen is safe.</li>
-                    <li>Rent and food are billed through Hostels: one monthly bill, no advance.</li>
-                  </ul>
-                </Card>
-                <Card className="p-4">
-                  <h3 className="font-medium">Not covered</h3>
-                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ink-soft">
-                    <li>It is not a government licence or safety certificate.</li>
-                    <li>House rules and amenities are written by the hostel.</li>
-                    <li>Visit before you move in if you can.</li>
-                  </ul>
-                </Card>
-              </div>
+              <VerifiedExplainer check={h.partnerCheck} />
             ) : (
               <p className="mt-2 max-w-prose text-sm text-ink-soft">
                 The Hostels team reviewed this listing before it went live, but the hostel is not a verified partner. Rent, advance and terms are
@@ -241,7 +294,11 @@ export default async function HostelPage({ params, searchParams }: Props) {
 
           <section id="reviews" aria-labelledby="reviews-heading">
             <h2 id="reviews-heading" className="text-xl font-semibold">How residents rate it</h2>
-            {h.ratings.reviewCount ? (
+            {rated.kind === 'new' ? (
+              <p className="mt-2 text-sm text-ink-soft">
+                <span className="font-medium text-ink">{newRatingLabel(rated.count)}.</span> {RATING_NEW_NOTE}
+              </p>
+            ) : rated.kind === 'rated' ? (
               <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
                 {[
                   ['Overall', h.ratings.rating],
@@ -260,52 +317,38 @@ export default async function HostelPage({ params, searchParams }: Props) {
               <p className="mt-2 text-sm text-ink-soft">No reviews yet. Only people who have lived here for at least {REVIEW_MIN_STAY_DAYS} days can review.</p>
             )}
 
-            {h.transparency && (
-              <Card className="mt-4 bg-brand-soft/40">
-                <h3 className="font-medium">Issue record, last {h.transparency.windowDays} days</h3>
-                <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-                  <div className="flex flex-col-reverse"><dt className="text-ink-muted">issues reported</dt><dd className="text-lg font-semibold tabular-nums">{h.transparency.reported}</dd></div>
-                  <div className="flex flex-col-reverse"><dt className="text-ink-muted">resolved</dt><dd className="text-lg font-semibold tabular-nums">{h.transparency.resolvedPct}%</dd></div>
-                  <div className="flex flex-col-reverse"><dt className="text-ink-muted">median first response</dt><dd className="text-lg font-semibold tabular-nums">{h.transparency.medianHoursToFirstResponse ?? '—'} h</dd></div>
-                  <div className="flex flex-col-reverse"><dt className="text-ink-muted">median time to fix</dt><dd className="text-lg font-semibold tabular-nums">{h.transparency.medianHoursToResolve ?? '—'} h</dd></div>
-                </dl>
-                <p className="mt-3 text-xs text-ink-muted">Reported by residents in the Hostels app. Issue details stay private to residents and the hostel.</p>
-              </Card>
-            )}
+            <IssueRecord stats={h.transparency} />
 
-            <ul className="mt-4 space-y-3">
-              {reviews.map((r) => (
-                <li key={r.id}>
-                  <Card className="p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="font-medium">{r.author}</span>
-                        <Badge tone={reviewSource(r.verifiedVia).strong ? 'green' : 'gray'}>{reviewSource(r.verifiedVia).label}</Badge>
-                        {r.stay && <span className="text-xs text-ink-muted">Lived here {monthLabel(r.stay.from)} – {r.stay.to ? monthLabel(r.stay.to) : 'now'}</span>}
-                      </div>
-                      <Stars value={r.rating} />
-                    </div>
-                    <p className="mt-2 text-sm text-ink-soft">{r.body}</p>
-                    {r.ownerReply && <div className="mt-3 rounded-xl bg-bg p-3 text-sm"><span className="font-medium">Reply from the hostel:</span> {r.ownerReply}</div>}
-                    {user && (
-                      <form action={flagReviewAction} className="mt-2">
-                        <input type="hidden" name="slug" value={h.slug} />
-                        <input type="hidden" name="reviewId" value={r.id} />
-                        <input type="hidden" name="reason" value="Reported from the hostel page" />
-                        <button type="submit" className="min-h-6 text-xs text-ink-muted underline-offset-2 hover:text-danger hover:underline">Report this review</button>
-                      </form>
-                    )}
-                  </Card>
-                </li>
-              ))}
-            </ul>
+            {reviews === null && <p className="mt-4 text-sm text-danger">Reviews could not be loaded right now. Refresh to try again.</p>}
+            {reviews && reviews.length > 0 && (
+              <ul className="mt-4 space-y-3">
+                {reviews.map((r) => (
+                  <li key={r.id}>
+                    <ReviewCard r={r} slug={h.slug} canFlag={!!user} />
+                  </li>
+                ))}
+              </ul>
+            )}
+            {!user && !!reviews?.length && (
+              <p className="mt-3 text-sm text-ink-soft">
+                Something wrong with a review?{' '}
+                <Link href={`/login?next=${encodeURIComponent(`/hostels/${h.slug}#reviews`)}`}>Log in to report it</Link> to our team, with a reason.
+              </p>
+            )}
+            <Pagination page={reviewPage} pages={reviewPages} href={(p) => `/hostels/${h.slug}${p > 1 ? `?reviews=${p}` : ''}#reviews`} />
           </section>
         </div>
 
         <aside aria-label="Price and contact" className="space-y-4 lg:sticky lg:top-24 lg:self-start">
           <Card>
-            <div className="text-sm text-ink-muted">From</div>
-            <div className="text-3xl font-semibold tabular-nums">{rupees(minRent)}<span className="text-base font-normal text-ink-muted"> /month</span></div>
+            {minRent ? (
+              <>
+                <div className="text-sm text-ink-muted">From</div>
+                <div className="text-3xl font-semibold tabular-nums">{rupees(minRent)}<span className="text-base font-normal text-ink-muted"> /month</span></div>
+              </>
+            ) : (
+              <p className="text-sm text-ink-soft">Rooms and rent are not listed yet. Call the hostel to ask.</p>
+            )}
             {h.isVerified ? (
               <>
                 {example && cheapestFree && (
@@ -325,17 +368,43 @@ export default async function HostelPage({ params, searchParams }: Props) {
                     : 'This hostel does not offer food plans.'}{' '}
                   Move or cancel anytime.
                 </p>
-                <LinkButton href={`/subscribe/${h.slug}`} size="lg" className="mt-4 w-full">Subscribe</LinkButton>
+                {isOwn ? (
+                  <div className="mt-4 rounded-xl bg-bg p-3 text-sm">
+                    <p className="text-ink-soft">You own this hostel, so you can&apos;t take a plan here.</p>
+                    <LinkButton href={`/owner/hostels/${h.id}`} variant="secondary" className="mt-3 w-full">Manage this hostel</LinkButton>
+                  </div>
+                ) : (
+                  <LinkButton href={`/subscribe/${h.slug}`} size="lg" className="mt-4 w-full">Subscribe</LinkButton>
+                )}
               </>
+            ) : isOwn ? (
+              <div id="visit" className="mt-4 rounded-xl bg-bg p-3 text-sm">
+                <p className="text-ink-soft">This is your hostel. Visitors request visits here, and you answer them from your visit inbox.</p>
+                <LinkButton href="/owner/visits" variant="secondary" className="mt-3 w-full">Open visit requests</LinkButton>
+              </div>
+            ) : openVisit ? (
+              <div id="visit" className="mt-4 rounded-xl bg-brand-soft p-3 text-sm">
+                <p className="font-medium text-ink">Visit requested for {dateLabel(openVisit.preferredDate)}</p>
+                <p className="mt-1 text-ink-soft">The hostel will call you to confirm. You can withdraw it from <Link href="/account">your account</Link>.</p>
+              </div>
             ) : (
               <form id="visit" action={requestVisitAction} className="mt-4 space-y-3 border-t border-line pt-4">
                 <input type="hidden" name="hostelId" value={h.id} />
                 <input type="hidden" name="slug" value={h.slug} />
                 <h2 className="font-medium">Request a visit</h2>
                 <p className="text-xs text-ink-muted">The hostel gets your request and calls you to confirm a time. Nothing is booked or paid yet.</p>
-                <Field label="Preferred date"><Input type="date" name="preferredDate" min={today} defaultValue={today} required /></Field>
-                <Field label="Note for the owner" optional><Textarea name="message" maxLength={500} placeholder="Evening after 6 works best" /></Field>
-                {user ? <SubmitButton className="w-full">Request visit</SubmitButton> : <LinkButton href={`/login?next=/hostels/${h.slug}`} className="w-full">Log in to request a visit</LinkButton>}
+                {user ? (
+                  <>
+                    <Field label="Preferred date" hint={`Today up to ${dateLabel(lastVisitDay)}.`}>
+                      <Input type="date" name="preferredDate" min={today} max={lastVisitDay} defaultValue={today} required />
+                    </Field>
+                    <Field label="Note for the owner" optional><Textarea name="message" maxLength={500} placeholder="Evening after 6 works best" /></Field>
+                    <SubmitButton className="w-full" pendingText="Sending…">Request visit</SubmitButton>
+                  </>
+                ) : (
+                  // A date and note typed before logging in would be lost, so they are asked for after.
+                  <LinkButton href={`/login?next=${encodeURIComponent(`/hostels/${h.slug}#visit`)}`} className="w-full">Log in to request a visit</LinkButton>
+                )}
               </form>
             )}
             <div className="mt-4 grid grid-cols-2 gap-2">
@@ -344,7 +413,8 @@ export default async function HostelPage({ params, searchParams }: Props) {
             </div>
           </Card>
           <p className="px-1 text-xs text-ink-muted">
-            Listed {dateLabel(h.createdAt)}. <Link href="/for-owners">Own this hostel?</Link>
+            Listed {dateLabel(h.createdAt)}.{' '}
+            {!isOwn && <Link href="/for-owners">Own this hostel?</Link>}
           </p>
         </aside>
       </div>
@@ -353,14 +423,18 @@ export default async function HostelPage({ params, searchParams }: Props) {
       <div data-sticky-actions className="sticky bottom-0 z-sticky -mx-4 mt-10 border-t border-line bg-surface/95 px-4 py-3 shadow-overlay backdrop-blur lg:hidden">
         <div className="mx-auto flex max-w-content items-center gap-3">
           <div className="min-w-0 flex-1">
-            <div className="text-lg font-semibold tabular-nums leading-tight">{rupees(minRent)}<span className="text-sm font-normal text-ink-muted"> /month</span></div>
+            <div className="text-lg font-semibold tabular-nums leading-tight">
+              {minRent ? <>{rupees(minRent)}<span className="text-sm font-normal text-ink-muted"> /month</span></> : 'Rent not listed'}
+            </div>
             <div className="truncate text-xs text-ink-muted">{h.isVerified ? 'No advance · one monthly bill' : bedsFree > 0 ? `${bedsFree} beds free` : 'Full right now'}</div>
           </div>
           <a href={phoneLink(h.contactPhone)} className={buttonClass('secondary', 'md')}>Call</a>
-          {h.isVerified ? (
+          {isOwn ? (
+            <Link href={`/owner/hostels/${h.id}`} className={buttonClass('primary', 'md')}>Manage</Link>
+          ) : h.isVerified ? (
             <Link href={`/subscribe/${h.slug}`} className={buttonClass('primary', 'md')}>Subscribe</Link>
           ) : (
-            <a href="#visit" className={buttonClass('primary', 'md')}>Request visit</a>
+            <a href="#visit" className={buttonClass('primary', 'md')}>{openVisit ? 'Visit requested' : 'Request visit'}</a>
           )}
         </div>
       </div>

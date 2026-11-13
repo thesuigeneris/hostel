@@ -7,6 +7,8 @@ process.env.ADMIN_PHONES = '9000000001';
 process.env.UPLOAD_DIR = `${require('node:os').tmpdir()}/hostels-test-uploads`;
 for (const key of ['MSG91_AUTH_KEY', 'MSG91_TEMPLATE_ID', 'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET']) delete process.env[key];
 process.env.RAZORPAY_WEBHOOK_SECRET = 'test-webhook-secret';
+// Every test request comes from one address; the limiter's own tests set the factor back to 1.
+process.env.RATE_LIMIT_FACTOR = '1000';
 
 const { runMigrations } = await import('../src/db/migrate');
 const { closeDb } = await import('../src/db');

@@ -1,4 +1,16 @@
-import { DEFAULT_PLATFORM_FEE_PCT, ISSUE_AUTOCLOSE_DAYS, OWNER_DOWNGRADE_DAYS, OWNER_PLANS, OWNER_TRIAL_MONTHS, REVIEW_MIN_STAY_DAYS, TRANSPARENCY_WINDOW_DAYS } from '@hostels/shared';
+import {
+  DEFAULT_PLATFORM_FEE_PCT,
+  ISSUE_AUTOCLOSE_DAYS,
+  OWNER_BILLING_RULES,
+  OWNER_DOWNGRADE_DAYS,
+  OWNER_PLAN_FEATURES,
+  OWNER_PLAN_TIERS,
+  OWNER_PLANS,
+  OWNER_TRIAL_MONTHS,
+  PARTNER_REQUIREMENTS,
+  REVIEW_MIN_STAY_DAYS,
+  TRANSPARENCY_WINDOW_DAYS,
+} from '@hostels/shared';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Card, cx, focusRing, LinkButton } from '@/components/ui';
@@ -11,29 +23,6 @@ export const metadata: Metadata = {
   alternates: { canonical: '/for-owners' },
 };
 
-const TIERS = [
-  {
-    id: 'free',
-    tagline: 'Get found',
-    features: ['Listing with photos, rooms and bed counts', 'Visit requests by phone and WhatsApp', 'Reviews from your residents', 'Issue reporting for your residents'],
-  },
-  {
-    id: 'pro',
-    tagline: 'Run your hostel',
-    features: ['Everything in Free', 'Resident register with phone invites', 'Rent tracker: who paid, who is due', 'Community board with announcements'],
-  },
-  {
-    id: 'partner',
-    tagline: 'Join the Hostels brand',
-    features: [
-      'Everything in Pro',
-      '“Verified partner” badge, listed first in search',
-      'Residents subscribe and pay online, no advance',
-      'Weekly menus, meal skips and kitchen headcount',
-      `Monthly payouts, ${DEFAULT_PLATFORM_FEE_PCT}% platform fee on resident bills paid through Hostels`,
-    ],
-  },
-] as const;
 
 const STEPS = [
   ['Create the listing', 'Name, address, map pin, amenities and house rules. About five minutes.'],
@@ -51,7 +40,7 @@ export default async function ForOwnersPage() {
     ['What happens in the review?', 'The Hostels team reads your listing before it appears in search, and approves it or sends it back with a reason. It is not an in-person inspection; Partner verification is.'],
     [
       'How does Partner verification work?',
-      'Someone from the Hostels team visits in person and checks that the photos match, rooms are clean and the kitchen is safe. The badge appears only after that visit.',
+      `Someone from the Hostels team visits in person and checks ${PARTNER_REQUIREMENTS.checks.length} standards, from photos that match the rooms to fire safety and a clean kitchen. The badge appears only after that visit, when every check passes.`,
     ],
     [
       'What does a Partner pay?',
@@ -59,7 +48,7 @@ export default async function ForOwnersPage() {
     ],
     [
       'Is there a free trial?',
-      `Pro and Partner are free for the first ${OWNER_TRIAL_MONTHS === 1 ? 'month' : `${OWNER_TRIAL_MONTHS} months`}. If a plan bill is ${OWNER_DOWNGRADE_DAYS} days overdue, the hostel goes back to the Free features until it is paid; the listing stays up.`,
+      `A hostel's first Pro or Partner plan is free for the first ${OWNER_TRIAL_MONTHS === 1 ? 'month' : `${OWNER_TRIAL_MONTHS} months`}, once. If a plan bill is more than ${OWNER_DOWNGRADE_DAYS} days overdue, the hostel goes back to the Free features until it is paid; the listing and your records stay, and everything returns the moment you pay.`,
     ],
     [
       'Who can review my hostel?',
@@ -126,33 +115,63 @@ export default async function ForOwnersPage() {
       <section id="plans" aria-labelledby="plans-heading" className="mx-auto max-w-content scroll-mt-24 px-4 py-14">
         <h2 id="plans-heading" className="font-display text-3xl font-semibold tracking-tight">Plans</h2>
         <p className="mt-1 text-ink-soft">
-          Per hostel, billed monthly. Pro and Partner are free for the first {OWNER_TRIAL_MONTHS === 1 ? 'month' : `${OWNER_TRIAL_MONTHS} months`}. Downgrade anytime.
+          Per hostel, billed monthly. A hostel&apos;s first Pro or Partner plan is free for the first {OWNER_TRIAL_MONTHS === 1 ? 'month' : `${OWNER_TRIAL_MONTHS} months`}.
+          Downgrade anytime; it takes effect at the end of the month you paid for.
         </p>
         <div className="mt-6 grid gap-4 lg:grid-cols-3">
-          {TIERS.map((t) => (
-            <Card key={t.id} className={t.id === 'partner' ? 'flex flex-col border-brand ring-2 ring-brand/20' : 'flex flex-col'}>
-              <div className="text-sm font-medium text-ink-muted">{t.tagline}</div>
-              <h3 className="mt-1 text-xl font-semibold">{OWNER_PLANS[t.id].label}</h3>
+          {OWNER_PLAN_TIERS.map((id) => (
+            <Card key={id} className={id === 'partner' ? 'flex flex-col border-brand ring-2 ring-brand/20' : 'flex flex-col'}>
+              <div className="text-sm font-medium text-ink-muted">{OWNER_PLAN_FEATURES[id].tagline}</div>
+              <h3 className="mt-1 text-xl font-semibold">{OWNER_PLANS[id].label}</h3>
               <div className="mt-3 text-3xl font-semibold tabular-nums">
-                {OWNER_PLANS[t.id].price ? rupees(OWNER_PLANS[t.id].price) : '₹0'}
+                {OWNER_PLANS[id].price ? rupees(OWNER_PLANS[id].price) : '₹0'}
                 <span className="text-base font-normal text-ink-muted"> /month</span>
               </div>
-              {t.id === 'partner' && <div className="text-sm text-ink-soft">+ {DEFAULT_PLATFORM_FEE_PCT}% of resident bills paid through Hostels</div>}
+              <div className="text-sm text-ink-soft">
+                {id === 'free' ? 'Always free' : id === 'partner' ? `+ ${DEFAULT_PLATFORM_FEE_PCT}% of resident bills paid through Hostels` : 'Per hostel'}
+              </div>
               <ul className="mt-5 flex-1 space-y-2 text-sm">
-                {t.features.map((f) => (
+                {OWNER_PLAN_FEATURES[id].features.map((f) => (
                   <li key={f} className="flex gap-2">
                     <svg aria-hidden="true" viewBox="0 0 20 20" className="mt-0.5 h-4 w-4 shrink-0 fill-brand"><path d="m8 13.6-3.6-3.6L3 11.4l5 5 9-9L15.6 6z" /></svg>
                     {f}
                   </li>
                 ))}
               </ul>
-              <LinkButton href={start} variant={t.id === 'partner' ? 'primary' : 'secondary'} className="mt-6 w-full">
-                {t.id === 'free' ? 'List free' : `Start with ${OWNER_PLANS[t.id].label}`}
+              <LinkButton href={start} variant={id === 'partner' ? 'primary' : 'secondary'} className="mt-6 w-full">
+                {id === 'free' ? 'List free' : `Start with ${OWNER_PLANS[id].label}`}
               </LinkButton>
             </Card>
           ))}
         </div>
-        <p className="mt-4 text-xs text-ink-muted">You choose a plan after your listing is created. Every listing starts on Free.</p>
+        <p className="mt-4 text-xs text-ink-muted">
+          You choose a plan after your listing is created. Every listing starts on Free. Partner needs a live listing and an in-person visit (below).
+        </p>
+
+        <div className="mt-10 grid gap-8 lg:grid-cols-2">
+          <section aria-labelledby="billing-heading">
+            <h3 id="billing-heading" className="text-xl font-semibold">How billing works</h3>
+            <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-ink-soft">
+              {OWNER_BILLING_RULES.map((r) => <li key={r}>{r}</li>)}
+            </ul>
+          </section>
+          <section aria-labelledby="verified-heading">
+            <h3 id="verified-heading" className="text-xl font-semibold">What “Verified partner” requires</h3>
+            <p className="mt-3 text-sm text-ink-soft">{PARTNER_REQUIREMENTS.intro}</p>
+            <ul className="mt-3 space-y-2 text-sm">
+              {PARTNER_REQUIREMENTS.checks.map((c) => (
+                <li key={c} className="flex gap-2">
+                  <svg aria-hidden="true" viewBox="0 0 20 20" className="mt-0.5 h-4 w-4 shrink-0 fill-brand"><path d="m8 13.6-3.6-3.6L3 11.4l5 5 9-9L15.6 6z" /></svg>
+                  {c}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-3 text-sm text-ink-soft">
+              Residents keep reporting issues and reviewing after the visit, so the badge stays earned. A hostel paused for an overdue bill loses the badge and
+              new subscriptions until it is paid.
+            </p>
+          </section>
+        </div>
       </section>
 
       <section aria-labelledby="owner-faq-heading" className="mx-auto max-w-prose px-4 pb-16">

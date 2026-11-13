@@ -23,6 +23,9 @@ export default async function RoomsPage({ params, searchParams }: Props) {
           <form action={updateRoomAction} className="grid items-end gap-3 sm:grid-cols-[1fr_repeat(4,120px)_auto]">
             <Back to={path} />
             <input type="hidden" name="roomId" value={r.id} />
+            {/* The counts this form shows: the API applies the owner's change as a difference, so bookings made meanwhile stand. */}
+            <input type="hidden" name="totalBedsWas" value={r.totalBeds} />
+            <input type="hidden" name="bedsAvailableWas" value={r.bedsAvailable} />
             <div>
               <div className="font-medium">{SHARING_LABEL[r.sharing]}</div>
               <div className="text-xs text-ink-muted">{r.bedsUpdatedAt ? `Beds updated ${timeAgo(r.bedsUpdatedAt)}` : 'Beds not updated since this was recorded'}</div>

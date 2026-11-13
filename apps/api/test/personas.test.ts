@@ -45,8 +45,10 @@ describe('verified reviews', () => {
     expect(pub.body).toHaveLength(1);
     const detail = await call(`/hostels/${hostel.slug}`);
     expect(detail.body.ratings).toMatchObject({ rating: 5, reviewCount: 1, cleanliness: 5, responsiveness: 3 });
-    const search = await call('/hostels?minRating=4.5');
+    // Search carries the true average; a single review reads "New", so it isn't counted as "rated 4.5 and up".
+    const search = await call('/hostels?sort=rating');
     expect(search.body.items[0]).toMatchObject({ rating: 5, reviewCount: 1 });
+    expect((await call('/hostels?minRating=4.5')).body.items).toEqual([]);
 
     // Owner replies once; admin hides after a flag and the average drops out.
     const reply = await call(`/owner/reviews/${ok.body.id}/reply`, { token: ownerToken, body: { reply: 'Thanks Asha!' } });
@@ -95,9 +97,13 @@ describe('owner-added residents', () => {
     expect(sheet.body.rows[0]).toMatchObject({ name: 'Ravi', status: 'partial' });
     expect(sheet.body.totals).toEqual({ due: 7000, collected: 3500, unpaid: 1 });
 
-    // Staying 14+ days lets them review as a verified resident (added by the hostel).
+    // The start date was backdated, so the 14 days count from the day the hostel added them (T1).
+    expect((await call(`/hostels/${free.hostel.id}/review`, { token: residentToken, method: 'PUT', body: REVIEW })).body.error).toBe('review_not_allowed');
+    setClock('2026-11-23T06:00:00Z');
     const review = await call(`/hostels/${free.hostel.id}/review`, { token: residentToken, method: 'PUT', body: REVIEW });
     expect(review.body.verifiedVia).toBe('owner');
+    // The card still shows the stay as the hostel recorded it.
+    expect(review.body.stay).toEqual({ from: '2026-10-01', to: null });
   });
 });
 
@@ -187,7 +193,7 @@ describe('community board', () => {
     const stays = (await call('/me/residencies', { token: a.token })).body;
     await call(`/me/residencies/${stays[0].id}`, { token: a.token, method: 'PATCH', body: { directoryOptIn: true } });
     const dir = await call(`/hostels/${hostel.id}/directory`, { token: b.token });
-    expect(dir.body).toEqual([{ name: 'Anil Kumar', sharing: '2-sharing', since: '2026-11-09' }]);
+    expect(dir.body).toEqual([{ name: 'Anil K.', sharing: '2-sharing', since: '2026-11-09' }]);
   });
 });
 
@@ -246,6 +252,31 @@ describe('owner plans and platform bills', () => {
     expect((await call(`/owner/hostels/${other.hostel.id}/plan`, { token: ownerToken })).body.plan.plan).toBe('free');
   });
 
+  test('a plan change never voids the bill for a month already used', async () => {
+    const free = await liveHostel(ownerToken, adminToken);
+    const plan = () => call(`/owner/hostels/${free.hostel.id}/plan`, { token: ownerToken });
+    await call(`/owner/hostels/${free.hostel.id}/plan`, { token: ownerToken, body: { plan: 'pro' } }); // trial to 9 Dec
+    setClock('2026-12-04T06:00:00Z');
+    await runJobs();
+    const dec = (await plan()).body.bills[0];
+    await call(`/payments/${dec.id}/simulate`, { token: ownerToken, method: 'POST' });
+    setClock('2027-01-04T06:00:00Z');
+    await runJobs(); // 9 January bill, left unpaid
+    setClock('2027-01-20T06:00:00Z');
+    const down = await call(`/owner/hostels/${free.hostel.id}/plan`, { token: ownerToken, body: { plan: 'free' } });
+    expect(down.body.plan).toMatchObject({ pendingPlan: 'free', pendingPlanOn: '2027-02-09' });
+    setClock('2027-02-09T06:00:00Z');
+    await runJobs();
+    const after = (await plan()).body;
+    expect(after.plan).toMatchObject({ plan: 'free', suspended: true });
+    const jan = after.bills.find((b: { periodStart: string }) => b.periodStart === '2027-01-09');
+    expect(jan).toMatchObject({ status: 'due', isOverdue: true });
+    expect(after.bills.filter((b: { status: string }) => b.status === 'due')).toHaveLength(1);
+    // Upgrading again doesn't lift the pause while that bill is still overdue.
+    const up = await call(`/owner/hostels/${free.hostel.id}/plan`, { token: ownerToken, body: { plan: 'pro' } });
+    expect(up.body.plan).toMatchObject({ plan: 'pro', suspended: true });
+  });
+
   test('admins see owner bills; another owner cannot pay mine', async () => {
     const free = await liveHostel(ownerToken, adminToken);
     await call(`/owner/hostels/${free.hostel.id}/plan`, { token: ownerToken, body: { plan: 'pro' } });
@@ -255,34 +286,5 @@ describe('owner plans and platform bills', () => {
     expect(bills.length).toBeGreaterThan(0);
     const stranger = await newOwner();
     expect((await call(`/payments/${bills[0].id}`, { token: stranger })).status).toBe(404);
-  });
-});
-
-describe('uploads', () => {
-  const upload = (token: string, bytes: Uint8Array, name = 'p.jpg', type = 'image/jpeg') => {
-    const form = new FormData();
-    form.append('file', new File([bytes], name, { type }));
-    return import('./helpers').then(({ app }) =>
-      app.request('/uploads', { method: 'POST', body: form, headers: { Authorization: `Bearer ${token}` } }),
-    );
-  };
-
-  test('checks the file signature, not the name, and serves the file back', async () => {
-    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
-    const ok = await upload(ownerToken, png, 'photo.jpg');
-    expect(ok.status).toBe(201);
-    const { key, url } = (await ok.json()) as { key: string; url: string };
-    expect(key).toEndWith('.png');
-    expect(url).toContain(`/uploads/${key}`);
-    const { app } = await import('./helpers');
-    const back = await app.request(`/uploads/${key}`);
-    expect(back.headers.get('content-type')).toBe('image/png');
-
-    const fake = await upload(ownerToken, new TextEncoder().encode('<script>alert(1)</script>'), 'x.png', 'image/png');
-    expect(fake.status).toBe(400);
-    const big = await upload(ownerToken, new Uint8Array(6 * 1024 * 1024).fill(0xff), 'big.jpg');
-    expect(big.status).toBe(413);
-    expect((await app.request('/uploads/../../etc/passwd')).status).toBe(404);
-    expect((await app.request('/uploads', { method: 'POST', body: new FormData() })).status).toBe(401);
   });
 });

@@ -1,28 +1,39 @@
 import type { User, VisitStatus } from '@hostels/shared';
-import { newId } from '@hostels/shared';
+import { newId, VISIT_NEXT, visitDateProblem } from '@hostels/shared';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db';
 import { clock } from '../lib/clock';
+import { isUniqueViolation } from '../lib/db-errors';
 import { AppError, notFound } from '../lib/errors';
 import { hostelIdsOwnedBy, ownedHostel } from './access';
 
 const toVisit = (v: typeof schema.visitRequests.$inferSelect) => ({ ...v, createdAt: v.createdAt.toISOString() });
 
+const alreadyWaiting = () => new AppError('invalid_state', 'You already have a visit request waiting at this hostel');
+
 export async function requestVisit(user: User, hostelId: string, input: { preferredDate: string; message: string }) {
   const db = getDb();
   const [h] = await db.select().from(schema.hostels).where(and(eq(schema.hostels.id, hostelId), eq(schema.hostels.status, 'live')));
   if (!h) throw notFound('Hostel');
-  if (input.preferredDate < clock.today()) throw new AppError('validation', 'Pick today or a later date', 400);
+  if (h.ownerId === user.id) throw new AppError('invalid_state', 'This is your own hostel, so there is no visit to request.');
+  const problem = visitDateProblem(input.preferredDate, clock.today());
+  if (problem) throw new AppError('validation', problem, 400);
   const [open] = await db
     .select({ id: schema.visitRequests.id })
     .from(schema.visitRequests)
     .where(and(eq(schema.visitRequests.hostelId, h.id), eq(schema.visitRequests.userId, user.id), eq(schema.visitRequests.status, 'new')));
-  if (open) throw new AppError('invalid_state', 'You already have a visit request waiting at this hostel');
-  const [row] = await db
-    .insert(schema.visitRequests)
-    .values({ id: newId('vis'), hostelId: h.id, userId: user.id, ...input, createdAt: clock.now() })
-    .returning();
-  return toVisit(row!);
+  if (open) throw alreadyWaiting();
+  try {
+    const [row] = await db
+      .insert(schema.visitRequests)
+      .values({ id: newId('vis'), hostelId: h.id, userId: user.id, ...input, createdAt: clock.now() })
+      .returning();
+    return toVisit(row!);
+  } catch (e) {
+    // A double-submitted form: both requests passed the check above, and the partial unique index lets one in.
+    if (isUniqueViolation(e, 'visit_requests_one_open')) throw alreadyWaiting();
+    throw e;
+  }
 }
 
 export async function myVisits(user: User) {
@@ -33,6 +44,21 @@ export async function myVisits(user: User) {
     .where(eq(schema.visitRequests.userId, user.id))
     .orderBy(desc(schema.visitRequests.createdAt));
   return rows.map((r) => ({ ...toVisit(r.visit), hostel: r.hostel }));
+}
+
+/** A seeker withdraws a visit request the hostel has not acted on yet. */
+export async function cancelVisit(user: User, visitId: string) {
+  const db = getDb();
+  const [v] = await db.select().from(schema.visitRequests).where(eq(schema.visitRequests.id, visitId));
+  if (!v || v.userId !== user.id) throw notFound('Visit request');
+  // Conditional on status, so a hostel reply landing at the same moment wins and the seeker is told.
+  const [row] = await db
+    .update(schema.visitRequests)
+    .set({ status: 'closed' })
+    .where(and(eq(schema.visitRequests.id, v.id), eq(schema.visitRequests.status, 'new')))
+    .returning();
+  if (!row) throw new AppError('invalid_state', 'The hostel has already responded to this request');
+  return toVisit(row);
 }
 
 export async function ownerVisits(user: User, status?: VisitStatus) {
@@ -52,11 +78,30 @@ export async function ownerVisits(user: User, status?: VisitStatus) {
   return rows.map((r) => ({ ...toVisit(r.visit), hostelName: r.hostelName, visitor: r.visitor }));
 }
 
+/**
+ * The owner's inbox moves a request forward only (`VISIT_NEXT`): closed is final, so a request the seeker withdrew
+ * can't be reopened. Asking for the status it already has is a repeat tap and changes nothing. The update is
+ * conditional on the status read here, so a seeker withdrawing at the same moment wins or loses as a whole.
+ */
 export async function setVisitStatus(user: User, visitId: string, status: VisitStatus) {
   const db = getDb();
   const [v] = await db.select().from(schema.visitRequests).where(eq(schema.visitRequests.id, visitId));
   if (!v) throw notFound('Visit request');
   await ownedHostel(user, v.hostelId);
-  const [row] = await db.update(schema.visitRequests).set({ status }).where(eq(schema.visitRequests.id, v.id)).returning();
-  return toVisit(row!);
+  if (v.status === status) return toVisit(v);
+  if (!VISIT_NEXT[v.status].includes(status)) {
+    throw new AppError(
+      'invalid_state',
+      v.status === 'closed'
+        ? 'This request is closed, so it can’t be reopened. The seeker can send a new one.'
+        : 'A visit request only moves forward: from contacted it can only be closed.',
+    );
+  }
+  const [row] = await db
+    .update(schema.visitRequests)
+    .set({ status })
+    .where(and(eq(schema.visitRequests.id, v.id), eq(schema.visitRequests.status, v.status)))
+    .returning();
+  if (!row) throw new AppError('invalid_state', 'This request just changed (the seeker may have withdrawn it). Refresh to see where it stands.');
+  return toVisit(row);
 }

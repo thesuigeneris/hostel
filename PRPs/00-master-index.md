@@ -9,7 +9,7 @@ Execute in this order. A PRP starts only after the ones it depends on are `done`
 | 01 | [Auth modes: demo isolation and zero-cost secure login](01-auth-demo-isolation-and-password-login.md) | M1, M2, M3, M4 (login) | none | done (mobile runtime unverified) |
 | 02 | Authorization: property, resident and invite access audit; invite links that don't depend on phone ownership | access helpers, invites, staff/org question | 01 | planned |
 | 03 | Bed allocation and dates: atomic room edits, order call outside the transaction, IST and month-end period tests | M5, M6 | 01 | planned |
-| 04 | Financial records: payment mode (simulated/test/live), payouts and revenue excluding simulated, reconciliation view | M7 | 03 | planned |
+| 04 | Financial records: payment mode (simulated/test/live/waived), payouts and revenue counting real money only, late payments revived or refunded (edge case M1) | M7 | 03 | done on branch `payment-mode` (mobile screens unverified; see `LEDGER.md`) |
 | 05 | Workflow completeness: booking, stay, complaint and review flows checked line by line against the spec, gaps filled | spec §3–6, addendum §2–6 | 02, 03, 04 | planned |
 | 06 | Uploads: relative keys, private attachments behind auth, metadata stripping, fallback images, local demo photos | M8, M9, M10, photo loading | 02 | planned |
 | 07 | Responsive and accessible web: automated accessibility checks in Playwright, mobile-width checks per page, fixes | M11 | 05, 06 | planned |

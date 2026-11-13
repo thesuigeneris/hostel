@@ -12,13 +12,15 @@ import {
   OWNER_PLANS,
   planIncludesMeal,
   SKIP_CREDITS,
+  standardsFor,
   weekStart,
 } from '@hostels/shared';
 import { getTableName, is, sql } from 'drizzle-orm';
 import { PgTable } from 'drizzle-orm/pg-core';
 import { closeDb, type DB, getDb, schema } from './index';
 import { runMigrations } from './migrate';
-import { DEMO_PHONES, EXTRA_OWNERS, FOOD_PARTNERS, HOSTELS, PHOTOS, RULES, THEMES } from './seed-data';
+import { DEMO_PHONES, EXTRA_OWNERS, FOOD_PARTNERS, HOSTELS, RULES, THEMES } from './seed-data';
+import { seedPhotos } from './seed-photos';
 
 /** Every table in the schema, derived from it so a new table can never be missed by a reset. */
 export const ALL_TABLES = (Object.values(schema) as unknown[])
@@ -69,7 +71,7 @@ async function seedData(db: DB, today: string) {
   const ownerId = newId('usr');
   const tenantId = newId('usr');
   await db.insert(schema.users).values([
-    { id: adminId, phone: DEMO_PHONES.admin, name: 'Demo Admin', role: 'admin' },
+    { id: adminId, phone: DEMO_PHONES.admin, name: 'Demo Admin', role: 'admin', adminGrantedAt: new Date() },
     { id: ownerId, phone: DEMO_PHONES.owner, name: 'Demo Owner', role: 'owner', email: 'owner@example.com' },
     { id: tenantId, phone: DEMO_PHONES.tenant, name: 'Demo Tenant', role: 'tenant' },
   ]);
@@ -84,6 +86,7 @@ async function seedData(db: DB, today: string) {
   const weeks = [thisWeek, addDays(thisWeek, 7)];
   const created: { id: string; partner: boolean; foodAvailable: boolean; rooms: (typeof schema.roomTypes.$inferInsert)[] }[] = [];
 
+  const photos = await seedPhotos();
   let photoCursor = 0;
   let partnerIndex = 0;
   let freeIndex = 0;
@@ -112,6 +115,17 @@ async function seedData(db: DB, today: string) {
       partnerStatus: h.partner ? 'verified' : 'none',
       platformFeePct: 10,
     });
+    if (h.partner) {
+      await db.insert(schema.partnerApplications).values({
+        id: newId('pap'),
+        hostelId,
+        status: 'verified',
+        checklist: standardsFor(h.foodAvailable).map((s) => s.id),
+        note: 'Seed data: inspected in person.',
+        appliedAt: istInstant(addMonths(today, -2), 10),
+        decidedAt: istInstant(addMonths(today, -2), 16),
+      });
+    }
     // Partners are on the Partner plan; every other free listing is on Pro so the management app has data.
     const plan = h.partner ? 'partner' : freeIndex++ % 2 === 0 ? 'pro' : 'free';
     const ownerPlanId = newId('opl');
@@ -137,12 +151,14 @@ async function seedData(db: DB, today: string) {
         amount: OWNER_PLANS[plan].price,
         dueDate: p.start,
         status: 'paid',
+        // Demo data: no money moved, so it never shows up as revenue.
+        paymentMode: 'simulated',
         razorpayPaymentId: `pay_seed_${hostelId.slice(4)}`,
         paidAt: istInstant(p.start, 10),
       });
     }
     await db.insert(schema.hostelPhotos).values(
-      [0, 1, 2].map((i) => ({ id: newId('pho'), hostelId, url: PHOTOS[(photoCursor + i) % PHOTOS.length]!, sortOrder: i })),
+      [0, 1, 2].map((i) => ({ id: newId('pho'), hostelId, url: photos[(photoCursor + i) % photos.length]!, sortOrder: i })),
     );
     photoCursor += 1;
     const rooms = h.rooms.map((r) => ({
@@ -228,6 +244,7 @@ async function seedResidents(db: DB, today: string, ctx: { tenantId: string; own
         periodEnd: p.end,
         ...computeBill({ rent: room.monthlyRent, mealPlan: opts.plan, skipCredits: n === 0 ? 0 : 130 }),
         status: 'paid',
+        paymentMode: 'simulated',
         dueDate: p.start,
         razorpayOrderId: `order_seed_${newId('inv').slice(4)}`,
         razorpayPaymentId: `pay_seed_${newId('inv').slice(4)}`,

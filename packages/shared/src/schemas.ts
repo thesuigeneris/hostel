@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { passwordProblem, PASSWORD_MAX_LENGTH } from './passwords';
 import { DIETS, MEAL_PLANS, MEALS } from './pricing';
-import { isValidDate } from './time';
+import { hasVisibleText, textLength } from './resident';
+import { SEARCH_TEXT_MAX, visitDateProblem } from './seeker';
+import { type ISODate, istDate, isValidDate } from './time';
 import {
   GENDER_TYPES,
   ISSUE_CATEGORIES,
@@ -79,8 +81,16 @@ const isoDate = z.string().refine(isValidDate, 'Use a YYYY-MM-DD date');
 const rupees = z.coerce.number().int().min(0).max(1_000_000);
 const shortText = (max: number) => z.string().trim().max(max);
 const stringList = z.array(z.string().trim().min(1).max(80)).max(30);
-/** Photo links must be plain web URLs; `javascript:` and `data:` links are refused. */
+/** Links must be plain web URLs; `javascript:` and `data:` links are refused. */
 const webUrl = z.string().trim().max(500).url().refine((v) => /^https?:\/\//i.test(v), 'Use an http or https link');
+/**
+ * A photo is always one the caller uploaded through `POST /uploads`, sent as the `upload` receipt it returned.
+ * Outside links aren't accepted: they would skip the upload checks and metadata stripping.
+ */
+const uploadReceipt = z
+  .string()
+  .trim()
+  .regex(/^[a-z]{3}_[a-z0-9]{16}\.(jpg|png|webp)\.[0-9a-f]{32}$/, 'Upload the photo, then attach it');
 
 export const hostelInputSchema = z.object({
   name: z.string().trim().min(3).max(80),
@@ -112,10 +122,20 @@ export const roomTypeInputSchema = z
   .object(roomFields)
   .refine((r) => r.bedsAvailable <= r.totalBeds, { message: 'Beds free cannot exceed total beds', path: ['bedsAvailable'] });
 export type RoomTypeInput = z.input<typeof roomTypeInputSchema>;
-export const roomTypeUpdateSchema = z.object(roomFields).partial();
+/**
+ * `totalBedsWas` and `bedsAvailableWas` are the counts the owner's form showed. The API applies the difference
+ * to the current counts, so a bed taken by a subscription while the form was open isn't given back.
+ */
+export const roomTypeUpdateSchema = z
+  .object(roomFields)
+  .partial()
+  .extend({
+    totalBedsWas: z.coerce.number().int().min(0).max(500).optional(),
+    bedsAvailableWas: z.coerce.number().int().min(0).max(500).optional(),
+  });
 export type RoomTypeUpdateInput = z.input<typeof roomTypeUpdateSchema>;
 
-export const photoInputSchema = z.object({ url: webUrl });
+export const photoInputSchema = z.object({ photo: uploadReceipt });
 export const photoOrderSchema = z.object({ photoIds: z.array(z.string()).min(1).max(30) });
 
 const boolParam = z
@@ -125,7 +145,7 @@ const boolParam = z
 
 export const SEARCH_SORTS = ['recommended', 'rent_asc', 'rent_desc', 'distance', 'rating'] as const;
 export const searchSchema = z.object({
-  q: shortText(80).optional(),
+  q: z.string().trim().max(SEARCH_TEXT_MAX, `Search text can be at most ${SEARCH_TEXT_MAX} characters`).optional(),
   area: shortText(60).optional(),
   minRent: rupees.optional(),
   maxRent: rupees.optional(),
@@ -143,10 +163,17 @@ export const searchSchema = z.object({
 });
 export type SearchInput = z.input<typeof searchSchema>;
 
-export const visitRequestSchema = z.object({
-  preferredDate: isoDate,
-  message: shortText(500).default(''),
-});
+/** A visit is for today up to `VISIT_MAX_DAYS_AHEAD` days ahead. The API passes its own clock; forms use today in IST. */
+export function visitRequestSchemaOn(today: () => ISODate) {
+  return z.object({
+    preferredDate: z.string().superRefine((date, ctx) => {
+      const problem = visitDateProblem(date, today());
+      if (problem) ctx.addIssue({ code: 'custom', message: problem });
+    }),
+    message: shortText(500).default(''),
+  });
+}
+export const visitRequestSchema = visitRequestSchemaOn(() => istDate());
 export type VisitRequestInput = z.input<typeof visitRequestSchema>;
 export const visitStatusSchema = z.object({ status: z.enum(VISIT_STATUSES) });
 
@@ -205,6 +232,25 @@ export const payoutGenerateSchema = z.object({ month: monthSchema });
 // ---------------------------------------------------------------------------
 // Residents, reviews, issues, community, owner plans
 
+/**
+ * Text residents write, counted in characters as people count them (an emoji is one, see `textLength`), trimmed,
+ * and refused when there is nothing visible in it.
+ */
+export const TEXT_LIMITS = { post: 1000, comment: 500, issueTitle: 120, issueDetails: 2000, issueUpdate: 1000, review: 2000 } as const;
+const fmt = (n: number) => n.toLocaleString('en-IN');
+const residentText = (opts: { min?: number; max: number; what: string }) => {
+  const min = opts.min ?? 1;
+  return z
+    .string()
+    .trim()
+    .superRefine((v, ctx) => {
+      const n = textLength(v);
+      if (min > 0 && !hasVisibleText(v)) ctx.addIssue({ code: 'custom', message: `Write the ${opts.what} first` });
+      else if (n < min) ctx.addIssue({ code: 'custom', message: `Write at least ${min} characters` });
+      else if (n > opts.max) ctx.addIssue({ code: 'custom', message: `Keep the ${opts.what} to ${fmt(opts.max)} characters (it has ${fmt(n)})` });
+    });
+};
+
 const rating = z.coerce.number().int().min(1).max(5);
 export const reviewInputSchema = z.object({
   rating,
@@ -212,7 +258,7 @@ export const reviewInputSchema = z.object({
   food: rating.nullable().optional(),
   safety: rating,
   responsiveness: rating,
-  body: z.string().trim().min(20, 'Write at least 20 characters').max(2000),
+  body: residentText({ min: 20, max: TEXT_LIMITS.review, what: 'review' }),
 });
 export type ReviewInput = z.input<typeof reviewInputSchema>;
 export const reasonSchema = z.object({ reason: z.string().trim().min(3).max(300) });
@@ -220,23 +266,28 @@ export const ownerReplySchema = z.object({ reply: z.string().trim().min(2).max(1
 
 export const issueInputSchema = z.object({
   category: z.enum(ISSUE_CATEGORIES),
-  title: z.string().trim().min(4).max(120),
-  description: shortText(2000).default(''),
-  photoUrl: webUrl.nullable().optional(),
+  title: residentText({ min: 4, max: TEXT_LIMITS.issueTitle, what: 'title' }),
+  description: residentText({ min: 0, max: TEXT_LIMITS.issueDetails, what: 'details' }).default(''),
+  photo: uploadReceipt.nullable().optional(),
 });
 export type IssueInput = z.input<typeof issueInputSchema>;
 export const issueUpdateSchema = z
-  .object({ status: z.enum(ISSUE_STATUSES).optional(), message: shortText(1000).optional() })
-  .refine((v) => v.status || v.message, 'Send a status or a message');
+  .object({
+    status: z.enum(ISSUE_STATUSES).optional(),
+    message: residentText({ min: 0, max: TEXT_LIMITS.issueUpdate, what: 'comment' }).optional(),
+    /** The status the caller's page showed. A status change only applies if the issue is still there. */
+    from: z.enum(ISSUE_STATUSES).optional(),
+  })
+  .refine((v) => v.status || v.message, 'Write a comment or pick a status');
 export type IssueUpdateInput = z.input<typeof issueUpdateSchema>;
 
 export const postInputSchema = z.object({
   kind: z.enum(POST_KINDS).default('general'),
-  body: z.string().trim().min(1).max(1000),
-  photoUrl: webUrl.nullable().optional(),
+  body: residentText({ max: TEXT_LIMITS.post, what: 'post' }),
+  photo: uploadReceipt.nullable().optional(),
 });
 export type PostInput = z.input<typeof postInputSchema>;
-export const commentInputSchema = z.object({ body: z.string().trim().min(1).max(500) });
+export const commentInputSchema = z.object({ body: residentText({ max: TEXT_LIMITS.comment, what: 'reply' }) });
 
 export const ownerPlanChangeSchema = z.object({ plan: z.enum(OWNER_PLAN_TIERS) });
 export const residentInputSchema = z.object({

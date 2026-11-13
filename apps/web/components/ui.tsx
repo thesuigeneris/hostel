@@ -16,7 +16,8 @@ const VARIANTS: Record<Variant, string> = {
   // White on amber is 2.7:1, so amber buttons carry dark text (5.9:1).
   food: 'bg-food text-ink hover:bg-food/90',
 };
-const SIZES = { sm: 'h-9 px-3 text-sm', md: 'h-11 px-4 text-sm', lg: 'h-12 px-6 text-base' };
+// `xs` is for text-sized actions inside a card (delete, report): still a 24 px target.
+const SIZES = { xs: 'min-h-6 px-1.5 text-xs', sm: 'h-9 px-3 text-sm', md: 'h-11 px-4 text-sm', lg: 'h-12 px-6 text-base' };
 
 export function buttonClass(variant: Variant = 'primary', size: keyof typeof SIZES = 'md', extra?: string) {
   return cx(
@@ -57,7 +58,8 @@ const STATUS_LABELS = {
   partner: { none: 'Not a partner', applied: 'Applied', verified: 'Verified', rejected: 'Not approved' },
   visit: { new: 'Requested', contacted: 'Hostel contacted', closed: 'Closed' },
   subscription: { pending: 'Awaiting payment', active: 'Active', cancelled: 'Cancelled', ended: 'Ended', expired: 'Expired, not paid' },
-  invoice: { due: 'Due', paid: 'Paid', void: 'Void', overdue: 'Overdue', unpaid: 'Due' },
+  invoice: { due: 'Due', paid: 'Paid', void: 'Cancelled', waived: 'Waived', overdue: 'Overdue', unpaid: 'Due' },
+  refund: { refund_due: 'Refund due', refunded: 'Refunded' },
   move: { scheduled: 'Scheduled', completed: 'Done', cancelled: 'Cancelled' },
   payout: { pending: 'Pending', paid: 'Paid' },
   residency: { invited: 'Invited', active: 'Living here', ended: 'Moved out', declined: 'Declined' },
@@ -71,6 +73,7 @@ export function StatusBadge({ status, kind }: { status: string; kind?: StatusKin
   const tone: Record<string, keyof typeof BADGES> = {
     live: 'green', verified: 'green', active: 'green', paid: 'green', resolved: 'green', closed: 'gray', contacted: 'green', completed: 'green',
     pending: 'food', applied: 'food', due: 'food', unpaid: 'food', invited: 'food', acknowledged: 'food', in_progress: 'food', scheduled: 'food', new: 'food',
+    refund_due: 'red', refunded: 'gray', waived: 'gray',
     rejected: 'red', void: 'gray', expired: 'gray', cancelled: 'gray', ended: 'gray', declined: 'gray', draft: 'gray', open: 'red', overdue: 'red', none: 'gray',
   };
   const labels: Record<string, string> | undefined = kind ? STATUS_LABELS[kind] : undefined;
@@ -191,7 +194,9 @@ export function Stars({ value, size = 'sm' }: { value: number | null; size?: 'sm
 
 export function Table({ head, children }: { head: string[]; children: ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
+    // `relative`: screen-reader-only text in a cell is positioned absolutely; without a positioned scroller it escapes
+    // the scroll box and widens the whole page on phones.
+    <div className="relative overflow-x-auto rounded-2xl border border-line bg-surface">
       <table className="w-full text-left text-sm">
         <thead className="border-b border-line bg-bg text-xs uppercase tracking-wide text-ink-muted">
           <tr>{head.map((h) => <th key={h} scope="col" className="whitespace-nowrap px-4 py-3 font-medium">{h}</th>)}</tr>
@@ -225,6 +230,15 @@ export function Pagination({ page, pages, href }: { page: number; pages: number;
       ))}
       {page < pages && <a href={href(page + 1)} className={cx(item, 'bg-surface text-ink-soft hover:text-brand')} rel="next">Next</a>}
     </nav>
+  );
+}
+
+/** A filter link in a row of filters (36 px target). The current one is filled; pair it with `aria-current`. */
+export function pillClass(active: boolean) {
+  return cx(
+    'inline-flex min-h-9 items-center gap-1 rounded-full px-3 text-sm no-underline',
+    focusRing,
+    active ? 'bg-brand text-brand-on' : 'border border-line bg-surface text-ink-soft hover:text-brand',
   );
 }
 

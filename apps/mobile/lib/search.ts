@@ -1,32 +1,100 @@
-import type { GenderType, SearchInput, SharingType } from '@hostels/shared';
+import { GENDER_LABEL, type GenderType, rupees, type SearchInput, SHARING_LABEL, type SharingType } from '@hostels/shared';
+
+export type Sort = 'recommended' | 'rent_asc' | 'rent_desc' | 'rating' | 'distance';
 
 export type Filters = {
   q: string;
+  area: string | null;
   verified: boolean;
   food: boolean;
+  topRated: boolean;
   gender: GenderType | null;
   sharing: SharingType | null;
+  minRent: number | null;
   maxRent: number | null;
+  sort: Sort;
   near: { lat: number; lng: number } | null;
 };
 
-export const EMPTY_FILTERS: Filters = { q: '', verified: false, food: false, gender: null, sharing: null, maxRent: null, near: null };
+export const EMPTY_FILTERS: Filters = {
+  q: '',
+  area: null,
+  verified: false,
+  food: false,
+  topRated: false,
+  gender: null,
+  sharing: null,
+  minRent: null,
+  maxRent: null,
+  sort: 'recommended',
+  near: null,
+};
 
 export const RENT_STEPS = [6000, 8000, 10000, 12000, 15000] as const;
+export const PAGE_SIZE = 20;
 
-/** Turns the explore screen's filters into an API search. Near me sorts by distance within 5 km. */
-export function toSearch(f: Filters): SearchInput {
-  const s: SearchInput = { limit: 50 };
+/** Sorts offered on the explore screen. Distance needs a location, so it only shows once Near me is on. */
+export const SORTS: { value: Sort; label: string }[] = [
+  { value: 'recommended', label: 'Recommended' },
+  { value: 'rent_asc', label: 'Rent: low to high' },
+  { value: 'rent_desc', label: 'Rent: high to low' },
+  { value: 'rating', label: 'Rating' },
+  { value: 'distance', label: 'Distance' },
+];
+
+/** Turns the explore screen's filters into an API search. Near me limits to 5 km and sorts by distance unless another sort is picked. */
+export function toSearch(f: Filters, page = 1): SearchInput {
+  const s: SearchInput = { limit: PAGE_SIZE };
+  if (page > 1) s.page = page;
   if (f.q.trim()) s.q = f.q.trim();
+  if (f.area) s.area = f.area;
   if (f.verified) s.verified = 'true';
   if (f.food) s.food = 'true';
+  if (f.topRated) s.minRating = 4;
   if (f.gender) s.gender = f.gender;
   if (f.sharing) s.sharing = f.sharing;
+  if (f.minRent) s.minRent = f.minRent;
   if (f.maxRent) s.maxRent = f.maxRent;
-  if (f.near) Object.assign(s, { lat: f.near.lat, lng: f.near.lng, radiusKm: 5, sort: 'distance' });
+  if (f.near) Object.assign(s, { lat: f.near.lat, lng: f.near.lng, radiusKm: 5 });
+  const sort = f.sort === 'distance' && !f.near ? 'recommended' : f.near && f.sort === 'recommended' ? 'distance' : f.sort;
+  if (sort !== 'recommended') s.sort = sort;
   return s;
 }
 
 export function activeFilterCount(f: Filters) {
-  return [f.verified, f.food, f.gender, f.sharing, f.maxRent, f.near].filter(Boolean).length;
+  return [f.area, f.verified, f.food, f.topRated, f.gender, f.sharing, f.minRent, f.maxRent, f.near, f.sort !== 'recommended'].filter(Boolean).length;
 }
+
+/** Reads a rent typed into a field: digits only, empty means no limit. */
+export function parseRent(text: string): number | null {
+  const n = Number(text.replace(/[^\d]/g, ''));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Whether another page of results exists after `loaded` items. */
+export const hasMore = (loaded: number, total: number) => loaded < total;
+
+/** One filter taken off, as offered when a search finds nothing. */
+export type Relaxation = { key: string; label: string; patch: Partial<Filters> };
+
+/**
+ * Each filter in force, as a change that removes just that one. The screen counts what each would find and offers
+ * the ones that find something, so an empty search always has a next step.
+ */
+export function relaxations(f: Filters): Relaxation[] {
+  const out: Relaxation[] = [];
+  if (f.q.trim()) out.push({ key: 'q', label: `Remove “${f.q.trim()}”`, patch: { q: '' } });
+  if (f.area) out.push({ key: 'area', label: `Remove ${f.area}`, patch: { area: null } });
+  if (f.verified) out.push({ key: 'verified', label: 'Remove Verified only', patch: { verified: false } });
+  if (f.food) out.push({ key: 'food', label: 'Remove Food', patch: { food: false } });
+  if (f.topRated) out.push({ key: 'topRated', label: 'Remove 4★ and up', patch: { topRated: false } });
+  if (f.gender) out.push({ key: 'gender', label: `Remove ${GENDER_LABEL[f.gender]}`, patch: { gender: null } });
+  if (f.sharing) out.push({ key: 'sharing', label: `Remove ${SHARING_LABEL[f.sharing]}`, patch: { sharing: null } });
+  if (f.minRent) out.push({ key: 'minRent', label: `Remove rent from ${rupees(f.minRent)}`, patch: { minRent: null } });
+  if (f.maxRent) out.push({ key: 'maxRent', label: `Remove rent up to ${rupees(f.maxRent)}`, patch: { maxRent: null } });
+  if (f.near) out.push({ key: 'near', label: 'Remove Near me', patch: { near: null, sort: f.sort === 'distance' ? 'recommended' : f.sort } });
+  return out;
+}
+
+/** "Rent from" above "Rent up to" can never match anything. */
+export const rentInverted = (f: Filters) => f.minRent !== null && f.maxRent !== null && f.minRent > f.maxRent;

@@ -1,4 +1,5 @@
 import type { Diet, Meal, MealPlan } from './pricing';
+import type { PartnerCheck } from './seeker';
 import type { ISODate } from './time';
 
 export const ROLES = ['tenant', 'owner', 'admin'] as const;
@@ -24,6 +25,38 @@ export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number];
 
 export const INVOICE_STATUSES = ['due', 'paid', 'void'] as const;
 export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
+
+/**
+ * How a bill was settled; null while it is due, or when it was voided by the system (a plan change, a cancelled stay).
+ * - `razorpay_live`: Razorpay with live keys (`rzp_live_`). The only real money.
+ * - `razorpay_test`: Razorpay with test keys (`rzp_test_`). Moves no money.
+ * - `simulated`: the "Simulate payment" button, or a stub-signed checkout, on a dev or demo instance.
+ * - `waived`: an admin waived an owner bill. The bill is void; nothing was paid.
+ */
+export const PAYMENT_MODES = ['razorpay_live', 'razorpay_test', 'simulated', 'waived'] as const;
+export type PaymentMode = (typeof PAYMENT_MODES)[number];
+/** The modes that are real money. Payouts, revenue and owner insights count only these. */
+export const REAL_MONEY_MODES = ['razorpay_live'] as const satisfies readonly PaymentMode[];
+/** Bills paid in a period that money figures leave out because no real money moved, in rupees. */
+export type NotCounted = { simulated: number; test: number };
+
+/**
+ * Why a payment could not be applied to its bill, so it has to be refunded. Recorded instead of losing the money when
+ * a payment lands after its bill stopped being payable (the bed hold expired, the plan changed, an admin waived it).
+ */
+export const PAYMENT_EXCEPTION_REASONS = [
+  'bed_taken',
+  'has_other_plan',
+  'hostel_unavailable',
+  'bill_cancelled',
+  'bill_waived',
+  'duplicate_payment',
+  /** A paid bill for a move that was then cancelled: the rent paid above the room the payer stayed in is owed back. */
+  'move_cancelled',
+] as const;
+export type PaymentExceptionReason = (typeof PAYMENT_EXCEPTION_REASONS)[number];
+export const PAYMENT_EXCEPTION_STATUSES = ['refund_due', 'refunded'] as const;
+export type PaymentExceptionStatus = (typeof PAYMENT_EXCEPTION_STATUSES)[number];
 
 export const MOVE_STATUSES = ['scheduled', 'completed', 'cancelled'] as const;
 export type MoveStatus = (typeof MOVE_STATUSES)[number];
@@ -177,6 +210,8 @@ export type HostelDetail = Hostel & {
   ratings: RatingBreakdown;
   /** Null until the hostel has enough issues in the window to be meaningful. */
   transparency: TransparencyStats | null;
+  /** For verified partners: what the in-person check covered. Null for everyone else. */
+  partnerCheck?: PartnerCheck | null;
 };
 
 export type VisitRequest = {
@@ -244,6 +279,7 @@ export type Invoice = {
   razorpayOrderId: string | null;
   razorpayPaymentId: string | null;
   paidAt: string | null;
+  paymentMode: PaymentMode | null;
   /** Derived on read. */
   isOverdue: boolean;
 };
@@ -266,8 +302,13 @@ export type MoveRequest = {
   toRoomTypeId: string;
   moveDate: ISODate;
   status: MoveStatus;
+  /** Set when the move was cancelled for the tenant (the destination stopped taking residents), in plain words. */
+  cancelReason: string | null;
   createdAt: string;
 };
+
+/** A move as the tenant sees it: where to, and whether that hostel is taking residents right now. */
+export type MoveView = MoveRequest & { toHostelName: string; toSharing: SharingType | null; toHostelOpen: boolean };
 
 export type Payout = {
   id: string;
@@ -290,8 +331,12 @@ export type Health = {
   service: 'hostels-api';
   version: string;
   db: 'up' | 'down';
+  /** `live` means Razorpay keys are configured (test or live keys); `payments` says which. */
   razorpay: 'live' | 'stub';
-  msg91: 'live' | 'stub';
+  /** How payments taken now are recorded. Only `razorpay_live` is real money. */
+  payments: Exclude<PaymentMode, 'waived'>;
+  /** How OTP login works: real texts, the fixed development code, or off (phone + password only). */
+  msg91: 'live' | 'stub' | 'off';
   devMode: boolean;
 };
 
@@ -303,11 +348,13 @@ export const ERROR_CODES = [
   'internal',
   'no_beds_available',
   'already_subscribed',
+  'cannot_subscribe_own_hostel',
   'not_verified',
   'cutoff_passed',
   'meal_not_in_plan',
   'otp_invalid',
   'otp_rate_limited',
+  'rate_limited',
   'invoice_already_paid',
   'signature_invalid',
   'move_not_allowed',
@@ -342,6 +389,8 @@ export type Review = {
   body: string;
   ownerReply: string | null;
   ownerRepliedAt: string | null;
+  /** Set when the owner changed their reply after posting it; the card says "edited" with this date. */
+  ownerReplyEditedAt: string | null;
   hidden: boolean;
   createdAt: string;
   updatedAt: string;
@@ -368,9 +417,13 @@ export type Residency = {
 };
 
 export type MyResidency = Residency & {
-  hostel: { id: string; name: string; slug: string; area: string };
+  hostel: { id: string; name: string; slug: string; area: string; foodAvailable: boolean };
   canReview: boolean;
+  /** Why this stay cannot be reviewed yet (or any more), when `canReview` is false. */
+  reviewBlockedReason: string | null;
   hasReview: boolean;
+  /** The resident's own review of this hostel, if they wrote one. */
+  review: (Review & { hiddenReason: string | null }) | null;
 };
 
 export type IssueView = {
@@ -387,9 +440,14 @@ export type IssueView = {
   closedAt: string | null;
   reporter: { id: string; name: string } | null;
   mine: boolean;
+  /** The reporter moved out: they can still read their issue, but not comment, me-too, confirm or reopen. */
+  readOnly: boolean;
   upvotes: number;
   upvotedByMe: boolean;
+  /** Open, unanswered by the hostel since it was reported or last reopened, for over a day (`issueNeedsResponse`). */
   needsResponse: boolean;
+  /** When the hostel's answer has been awaited since (the report or the latest reopen); null once answered. */
+  awaitingReplySince: string | null;
 };
 
 export type IssueDetail = IssueView & {
@@ -401,6 +459,8 @@ export type IssueDetail = IssueView & {
     createdAt: string;
     author: string;
     byOwner: boolean;
+    /** Written by the platform itself (the issue closed on its own), not by a person. */
+    bySystem: boolean;
   }[];
 };
 
@@ -425,7 +485,9 @@ export type MySubscription = {
   roomType: RoomType;
   currentPeriod: { index: number; start: ISODate; end: ISODate };
   invoices: Invoice[];
-  scheduledMove: MoveRequest | null;
+  scheduledMove: MoveView | null;
+  /** A move we cancelled for the tenant in the last 30 days, with the reason, so they know why they're staying. */
+  cancelledMove: MoveView | null;
 };
 
 export type MenuDay = {
@@ -441,11 +503,19 @@ export type MenuDay = {
     skipped: boolean;
     cutoff: string;
     canChange: boolean;
+    /** What skipping this meal takes off a bill; 0 when no bill will carry it (the plan ends first). */
     credit: number;
   }[];
 };
 
-export type MyMenu = { mealPlan: MealPlan; diet: Diet; planLabel: string; days: MenuDay[] };
+export type MyMenu = {
+  mealPlan: MealPlan;
+  diet: Diet;
+  planLabel: string;
+  /** Skips dated from here on earn nothing: the plan ends before the bill that would carry them. Null if none. */
+  noCreditFrom: ISODate | null;
+  days: MenuDay[];
+};
 
 export type Headcount = {
   date: ISODate;
@@ -460,12 +530,18 @@ export type OwnerInvoice = {
   plan: OwnerPlanTier;
   periodStart: ISODate;
   periodEnd: ISODate;
+  /** What is payable: the plan price less `creditAmount` (or the used share of a month cut short by an upgrade). */
   amount: number;
+  /** Unused days already paid on the previous plan, taken off this bill. */
+  creditAmount: number;
+  /** What the credit or a shortened period is for, in words. */
+  note: string | null;
   status: InvoiceStatus;
   dueDate: ISODate;
   razorpayOrderId: string | null;
   razorpayPaymentId: string | null;
   paidAt: string | null;
+  paymentMode: PaymentMode | null;
   createdAt: string;
   isOverdue: boolean;
 };
@@ -499,6 +575,31 @@ export type PaymentPage = {
   invoice: Invoice | OwnerInvoice;
   keyId: string;
   stub: boolean;
+  /** A payment for this bill that arrived when it could no longer be applied, and is (or was) refunded. */
+  refund: PaymentException | null;
+};
+
+/** A payment we received but could not apply to its bill: a refund is owed until an admin marks it refunded. */
+export type PaymentException = {
+  id: string;
+  billKind: 'tenant' | 'owner';
+  billId: string;
+  /** The person who paid: the tenant, or the owner for a plan bill. */
+  userId: string;
+  amount: number;
+  paymentMode: Exclude<PaymentMode, 'waived'>;
+  reason: PaymentExceptionReason;
+  status: PaymentExceptionStatus;
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  createdAt: string;
+  refundedAt: string | null;
+  refundNote: string | null;
+};
+
+export type AdminPaymentException = PaymentException & {
+  hostelName: string;
+  payer: { id: string; name: string; phone: string };
 };
 
 export type CheckoutOrder = { invoiceId: string; orderId: string; amount: number; currency: 'INR'; keyId: string; stub: boolean };
@@ -529,7 +630,27 @@ export type Subscriber = {
 export type PayoutView = Payout & { hostelName: string };
 export type OwnerPayouts = {
   history: PayoutView[];
-  thisMonth: { month: string; hostels: { hostelId: string; hostelName: string; grossAmount: number; platformFee: number; netAmount: number }[] };
+  thisMonth: {
+    month: string;
+    /** Real money only (Razorpay live). */
+    hostels: { hostelId: string; hostelName: string; grossAmount: number; platformFee: number; netAmount: number }[];
+    /** Subscriber bills paid this month without real money, which payouts leave out. */
+    notCounted: NotCounted;
+  };
+};
+
+/** What the platform took in for a month: real money only, with what was left out shown separately. */
+export type PlatformRevenue = {
+  /** The IST month covered, `YYYY-MM`. */
+  month: string;
+  /** Tenant bills (rent + food − credits) paid with real money in the month. */
+  subscriptionGross: number;
+  /** Our fee on those bills, at each hostel's fee %. */
+  platformFees: number;
+  /** Owner plan bills paid with real money in the month. */
+  ownerPlans: number;
+  /** Bills paid in the month without real money (simulated, or Razorpay test mode). Never in the figures above. */
+  notCounted: { tenant: NotCounted; owner: NotCounted };
 };
 export type Area = { area: string; count: number; slug: string };
 export type AdminStats = {
@@ -540,15 +661,17 @@ export type AdminStats = {
   flaggedReviews: number;
   openReports: number;
   overdueBills: number;
+  overdueOwnerBills: number;
+  suspendedHostels: number;
   escalatedIssues: number;
-  /** Monthly recurring revenue in rupees, from what is in force today. */
-  revenue: {
-    /** Rent + food of active subscriptions (the gross we bill tenants each month). */
-    subscriptionGross: number;
-    /** Our platform fee on that gross, at each hostel's fee %. */
-    platformFees: number;
-    /** Owner software plans that are paying (not in trial, not suspended). */
-    ownerPlans: number;
+  /** Material edits of live listings in the last 7 days. */
+  listingChanges7d: number;
+  /** Verified partners that moved address or pin and need checking again. */
+  partnerRechecks: number;
+  /** Payments received that could not be applied and still have to be refunded. */
+  refundsDue: number;
+  /** This month so far, in rupees, counting real money only. */
+  revenue: PlatformRevenue & {
     /** Pro and Partner hostels still in their free trial. */
     trialHostels: number;
   };
@@ -557,9 +680,15 @@ export type AdminStats = {
 /** Issues that need an admin nudge: unacknowledged for 48 hours, or unresolved for 7 days. */
 export type EscalatedIssue = IssueView & { hostelName: string; hostelSlug: string; ageHours: number; reason: 'unacknowledged' | 'unresolved' };
 
-/** Per-hostel numbers for the owner. View counts need the Pro or Partner plan; `locked` is true on Free. */
+/**
+ * Per-hostel numbers for the owner. The summary and issue health are free. View counts, room occupancy and the
+ * month's money need Pro or Partner: `locked` is true (and those fields null) on Free or a paused plan.
+ */
 export type OwnerInsights = {
   hostelId: string;
+  /** The month the money figures cover, `YYYY-MM`. */
+  month: string;
+  plan: PlanState;
   locked: boolean;
   views30d: number | null;
   viewsByDay: { day: ISODate; count: number }[] | null;
@@ -569,4 +698,50 @@ export type OwnerInsights = {
   openIssues: number;
   rating: number | null;
   reviewCount: number;
+  occupancy: {
+    totalBeds: number;
+    freeBeds: number;
+    occupiedBeds: number;
+    occupancyPct: number | null;
+    activeResidents: number;
+    activeSubscribers: number;
+    rooms: { roomTypeId: string; sharing: SharingType; totalBeds: number; bedsAvailable: number; monthlyRent: number }[];
+  } | null;
+  /**
+   * Subscription money is what tenants paid online this month with real money (what payouts are made from); rent is the
+   * owner's own ledger.
+   */
+  revenue: {
+    subscriptionGross: number;
+    platformFeePct: number;
+    platformFee: number;
+    subscriptionNet: number;
+    /** Subscription bills paid this month without real money (simulated or Razorpay test mode), left out above. */
+    notCounted: NotCounted;
+    rentDue: number;
+    rentCollected: number;
+    planBillDue: number;
+  } | null;
+  issues: {
+    open: number;
+    needsResponse: number;
+    openByAge: { under1Day: number; days1to3: number; days3to7: number; over7Days: number };
+    byCategory: Partial<Record<IssueCategory, number>>;
+    reportedLast90Days: number;
+    medianHoursToFirstResponse: number | null;
+    medianHoursToResolve: number | null;
+  };
+  reviews: { rating: number | null; count: number; awaitingReply: number };
+  visits: { new: number; contacted: number };
+  /** What the owner owes us for this hostel's plan, shown on every plan (a paused hostel most of all). */
+  planBill: {
+    /** Unpaid plan bills, in rupees. */
+    due: number;
+    /** The oldest unpaid bill, which decides overdue and the pause. */
+    oldest: { id: string; amount: number; dueDate: ISODate; isOverdue: boolean; pausesOn: ISODate } | null;
+    suspended: boolean;
+  };
 };
+
+/** Owner Issues tab badges: issues waiting over a day for the hostel's first answer, in total and per hostel. */
+export type OwnerIssueSummary = { needsResponse: number; byHostel: Record<string, number> };

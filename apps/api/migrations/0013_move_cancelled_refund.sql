@@ -1,0 +1,1 @@
+ALTER TYPE "public"."payment_exception_reason" ADD VALUE 'move_cancelled';

@@ -14,6 +14,7 @@ const NAV = [
   ['/admin/issues', 'Escalated issues'],
   ['/admin/moderation', 'Moderation'],
   ['/admin/food', 'Food partners'],
+  ['/admin/audit', 'Audit log'],
 ] as const;
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {

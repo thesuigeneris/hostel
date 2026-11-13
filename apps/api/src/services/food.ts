@@ -1,4 +1,4 @@
-import type { Meal, MenuWeek, User } from '@hostels/shared';
+import type { ISODate, Meal, MenuWeek, User } from '@hostels/shared';
 import {
   addDays,
   canChangeSkip,
@@ -7,18 +7,19 @@ import {
   MEALS,
   type menuWeekInputSchema,
   newId,
+  periodContaining,
   planIncludesMeal,
   SKIP_CREDITS,
   skipCutoff,
   weekStart,
 } from '@hostels/shared';
-import { and, asc, eq, gte, inArray, lte } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 import { getDb, schema } from '../db';
 import { clock } from '../lib/clock';
 import { AppError, notFound } from '../lib/errors';
-import { ownedHostel, requirePlan } from './access';
-import { openSubscription } from './billing';
+import { ownedHostel, requirePlanTier } from './access';
+import { creditWindow, openSubscription } from './billing';
 
 async function loadWeek(hostelId: string, start: string): Promise<MenuWeek | null> {
   const db = getDb();
@@ -50,7 +51,8 @@ export async function ownerMenu(user: User, hostelId: string, start: string) {
 /** Replaces a week's menu. Dates must fall inside the week. */
 export async function saveMenu(user: User, hostelId: string, start: string, input: z.output<typeof menuWeekInputSchema>) {
   const h = await ownedHostel(user, hostelId);
-  await requirePlan(h.id, 'partner');
+  // A paused Partner hostel still feeds its existing subscribers, so its menu stays editable.
+  await requirePlanTier(h.id, 'partner');
   if (!isMonday(start)) throw new AppError('validation', 'Weeks start on a Monday', 400);
   const end = addDays(start, 6);
   const bad = input.items.find((i) => i.date < start || i.date > end);
@@ -113,6 +115,24 @@ export async function copyLastWeek(user: User, hostelId: string, start: string) 
 
 // --- tenant: menu with skips -------------------------------------------------
 
+/**
+ * The first day whose skip credit no bill will ever carry, or null while the plan runs on. A skip's credit goes on
+ * the bill whose credit window holds its date (`creditWindow`); a cancelled plan's bills stop at the last period that
+ * starts by `cancelAt`, so skips after that bill's window earn nothing (the spec doesn't refund them in v1).
+ */
+export function noCreditFrom(sub: { startDate: ISODate; cancelAt: ISODate | null }): ISODate | null {
+  if (!sub.cancelAt) return null;
+  const last = periodContaining(sub.startDate, sub.cancelAt).index;
+  // Ended inside the first period: the only bill is the first one, which carries no credits.
+  return last === 0 ? sub.startDate : addDays(creditWindow(sub.startDate, last).to, 1);
+}
+
+/** What skipping a meal on a date takes off a bill. */
+function skipCredit(sub: { startDate: ISODate; cancelAt: ISODate | null }, date: ISODate, meal: Meal) {
+  const from = noCreditFrom(sub);
+  return from && date >= from ? 0 : SKIP_CREDITS[meal];
+}
+
 async function activeSubscription(user: User) {
   const sub = await openSubscription(user.id);
   if (!sub || sub.status !== 'active') throw new AppError('invalid_state', 'You need an active plan for this');
@@ -165,12 +185,12 @@ export async function myMenu(user: User, days = 7) {
           skipped: skipped.has(`${date}:${meal}`),
           cutoff: skipCutoff(date, meal).toISOString(),
           canChange: inPlan && canChangeSkip(date, meal, now),
-          credit: SKIP_CREDITS[meal],
+          credit: skipCredit(sub, date, meal),
         };
       }),
     });
   }
-  return { mealPlan: sub.mealPlan, diet: sub.diet, planLabel: FOOD_PLANS[sub.mealPlan].label, days: out };
+  return { mealPlan: sub.mealPlan, diet: sub.diet, planLabel: FOOD_PLANS[sub.mealPlan].label, noCreditFrom: noCreditFrom(sub), days: out };
 }
 
 async function checkSkippable(sub: typeof schema.subscriptions.$inferSelect, date: string, meal: Meal) {
@@ -185,9 +205,11 @@ export async function skipMeal(user: User, date: string, meal: Meal) {
   const sub = await activeSubscription(user);
   await checkSkippable(sub, date, meal);
   const db = getDb();
+  // A skip in the last stretch of a cancelled plan still tells the kitchen (headcount), but earns nothing: no bill
+  // will carry it.
   await db
     .insert(schema.mealSkips)
-    .values({ id: newId('skp'), subscriptionId: sub.id, date, meal, creditAmount: SKIP_CREDITS[meal] })
+    .values({ id: newId('skp'), subscriptionId: sub.id, date, meal, creditAmount: skipCredit(sub, date, meal) })
     .onConflictDoNothing();
   const [row] = await db
     .select()
@@ -207,18 +229,30 @@ export async function unskipMeal(user: User, date: string, meal: Meal) {
 
 // --- owner: headcount and subscribers ---------------------------------------
 
-/** Per meal on a date: subscribers eating at this hostel whose plan has the meal, minus skips, split by diet. */
+/**
+ * Per meal on a date: subscribers eating at this hostel whose plan has the meal, minus skips, split by diet. Who eats
+ * here is worked out in SQL for this hostel only: its subscribers, plus those with a move into it on or before the
+ * date, minus those with a move out by then.
+ */
 export async function headcount(user: User, hostelId: string, date: string) {
   const h = await ownedHostel(user, hostelId);
   const db = getDb();
   const s = schema.subscriptions;
-  const candidates = await db.select().from(s).where(eq(s.status, 'active'));
-  const moves = await db.select().from(schema.moveRequests).where(eq(schema.moveRequests.status, 'scheduled'));
-  const eating = candidates.filter((sub) => {
-    if (sub.startDate > date || (sub.cancelAt && sub.cancelAt < date)) return false;
-    const move = moves.find((m) => m.subscriptionId === sub.id && m.moveDate <= date);
-    return (move?.toHostelId ?? sub.hostelId) === h.id;
-  });
+  const m = schema.moveRequests;
+  const eating = await db
+    .select({ id: s.id, mealPlan: s.mealPlan, diet: s.diet })
+    .from(s)
+    // A subscription has at most one scheduled move; once its date has come, the tenant eats at the destination.
+    .leftJoin(m, and(eq(m.subscriptionId, s.id), eq(m.status, 'scheduled'), lte(m.moveDate, date)))
+    .where(
+      and(
+        eq(s.status, 'active'),
+        lte(s.startDate, date),
+        or(isNull(s.cancelAt), gte(s.cancelAt, date)),
+        or(eq(s.hostelId, h.id), eq(m.toHostelId, h.id)),
+        sql`coalesce(${m.toHostelId}, ${s.hostelId}) = ${h.id}`,
+      ),
+    );
   const skips = eating.length
     ? await db
         .select()

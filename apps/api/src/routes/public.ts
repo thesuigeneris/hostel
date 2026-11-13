@@ -1,19 +1,21 @@
 import type { Health } from '@hostels/shared';
-import { searchSchema } from '@hostels/shared';
+import { searchSchema, suggestSchema } from '@hostels/shared';
 import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb, pingDb, schema } from '../db';
+import { clientIp } from '../lib/client-ip';
 import { notFound } from '../lib/errors';
-import { isMsg91Configured } from '../lib/msg91';
-import { isRazorpayConfigured } from '../lib/razorpay';
+import { otpMode } from '../lib/msg91';
+import { instancePaymentMode, isRazorpayConfigured } from '../lib/razorpay';
 import { parseQuery } from '../lib/validate';
-import type { AppEnv } from '../middleware/auth';
+import { type AppEnv, bearerToken } from '../middleware/auth';
 import { listFoodPartners, publicMenu } from '../services/food';
+import { getSessionUser } from '../services/auth';
 import { listAreas, liveSlugs, publicHostelBySlug } from '../services/listings';
 import { recordView } from '../services/insights';
 import { hostelReviews } from '../services/residents';
-import { searchHostels } from '../services/search';
+import { searchHostels, suggest } from '../services/search';
 
 export const API_VERSION = '0.2.0';
 
@@ -29,25 +31,32 @@ async function liveHostel(slug: string) {
 export const publicRoutes = new Hono<AppEnv>()
   .get('/', async (c) => {
     const razorpay = isRazorpayConfigured() ? 'live' : 'stub';
-    const msg91 = isMsg91Configured() ? 'live' : 'stub';
+    // `off` (production without SMS) is not dev mode: people log in with a password and no fixed code works.
+    const msg91 = otpMode();
     const health: Health = {
       ok: true,
       service: 'hostels-api',
       version: API_VERSION,
       db: (await pingDb()) ? 'up' : 'down',
       razorpay,
+      payments: instancePaymentMode(),
       msg91,
       devMode: razorpay === 'stub' || msg91 === 'stub',
     };
     return c.json(health);
   })
   .get('/hostels', async (c) => c.json(await searchHostels(parseQuery(c, searchSchema))))
+  // Not under /hostels/: a hostel could be called "suggest".
+  .get('/suggest', async (c) => c.json(await suggest(parseQuery(c, suggestSchema))))
   .get('/areas', async (c) => c.json(await listAreas()))
   .get('/sitemap-data', async (c) => c.json({ hostels: await liveSlugs(), areas: await listAreas() }))
   .get('/food-partners', async (c) => c.json(await listFoodPartners(true)))
   .get('/hostels/:slug', async (c) => c.json(await publicHostelBySlug(c.req.param('slug'))))
   .post('/hostels/:slug/view', async (c) => {
-    await recordView(c.req.param('slug'));
+    // Signed in or not; a session only helps tell visitors apart (and the owner from a visitor).
+    const token = bearerToken(c.req.header('Authorization'));
+    const user = token ? await getSessionUser(token) : null;
+    await recordView(c.req.param('slug'), { userId: user?.id ?? null, ip: clientIp(c) });
     return c.json({ ok: true as const });
   })
   .get('/hostels/:slug/reviews', async (c) => {

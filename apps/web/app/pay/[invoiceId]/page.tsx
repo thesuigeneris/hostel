@@ -1,12 +1,13 @@
 import { ApiError, type Invoice } from '@hostels/shared';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { simulatePaymentAction } from '@/app/account/actions';
+import { releaseHoldAction, simulatePaymentAction } from '@/app/account/actions';
 import { RazorpayButton } from '@/components/RazorpayButton';
 import { SubmitButton } from '@/components/SubmitButton';
 import { Card, Flash, LinkButton, PageHeader, StatusBadge } from '@/components/ui';
 import { api, requireUser } from '@/lib/api';
-import { dateLabel, rupees } from '@/lib/format';
+import { dateLabel, refundMessage, rupees } from '@/lib/format';
+import { holdText } from '@/lib/hold';
 
 type Props = { params: Promise<{ invoiceId: string }>; searchParams: Promise<{ error?: string; ok?: string }> };
 
@@ -16,11 +17,17 @@ export default async function PayPage({ params, searchParams }: Props) {
   const { invoiceId } = await params;
   const q = await searchParams;
   const user = await requireUser(`/pay/${invoiceId}`);
-  const page = await (await api()).payments.page(invoiceId).catch((e) => {
+  const client = await api();
+  const page = await client.payments.page(invoiceId).catch((e) => {
     if (e instanceof ApiError && (e.status === 404 || e.status === 403)) notFound();
     throw e;
   });
   const tenantBill = page.kind === 'tenant' ? (page.invoice as Invoice) : null;
+  // A first bill for a held bed: say how long the hold lasts, and offer a way back to choose again.
+  const mine = tenantBill && page.status === 'due' ? await client.me.subscription().catch(() => null) : null;
+  const held = mine?.subscription.status === 'pending' && mine.subscription.id === tenantBill?.subscriptionId ? mine : null;
+  const hold = held ? holdText(held.subscription.createdAt) : null;
+  const waived = page.status === 'void' && page.invoice.paymentMode === 'waived';
   const doneHref = page.kind === 'tenant' ? '/account' : `/owner/hostels/${page.invoice.hostelId}/plan`;
 
   return (
@@ -32,7 +39,7 @@ export default async function PayPage({ params, searchParams }: Props) {
           <span className="text-sm text-ink-muted">
             {dateLabel(page.invoice.periodStart)} – {dateLabel(page.invoice.periodEnd)}
           </span>
-          <StatusBadge kind="invoice" status={page.invoice.isOverdue ? 'overdue' : page.status} />
+          <StatusBadge kind="invoice" status={page.invoice.isOverdue ? 'overdue' : waived ? 'waived' : page.status} />
         </div>
         {tenantBill && (
           <dl className="mt-4 space-y-2 text-sm">
@@ -49,11 +56,43 @@ export default async function PayPage({ params, searchParams }: Props) {
         </div>
         <div className="mt-1 text-right text-xs text-ink-muted">Due {dateLabel(page.invoice.dueDate)}</div>
 
+        {held && hold && (
+          <p className="mt-4 rounded-xl bg-brand-soft p-3 text-sm text-ink">
+            {hold.ended
+              ? `The hold on your bed at ${held.hostel.name} has run out, so it can be released at any moment. Pay now to keep it while it is still yours.`
+              : `We’re holding your bed at ${held.hostel.name} until ${hold.until}. Pay before then to confirm it; after that the bed is released and this bill is cancelled.`}
+          </p>
+        )}
+
+        {page.refund && (
+          <section aria-labelledby="refund-heading" className="mt-6 rounded-xl border border-food/50 bg-food-soft p-4 text-sm text-ink">
+            <h2 id="refund-heading" className="font-medium">
+              {page.refund.status === 'refunded' ? 'Refunded' : page.refund.paymentMode === 'simulated' ? 'Payment not used' : 'Your payment will be refunded'}
+            </h2>
+            <p className="mt-1">{refundMessage(page.refund)}</p>
+            <p className="mt-1 text-xs text-ink-muted">Payment reference {page.refund.razorpayPaymentId}</p>
+          </section>
+        )}
+
         <div className="mt-6">
           {page.status === 'paid' ? (
-            <LinkButton href={doneHref} size="lg" className="w-full">Done</LinkButton>
+            <>
+              <p className="mb-3 text-sm text-ink-soft">Paid{page.invoice.paidAt ? ` on ${dateLabel(page.invoice.paidAt)}` : ''}. Nothing more to pay on this bill.</p>
+              <LinkButton href={doneHref} size="lg" className="w-full">Done</LinkButton>
+            </>
           ) : page.status === 'void' ? (
-            <p className="text-sm text-ink-soft">This bill was replaced by a newer one. Nothing to pay here.</p>
+            page.refund ? (
+              <LinkButton href={doneHref} size="lg" variant="secondary" className="w-full">Done</LinkButton>
+            ) : (
+              <div className="text-sm text-ink-soft">
+                <p>
+                  {waived
+                    ? 'This bill was waived. Nothing to pay here.'
+                    : 'This bill is no longer due, so there is nothing to pay here. It was replaced by a newer bill, or the plan it belonged to was cancelled or not paid in time.'}
+                </p>
+                <LinkButton href={doneHref} variant="secondary" className="mt-3 w-full">{page.kind === 'tenant' ? 'See my plan and bills' : 'See plan and bills'}</LinkButton>
+              </div>
+            )
           ) : page.stub ? (
             <form action={simulatePaymentAction}>
               <input type="hidden" name="invoiceId" value={invoiceId} />
@@ -62,6 +101,13 @@ export default async function PayPage({ params, searchParams }: Props) {
             </form>
           ) : (
             <RazorpayButton invoiceId={invoiceId} label={`Pay ${rupees(page.amount)}`} description={page.description} phone={user.phone} />
+          )}
+          {held && (
+            <form action={releaseHoldAction} className="mt-3 text-center">
+              <input type="hidden" name="slug" value={held.hostel.slug} />
+              <input type="hidden" name="subscriptionId" value={held.subscription.id} />
+              <SubmitButton variant="ghost" size="sm" pendingText="Releasing…">Release the bed and choose again</SubmitButton>
+            </form>
           )}
         </div>
       </Card>

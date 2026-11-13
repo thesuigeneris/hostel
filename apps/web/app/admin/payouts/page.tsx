@@ -2,7 +2,7 @@ import { istDate, monthOf } from '@hostels/shared';
 import { SubmitButton } from '@/components/SubmitButton';
 import { Back, Card, Empty, Flash, Input, PageHeader, StatusBadge, Table, Td } from '@/components/ui';
 import { api } from '@/lib/api';
-import { dateLabel, monthLabel, rupees } from '@/lib/format';
+import { dateLabel, monthLabel, notCountedLabel, rupees } from '@/lib/format';
 import { generatePayoutsAction, markPayoutPaidAction } from '../actions';
 
 function lastMonth() {
@@ -13,12 +13,18 @@ function lastMonth() {
 export default async function AdminPayouts({ searchParams }: { searchParams: Promise<{ month?: string; error?: string; ok?: string }> }) {
   const q = await searchParams;
   const month = q.month && /^\d{4}-\d{2}$/.test(q.month) ? q.month : lastMonth();
-  const payouts = await (await api()).admin.payouts(month);
+  const client = await api();
+  const [payouts, revenue] = await Promise.all([client.admin.payouts(month), client.admin.revenue(month)]);
+  const leftOut = notCountedLabel(revenue.notCounted.tenant);
   const path = `/admin/payouts?month=${month}`;
   return (
     <>
-      <PageHeader title="Payouts" subtitle="Generate after a month closes. Bills paid in that month count, minus each hostel's fee." />
+      <PageHeader
+        title="Payouts"
+        subtitle="Generate after a month closes. Tenant bills paid that month through live Razorpay count, minus each hostel's fee."
+      />
       <Flash error={q.error} ok={q.ok} />
+      {leftOut && <p className="mb-4 text-sm text-ink-soft">{monthLabel(month)}: {leftOut}, so it is never paid out.</p>}
       <Card className="mb-6 flex flex-wrap items-end gap-3">
         <form className="flex items-end gap-2">
           <label className="text-sm"><span className="mb-1 block font-medium">Month</span><Input type="month" name="month" defaultValue={month} className="w-44" /></label>

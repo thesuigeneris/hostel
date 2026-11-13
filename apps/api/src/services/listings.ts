@@ -9,19 +9,26 @@ import type {
 import {
   addDays,
   type hostelInputSchema,
+  istDate,
   newId,
+  type PartnerCheck,
+  type PartnerStandardId,
   type roomTypeInputSchema,
+  standardsFor,
   TRANSPARENCY_MIN_ISSUES,
   TRANSPARENCY_WINDOW_DAYS,
 } from '@hostels/shared';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, or, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 import { getDb, schema } from '../db';
 import { clock } from '../lib/clock';
 import { isUniqueViolation } from '../lib/db-errors';
 import { AppError, notFound } from '../lib/errors';
+import { claimUpload } from '../lib/uploads';
 import { isBookable, ownedHostel, planFor } from './access';
-import { toHostel, toRoomType } from './mappers';
+import { toHostel, toPhoto, toRoomType } from './mappers';
+import { recordMaterialEdit } from './listing-changes';
+import { closeApplication, openApplication } from './partners';
 import { switchPlan } from './plans';
 
 export function slugify(value: string): string {
@@ -68,12 +75,17 @@ export async function createHostel(owner: User, input: z.output<typeof hostelInp
 /** Editing keeps a live listing live; a rejected one goes back to draft so it can be resubmitted. */
 export async function updateHostel(user: User, hostelId: string, patch: HostelUpdateInput) {
   const h = await ownedHostel(user, hostelId);
-  const [row] = await getDb()
-    .update(schema.hostels)
-    .set({ ...patch, ...(h.status === 'rejected' ? { status: 'draft' as const, rejectionReason: null } : {}) })
-    .where(eq(schema.hostels.id, h.id))
-    .returning();
-  return toHostel(row!);
+  return getDb().transaction(async (tx) => {
+    // Locked, so the trail of a live listing's edits records what each save really replaced (edge case O3).
+    const [before] = await tx.select().from(schema.hostels).where(eq(schema.hostels.id, h.id)).for('update');
+    const [row] = await tx
+      .update(schema.hostels)
+      .set({ ...patch, ...(before!.status === 'rejected' ? { status: 'draft' as const, rejectionReason: null } : {}) })
+      .where(eq(schema.hostels.id, h.id))
+      .returning();
+    await recordMaterialEdit(tx, before!, row!, user.id);
+    return toHostel(row!);
+  });
 }
 
 export async function submitHostel(user: User, hostelId: string) {
@@ -99,12 +111,14 @@ export async function reviewListing(hostelId: string, decision: { approve: true 
   const [h] = await db.select().from(schema.hostels).where(eq(schema.hostels.id, hostelId));
   if (!h) throw notFound('Hostel');
   if (h.status !== 'pending') throw new AppError('invalid_state', 'Only listings in review can be approved or rejected');
+  // Conditional, so two admins (or a double click) deciding at once give one decision and one "refresh".
   const [row] = await db
     .update(schema.hostels)
     .set(decision.approve ? { status: 'live', rejectionReason: null } : { status: 'rejected', rejectionReason: decision.reason })
-    .where(eq(schema.hostels.id, hostelId))
+    .where(and(eq(schema.hostels.id, hostelId), eq(schema.hostels.status, 'pending')))
     .returning();
-  return toHostel(row!);
+  if (!row) throw new AppError('invalid_state', 'This listing was decided a moment ago; refresh to see the outcome');
+  return toHostel(row);
 }
 
 // --- rooms -----------------------------------------------------------------
@@ -126,27 +140,67 @@ async function ownedRoom(user: User, roomTypeId: string) {
   return { room, hostel };
 }
 
+/** Beds a room type has promised: pending and active plans in it, and plans scheduled to move into it. */
+function heldBeds(roomTypeId: string) {
+  return sql<number>`(
+    (select count(*) from ${schema.subscriptions}
+      where ${schema.subscriptions.roomTypeId} = ${roomTypeId} and ${schema.subscriptions.status} in ('pending', 'active'))
+    + (select count(*) from ${schema.moveRequests}
+      where ${schema.moveRequests.toRoomTypeId} = ${roomTypeId} and ${schema.moveRequests.status} = 'scheduled')
+  )::int`;
+}
+
+/**
+ * Bed counts move by the difference between what the owner entered and what their form showed (`*Was`, or the
+ * current count when not sent), in one conditional UPDATE. Subscriptions take and return beds at any moment, so
+ * writing back absolute counts would hand out a bed that was just taken. Beds held by plans can't be freed or removed.
+ */
 export async function updateRoomType(user: User, roomTypeId: string, patch: RoomTypeUpdateInput) {
   const { room, hostel } = await ownedRoom(user, roomTypeId);
-  const next = { ...room, ...patch } as typeof room;
-  if (next.bedsAvailable > next.totalBeds) {
-    throw new AppError('validation', 'Beds free cannot exceed total beds', 400, [{ path: 'bedsAvailable', message: 'Too many' }]);
+  const dTotal = patch.totalBeds === undefined ? 0 : patch.totalBeds - (patch.totalBedsWas ?? room.totalBeds);
+  const dFree = patch.bedsAvailable === undefined ? 0 : patch.bedsAvailable - (patch.bedsAvailableWas ?? room.bedsAvailable);
+  const fields = Object.fromEntries(
+    Object.entries({
+      sharing: patch.sharing,
+      monthlyRent: patch.monthlyRent,
+      advanceAmount: hostel.partnerStatus === 'verified' ? 0 : patch.advanceAmount,
+    }).filter(([, v]) => v !== undefined),
+  );
+  const rt = schema.roomTypes;
+  return getDb().transaction(async (tx) => {
+    if (dTotal === 0 && dFree === 0) {
+      const [row] = Object.keys(fields).length
+        ? await tx.update(rt).set(fields).where(eq(rt.id, room.id)).returning()
+        : await tx.select().from(rt).where(eq(rt.id, room.id));
+      return toRoomType(row!);
+    }
+    // Wait for any booking that is taking a bed right now, so the held count below includes it.
+    await tx.select({ id: rt.id }).from(rt).where(eq(rt.id, room.id)).for('update');
+    const total = sql`(${rt.totalBeds} + ${dTotal})`;
+    const free = sql`(${rt.bedsAvailable} + ${dFree})`;
+    const [row] = await tx
+      .update(rt)
+      .set({ ...fields, totalBeds: total, bedsAvailable: free, bedsUpdatedAt: clock.now() })
+      .where(and(eq(rt.id, room.id), sql`${total} >= 1`, sql`${free} >= 0`, sql`${total} - ${free} >= ${heldBeds(room.id)}`))
+      .returning();
+    if (row) return toRoomType(row);
+    const [now] = await tx.select().from(rt).where(eq(rt.id, room.id));
+    const [counted] = await tx.execute<{ held: number }>(sql`select ${heldBeds(room.id)} as held`);
+    throw bedChangeRefused(now!.totalBeds + dTotal, now!.bedsAvailable + dFree, counted!.held, now!.bedsAvailable);
+  });
+}
+
+function bedChangeRefused(total: number, free: number, held: number, freeNow: number) {
+  const field = (path: string, message: string) => new AppError('validation', message, 400, [{ path, message }]);
+  if (total < 1) return field('totalBeds', 'A room type needs at least one bed');
+  if (total < held) {
+    return new AppError('invalid_state', `${held} beds here are taken by tenants with a plan, so total beds can't go below ${held}`);
   }
-  if (hostel.partnerStatus === 'verified') next.advanceAmount = 0;
-  const bedsChanged = next.totalBeds !== room.totalBeds || next.bedsAvailable !== room.bedsAvailable;
-  const [row] = await getDb()
-    .update(schema.roomTypes)
-    .set({
-      sharing: next.sharing,
-      monthlyRent: next.monthlyRent,
-      advanceAmount: next.advanceAmount,
-      totalBeds: next.totalBeds,
-      bedsAvailable: next.bedsAvailable,
-      ...(bedsChanged ? { bedsUpdatedAt: clock.now() } : {}),
-    })
-    .where(eq(schema.roomTypes.id, room.id))
-    .returning();
-  return toRoomType(row!);
+  if (free < 0) return field('bedsAvailable', `Only ${freeNow} beds are free right now, so that's as many as you can take off`);
+  if (held > 0) {
+    return new AppError('invalid_state', `At most ${total - held} of ${total} beds can be free: ${held} are taken by tenants with a plan`);
+  }
+  return field('bedsAvailable', 'Beds free cannot exceed total beds');
 }
 
 export async function deleteRoomType(user: User, roomTypeId: string) {
@@ -157,14 +211,21 @@ export async function deleteRoomType(user: User, roomTypeId: string) {
     .from(schema.subscriptions)
     .where(eq(schema.subscriptions.roomTypeId, room.id))
     .limit(1);
-  if (used) throw new AppError('invalid_state', 'This room type has subscriptions; set beds free to 0 instead');
+  const [moving] = await db
+    .select({ id: schema.moveRequests.id })
+    .from(schema.moveRequests)
+    .where(or(eq(schema.moveRequests.fromRoomTypeId, room.id), eq(schema.moveRequests.toRoomTypeId, room.id)))
+    .limit(1);
+  if (used || moving) throw new AppError('invalid_state', 'This room type has subscriptions; set beds free to 0 instead');
   await db.delete(schema.roomTypes).where(eq(schema.roomTypes.id, room.id));
 }
 
 // --- photos ----------------------------------------------------------------
 
-export async function addPhoto(user: User, hostelId: string, url: string) {
+/** `photo` is the receipt of a listing photo this user uploaded. */
+export async function addPhoto(user: User, hostelId: string, photo: string) {
   const h = await ownedHostel(user, hostelId);
+  const stored = claimUpload(user, photo, 'listing', 'photo');
   const db = getDb();
   const [max] = await db
     .select({ n: sql<number>`coalesce(max(${schema.hostelPhotos.sortOrder}), -1)::int` })
@@ -172,24 +233,42 @@ export async function addPhoto(user: User, hostelId: string, url: string) {
     .where(eq(schema.hostelPhotos.hostelId, h.id));
   const [row] = await db
     .insert(schema.hostelPhotos)
-    .values({ id: newId('pho'), hostelId: h.id, url, sortOrder: max!.n + 1 })
+    .values({ id: newId('pho'), hostelId: h.id, url: stored, sortOrder: max!.n + 1 })
     .returning();
-  return row!;
+  return toPhoto(row!);
 }
 
+/**
+ * Removes a photo. A live listing (or one in review) keeps at least one: the hostel row is locked first, so two
+ * removals at once can't each see the other's photo and leave none.
+ */
 export async function deletePhoto(user: User, hostelId: string, photoId: string) {
   const h = await ownedHostel(user, hostelId);
-  const deleted = await getDb()
-    .delete(schema.hostelPhotos)
-    .where(and(eq(schema.hostelPhotos.id, photoId), eq(schema.hostelPhotos.hostelId, h.id)))
-    .returning();
-  if (!deleted.length) throw notFound('Photo');
+  const p = schema.hostelPhotos;
+  await getDb().transaction(async (tx) => {
+    const [now] = await tx.select({ status: schema.hostels.status }).from(schema.hostels).where(eq(schema.hostels.id, h.id)).for('update');
+    const photos = await tx.select({ id: p.id }).from(p).where(eq(p.hostelId, h.id));
+    if (!photos.some((x) => x.id === photoId)) throw notFound('Photo');
+    if (photos.length === 1 && (now!.status === 'live' || now!.status === 'pending')) {
+      throw new AppError(
+        'invalid_state',
+        `Your listing is ${now!.status === 'live' ? 'live' : 'in review'}, so it needs at least one photo. Upload another photo first, then remove this one.`,
+      );
+    }
+    await tx.delete(p).where(and(eq(p.id, photoId), eq(p.hostelId, h.id)));
+  });
 }
 
 export async function reorderPhotos(user: User, hostelId: string, photoIds: string[]) {
   const h = await ownedHostel(user, hostelId);
   const db = getDb();
   await db.transaction(async (tx) => {
+    // The new order must name every photo exactly once; a partial or repeated list would leave two photos in one place.
+    const current = await tx.select({ id: schema.hostelPhotos.id }).from(schema.hostelPhotos).where(eq(schema.hostelPhotos.hostelId, h.id)).for('update');
+    const ids = new Set(current.map((p) => p.id));
+    if (photoIds.length !== ids.size || new Set(photoIds).size !== photoIds.length || photoIds.some((id) => !ids.has(id))) {
+      throw new AppError('validation', 'The photo order has changed; reload the page and try again', 400);
+    }
     for (const [i, id] of photoIds.entries()) {
       await tx
         .update(schema.hostelPhotos)
@@ -197,7 +276,8 @@ export async function reorderPhotos(user: User, hostelId: string, photoIds: stri
         .where(and(eq(schema.hostelPhotos.id, id), eq(schema.hostelPhotos.hostelId, h.id)));
     }
   });
-  return db.select().from(schema.hostelPhotos).where(eq(schema.hostelPhotos.hostelId, h.id)).orderBy(asc(schema.hostelPhotos.sortOrder));
+  const rows = await db.select().from(schema.hostelPhotos).where(eq(schema.hostelPhotos.hostelId, h.id)).orderBy(asc(schema.hostelPhotos.sortOrder));
+  return rows.map(toPhoto);
 }
 
 // --- partner flow ----------------------------------------------------------
@@ -207,40 +287,50 @@ export async function applyForPartner(user: User, hostelId: string) {
   if (h.status !== 'live') throw new AppError('invalid_state', 'The listing must be live before applying');
   if (h.partnerStatus === 'verified') throw new AppError('invalid_state', 'This hostel is already a verified partner');
   if (h.partnerStatus === 'applied') throw new AppError('invalid_state', 'Your application is already in review');
-  const db = getDb();
-  await db.update(schema.ownerPlans).set({ pendingPlan: 'partner', pendingPlanOn: null }).where(eq(schema.ownerPlans.hostelId, h.id));
-  const [row] = await db
-    .update(schema.hostels)
-    .set({ partnerStatus: 'applied', rejectionReason: null })
-    .where(eq(schema.hostels.id, h.id))
-    .returning();
+  const [row] = await getDb().transaction(async (tx) => {
+    await tx.update(schema.ownerPlans).set({ pendingPlan: 'partner', pendingPlanOn: null }).where(eq(schema.ownerPlans.hostelId, h.id));
+    await openApplication(tx, h.id);
+    return tx
+      .update(schema.hostels)
+      .set({ partnerStatus: 'applied', rejectionReason: null })
+      .where(eq(schema.hostels.id, h.id))
+      .returning();
+  });
   return toHostel(row!);
 }
 
 /** Verifying a partner switches the owner plan to Partner, with the first month free if no trial was used. */
-export async function decidePartner(hostelId: string, decision: { verify: true; platformFeePct: number } | { verify: false; reason: string }) {
+export async function decidePartner(
+  hostelId: string,
+  decision: { verify: true; platformFeePct: number; checklist?: string[]; note?: string } | { verify: false; reason: string },
+  actorId: string | null = null,
+) {
   const db = getDb();
   const [h] = await db.select().from(schema.hostels).where(eq(schema.hostels.id, hostelId));
   if (!h) throw notFound('Hostel');
   if (h.partnerStatus !== 'applied') throw new AppError('invalid_state', 'This hostel has no partner application in review');
   return db.transaction(async (tx) => {
+    // Claim the decision first, conditionally: of two admins deciding at once, one decides and the other is told to
+    // refresh, so the plan is switched once and the application closed once.
+    const [row] = await tx
+      .update(schema.hostels)
+      .set(
+        decision.verify
+          ? { partnerStatus: 'verified', platformFeePct: decision.platformFeePct, rejectionReason: null }
+          : { partnerStatus: 'rejected', rejectionReason: decision.reason },
+      )
+      .where(and(eq(schema.hostels.id, hostelId), eq(schema.hostels.partnerStatus, 'applied')))
+      .returning();
+    if (!row) throw new AppError('invalid_state', 'This application was decided a moment ago; refresh to see the outcome');
+    // Refuses (and rolls the claim back) unless every brand standard is ticked.
+    await closeApplication(tx, row, decision, actorId);
     if (!decision.verify) {
       await tx.update(schema.ownerPlans).set({ pendingPlan: null, pendingPlanOn: null }).where(eq(schema.ownerPlans.hostelId, hostelId));
-      const [row] = await tx
-        .update(schema.hostels)
-        .set({ partnerStatus: 'rejected', rejectionReason: decision.reason })
-        .where(eq(schema.hostels.id, hostelId))
-        .returning();
-      return toHostel(row!);
+      return toHostel(row);
     }
     await switchPlan(tx, hostelId, 'partner');
     await tx.update(schema.roomTypes).set({ advanceAmount: 0 }).where(eq(schema.roomTypes.hostelId, hostelId));
-    const [row] = await tx
-      .update(schema.hostels)
-      .set({ partnerStatus: 'verified', platformFeePct: decision.platformFeePct, rejectionReason: null })
-      .where(eq(schema.hostels.id, hostelId))
-      .returning();
-    return toHostel(row!);
+    return toHostel(row);
   });
 }
 
@@ -291,22 +381,50 @@ export async function transparencyFor(hostelId: string): Promise<TransparencySta
   };
 }
 
+/** What the decision that verified this partner covered: the standards that apply to it and were ticked. */
+export async function partnerCheckFor(hostel: {
+  id: string;
+  partnerStatus: string;
+  foodAvailable: boolean;
+  partnerRecheckSince?: Date | null;
+}): Promise<PartnerCheck | null> {
+  if (hostel.partnerStatus !== 'verified') return null;
+  const a = schema.partnerApplications;
+  const [row] = await getDb()
+    .select({ checklist: a.checklist, decidedAt: a.decidedAt })
+    .from(a)
+    .where(and(eq(a.hostelId, hostel.id), eq(a.status, 'verified')))
+    .orderBy(sql`${a.decidedAt} desc nulls last`, desc(a.appliedAt))
+    .limit(1);
+  const ticked = new Set(row?.checklist ?? []);
+  return {
+    checkedOn: row?.decidedAt ? istDate(row.decidedAt) : null,
+    checks: standardsFor(hostel.foodAvailable)
+      .map((s) => s.id)
+      .filter((id): id is PartnerStandardId => ticked.has(id)),
+    // The place moved after the check: say so rather than vouch for the new one.
+    ...(hostel.partnerRecheckSince ? { recheckSince: istDate(hostel.partnerRecheckSince) } : {}),
+  };
+}
+
 export async function hostelDetail(hostel: typeof schema.hostels.$inferSelect): Promise<HostelDetail> {
   const db = getDb();
-  const [photos, rooms, ratings, transparency, plan] = await Promise.all([
+  const [photos, rooms, ratings, transparency, plan, partnerCheck] = await Promise.all([
     db.select().from(schema.hostelPhotos).where(eq(schema.hostelPhotos.hostelId, hostel.id)).orderBy(asc(schema.hostelPhotos.sortOrder)),
     db.select().from(schema.roomTypes).where(eq(schema.roomTypes.hostelId, hostel.id)).orderBy(asc(schema.roomTypes.monthlyRent)),
     ratingsFor(hostel.id),
     transparencyFor(hostel.id),
     planFor(hostel.id),
+    partnerCheckFor(hostel),
   ]);
   return {
     ...toHostel(hostel),
     isVerified: isBookable(hostel, plan),
-    photos,
+    photos: photos.map(toPhoto),
     roomTypes: rooms.map(toRoomType),
     ratings,
     transparency,
+    partnerCheck,
   };
 }
 

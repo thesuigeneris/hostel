@@ -1,15 +1,16 @@
 import { type AuthMethods, type AuthSession, PASSWORD_MIN_LENGTH } from '@hostels/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { View } from 'react-native';
-import { Button, ErrorText, Field, H1, Loading, Notice, P, Screen } from '@/components/ui';
+import { Pressable, Text, View } from 'react-native';
+import { Button, ErrorState, ErrorText, Field, H1, Loading, Notice, P, Screen } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { theme } from '@/lib/theme';
 
 type View_ = 'otp' | 'otp-code' | 'password' | 'signup';
 
 export default function Login() {
-  const { next } = useLocalSearchParams<{ next?: string }>();
+  const { next, role } = useLocalSearchParams<{ next?: string; role?: string }>();
   const { signIn } = useAuth();
   const [methods, setMethods] = useState<AuthMethods | null>(null);
   const [view, setView] = useState<View_>('password');
@@ -17,11 +18,14 @@ export default function Login() {
   const [otp, setOtp] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
+  // Only applies when this phone signs up for the first time; existing accounts keep their role.
+  const [owner, setOwner] = useState(role === 'owner');
   const [devOtp, setDevOtp] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadMethods = () => {
+    setError(null);
     api.auth
       .methods()
       .then((m) => {
@@ -30,12 +34,16 @@ export default function Login() {
         setView(m.otp !== 'off' ? 'otp' : 'password');
       })
       .catch((e) => setError(errorMessage(e)));
-  }, []);
+  };
+  // Load once on open; Try again calls it again.
+  useEffect(loadMethods, []);
 
   async function finish(session: AuthSession) {
     await signIn(session.token, session.user);
     if (router.canGoBack()) router.back();
-    if (next) router.push(next as never);
+    const to = next?.startsWith('/') && !next.startsWith('//') ? next : null;
+    if (to) router.push(to as never);
+    else if (session.user.role !== 'tenant') router.navigate('/profile');
   }
 
   async function act(fn: () => Promise<void>) {
@@ -57,16 +65,17 @@ export default function Login() {
       if (res.devOtp) setOtp(res.devOtp);
       setView('otp-code');
     });
-  const verify = () => act(async () => finish(await api.auth.verifyOtp({ phone, otp, name: name.trim() || undefined })));
+  const ownerRole = owner ? ('owner' as const) : undefined;
+  const verify = () => act(async () => finish(await api.auth.verifyOtp({ phone, otp, name: name.trim() || undefined, role: ownerRole })));
   const logIn = () => act(async () => finish(await api.auth.login({ phone, password })));
-  const signUp = () => act(async () => finish(await api.auth.register({ phone, password, name: name.trim() })));
+  const signUp = () => act(async () => finish(await api.auth.register({ phone, password, name: name.trim(), role: ownerRole })));
   const demo = (p: string) => act(async () => finish(await api.auth.demo(p)));
 
   if (!methods) {
     return (
       <Screen>
         <H1>Log in</H1>
-        {error ? <ErrorText>{error}</ErrorText> : <Loading />}
+        {error ? <ErrorState title="Can't reach Hostels" message={error} onRetry={loadMethods} /> : <Loading />}
       </Screen>
     );
   }
@@ -87,6 +96,7 @@ export default function Login() {
           <P>We'll text you a 6-digit code. New here? This creates your account.</P>
           <Field label="Mobile number" keyboardType="phone-pad" autoComplete="tel" placeholder="98765 43210" value={phone} onChangeText={setPhone} autoFocus maxLength={14} />
           <ErrorText>{error}</ErrorText>
+          <OwnerToggle checked={owner} onToggle={() => setOwner(!owner)} />
           <Button title="Send code" onPress={send} busy={busy} disabled={!phoneOk} />
           {methods.password && <Button title="Log in with a password" variant="ghost" onPress={() => setView('password')} />}
         </>
@@ -127,6 +137,7 @@ export default function Login() {
             maxLength={128}
           />
           <ErrorText>{error}</ErrorText>
+          <OwnerToggle checked={owner} onToggle={() => setOwner(!owner)} />
           <Button title="Create account" onPress={signUp} busy={busy} disabled={!phoneOk || !name.trim() || password.length < PASSWORD_MIN_LENGTH} />
           <Button title="I already have an account" variant="ghost" onPress={() => setView('password')} />
         </>
@@ -142,5 +153,33 @@ export default function Login() {
         </View>
       )}
     </Screen>
+  );
+}
+
+/** "I own or run a hostel": new accounts made with it start as owners. */
+function OwnerToggle({ checked, onToggle }: { checked: boolean; onToggle: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked }}
+      onPress={onToggle}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm, minHeight: 44 }}
+    >
+      <View
+        style={{
+          width: 22,
+          height: 22,
+          borderRadius: 6,
+          borderWidth: 2,
+          borderColor: checked ? theme.colors.brand : theme.colors.border,
+          backgroundColor: checked ? theme.colors.brand : theme.colors.surface,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {checked && <Text style={{ color: theme.colors.white, fontWeight: '700', fontSize: 13 }}>✓</Text>}
+      </View>
+      <Text style={{ color: theme.colors.soft, fontSize: 15 }}>I own or run a hostel</Text>
+    </Pressable>
   );
 }

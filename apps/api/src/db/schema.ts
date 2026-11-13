@@ -27,6 +27,9 @@ import {
   MOVE_STATUSES,
   OWNER_PLAN_TIERS,
   PARTNER_STATUSES,
+  PAYMENT_EXCEPTION_REASONS,
+  PAYMENT_EXCEPTION_STATUSES,
+  PAYMENT_MODES,
   PAYOUT_STATUSES,
   POST_KINDS,
   RENT_METHODS,
@@ -51,6 +54,9 @@ export const subscriptionStatusEnum = pgEnum('subscription_status', SUBSCRIPTION
 export const invoiceStatusEnum = pgEnum('invoice_status', INVOICE_STATUSES);
 export const moveStatusEnum = pgEnum('move_status', MOVE_STATUSES);
 export const payoutStatusEnum = pgEnum('payout_status', PAYOUT_STATUSES);
+export const paymentModeEnum = pgEnum('payment_mode', PAYMENT_MODES);
+export const paymentExceptionReasonEnum = pgEnum('payment_exception_reason', PAYMENT_EXCEPTION_REASONS);
+export const paymentExceptionStatusEnum = pgEnum('payment_exception_status', PAYMENT_EXCEPTION_STATUSES);
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 const day = (name: string) => date(name, { mode: 'string' });
@@ -68,6 +74,11 @@ export const users = pgTable('users', {
   phoneVerifiedAt: timestamp('phone_verified_at', { withTimezone: true }),
   /** argon2id (PHC string) from Bun.password; null for OTP-only accounts. */
   passwordHash: text('password_hash'),
+  /**
+   * Set when admin was granted on the server (`admin:grant`, demo seed). Such admins keep the role;
+   * any other admin holds it only while their phone is in ADMIN_PHONES.
+   */
+  adminGrantedAt: timestamp('admin_granted_at', { withTimezone: true }),
 });
 
 /** Failed password logins per phone (known or not), so lockouts don't reveal which phones have accounts. */
@@ -138,6 +149,11 @@ export const hostels = pgTable(
     partnerStatus: partnerStatusEnum('partner_status').notNull().default('none'),
     platformFeePct: doublePrecision('platform_fee_pct').notNull().default(10),
     rejectionReason: text('rejection_reason'),
+    /**
+     * Set when a verified partner moves its address or map pin: the in-person check was made somewhere else. The
+     * badge stays (editing keeps a listing live) and admins see the flag until someone checks the place again.
+     */
+    partnerRecheckSince: timestamp('partner_recheck_since', { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [
@@ -197,7 +213,11 @@ export const visitRequests = pgTable(
     status: visitStatusEnum('status').notNull().default('new'),
     createdAt: createdAt(),
   },
-  (t) => [index('visit_requests_hostel_idx').on(t.hostelId)],
+  (t) => [
+    index('visit_requests_hostel_idx').on(t.hostelId),
+    // One waiting request per person per hostel, even when the form is sent twice at once.
+    uniqueIndex('visit_requests_one_open').on(t.hostelId, t.userId).where(sql`${t.status} = 'new'`),
+  ],
 );
 
 export const foodPartners = pgTable('food_partners', {
@@ -290,6 +310,8 @@ export const invoices = pgTable(
     razorpayOrderId: text('razorpay_order_id').unique(),
     razorpayPaymentId: text('razorpay_payment_id'),
     paidAt: timestamp('paid_at', { withTimezone: true }),
+    /** How the bill was paid; set exactly when it is paid. Money figures count only real money (`razorpay_live`). */
+    paymentMode: paymentModeEnum('payment_mode'),
     createdAt: createdAt(),
   },
   (t) => [
@@ -299,6 +321,11 @@ export const invoices = pgTable(
     uniqueIndex('invoices_subscription_period')
       .on(t.subscriptionId, t.periodStart)
       .where(sql`${t.status} <> 'void'`),
+    // A paid bill always says how it was paid, and only a paid bill does (tenant bills are never waived).
+    check(
+      'invoices_payment_mode_status',
+      sql`(${t.status} = 'paid' and ${t.paymentMode} is not null and ${t.paymentMode} <> 'waived') or (${t.status} <> 'paid' and ${t.paymentMode} is null)`,
+    ),
   ],
 );
 
@@ -338,6 +365,8 @@ export const moveRequests = pgTable(
       .references(() => roomTypes.id),
     moveDate: day('move_date').notNull(),
     status: moveStatusEnum('status').notNull().default('scheduled'),
+    /** Why we cancelled the move for the tenant (the destination stopped taking residents); null otherwise. */
+    cancelReason: text('cancel_reason'),
     createdAt: createdAt(),
   },
   (t) => [
@@ -406,6 +435,11 @@ export const residencies = pgTable(
     index('residencies_hostel_idx').on(t.hostelId, t.status),
     index('residencies_user_idx').on(t.userId),
     index('residencies_phone_idx').on(t.phone),
+    // One open owner invite or stay per phone per hostel, so two "add resident" taps at once make one invite.
+    // Stays from subscriptions are left out: activating a paid plan must never fail on this index.
+    uniqueIndex('residencies_one_open_owner_stay')
+      .on(t.hostelId, t.phone)
+      .where(sql`${t.source} = 'owner' and ${t.status} in ('invited', 'active')`),
   ],
 );
 
@@ -430,6 +464,8 @@ export const reviews = pgTable(
     body: text('body').notNull(),
     ownerReply: text('owner_reply'),
     ownerRepliedAt: timestamp('owner_replied_at', { withTimezone: true }),
+    /** Set when the owner edits their reply; the public card then says "edited" with this date. */
+    ownerReplyEditedAt: timestamp('owner_reply_edited_at', { withTimezone: true }),
     hidden: boolean('hidden').notNull().default(false),
     hiddenReason: text('hidden_reason'),
     createdAt: createdAt(),
@@ -458,7 +494,9 @@ export const reviewFlags = pgTable(
     resolved: boolean('resolved').notNull().default(false),
     createdAt: createdAt(),
   },
-  (t) => [unique('review_flags_review_user').on(t.reviewId, t.userId)],
+  // One open flag per person per review. Once an admin acts on a review its flags are resolved, and the same person
+  // may flag it again (for example after it is shown again).
+  (t) => [uniqueIndex('review_flags_one_open').on(t.reviewId, t.userId).where(sql`not ${t.resolved}`)],
 );
 
 export const issues = pgTable(
@@ -494,9 +532,8 @@ export const issueUpdates = pgTable(
     issueId: text('issue_id')
       .notNull()
       .references(() => issues.id, { onDelete: 'cascade' }),
-    authorId: text('author_id')
-      .notNull()
-      .references(() => users.id),
+    /** Null when the platform made the change itself (an issue closing on its own), never a stand-in user. */
+    authorId: text('author_id').references(() => users.id),
     message: text('message').notNull().default(''),
     fromStatus: issueStatusEnum('from_status'),
     toStatus: issueStatusEnum('to_status'),
@@ -571,7 +608,8 @@ export const contentReports = pgTable(
     resolved: boolean('resolved').notNull().default(false),
     createdAt: createdAt(),
   },
-  (t) => [unique('content_reports_target_user').on(t.targetType, t.targetId, t.userId)],
+  // One open report per person per post or comment; resolved reports don't stop a fresh one.
+  (t) => [uniqueIndex('content_reports_one_open').on(t.targetType, t.targetId, t.userId).where(sql`not ${t.resolved}`)],
 );
 
 export const ownerPlans = pgTable('owner_plans', {
@@ -608,18 +646,71 @@ export const ownerInvoices = pgTable(
     plan: ownerPlanTierEnum('plan').notNull(),
     periodStart: day('period_start').notNull(),
     periodEnd: day('period_end').notNull(),
+    /** What is payable: the plan price less `creditAmount`, or the used share of a month an upgrade cut short. */
     amount: integer('amount').notNull(),
+    /** Unused days already paid for on the previous plan, taken off this bill (upgrades). */
+    creditAmount: integer('credit_amount').notNull().default(0),
+    /** What a credit or a shortened period is for, shown on the bill. */
+    note: text('note'),
     status: invoiceStatusEnum('status').notNull().default('due'),
     dueDate: day('due_date').notNull(),
     razorpayOrderId: text('razorpay_order_id').unique(),
     razorpayPaymentId: text('razorpay_payment_id'),
     paidAt: timestamp('paid_at', { withTimezone: true }),
+    /** How the bill was settled: a payment mode when paid, `waived` when an admin waived it (status void). */
+    paymentMode: paymentModeEnum('payment_mode'),
     createdAt: createdAt(),
   },
   (t) => [
-    uniqueIndex('owner_invoices_plan_period')
-      .on(t.ownerPlanId, t.periodStart)
+    // One live bill per plan tier and period. The tier is part of the key because an upgrade on the first day of a
+    // paid month starts the new plan's month on the same day as the old one (the old bill's unused days are credited).
+    uniqueIndex('owner_invoices_plan_tier_period')
+      .on(t.ownerPlanId, t.periodStart, t.plan)
       .where(sql`${t.status} <> 'void'`),
+    check('owner_invoices_amounts_nonneg', sql`${t.amount} >= 0 and ${t.creditAmount} >= 0`),
+    // Paid bills say how they were paid; a void bill is either waived by an admin or dropped by the system (null).
+    check(
+      'owner_invoices_payment_mode_status',
+      sql`(${t.status} = 'paid' and ${t.paymentMode} is not null and ${t.paymentMode} <> 'waived') or (${t.status} = 'void' and (${t.paymentMode} is null or ${t.paymentMode} = 'waived')) or (${t.status} = 'due' and ${t.paymentMode} is null)`,
+    ),
+  ],
+);
+
+/**
+ * A payment we received but could not apply, because its bill stopped being payable while the payment was on its way
+ * (the bed hold expired and the bed went, the plan changed, an admin waived the bill, or the bill was already paid).
+ * The money is owed back until an admin marks it refunded. One row per Razorpay payment, so retried webhooks and the
+ * checkout callback can never record it twice.
+ */
+export const paymentExceptions = pgTable(
+  'payment_exceptions',
+  {
+    id: text('id').primaryKey(),
+    invoiceId: text('invoice_id').references(() => invoices.id),
+    ownerInvoiceId: text('owner_invoice_id').references(() => ownerInvoices.id),
+    /** Who paid: the tenant, or the owner for a plan bill. */
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    hostelId: text('hostel_id')
+      .notNull()
+      .references(() => hostels.id),
+    amount: integer('amount').notNull(),
+    paymentMode: paymentModeEnum('payment_mode').notNull(),
+    reason: paymentExceptionReasonEnum('reason').notNull(),
+    status: paymentExceptionStatusEnum('status').notNull().default('refund_due'),
+    razorpayOrderId: text('razorpay_order_id').notNull(),
+    razorpayPaymentId: text('razorpay_payment_id').notNull().unique(),
+    createdAt: createdAt(),
+    refundedAt: timestamp('refunded_at', { withTimezone: true }),
+    refundedBy: text('refunded_by').references(() => users.id, { onDelete: 'set null' }),
+    refundNote: text('refund_note'),
+  },
+  (t) => [
+    index('payment_exceptions_status_idx').on(t.status, t.createdAt),
+    check('payment_exceptions_one_bill', sql`num_nonnulls(${t.invoiceId}, ${t.ownerInvoiceId}) = 1`),
+    check('payment_exceptions_paid_mode', sql`${t.paymentMode} <> 'waived'`),
+    check('payment_exceptions_refunded', sql`(${t.status} = 'refunded') = (${t.refundedAt} is not null)`),
   ],
 );
 
@@ -667,4 +758,68 @@ export const hostelViews = pgTable(
     count: integer('count').notNull().default(0),
   },
   (t) => [primaryKey({ columns: [t.hostelId, t.day] })],
+);
+
+// ---------------------------------------------------------------------------
+// Partner applications and the admin audit log.
+
+/** One row per partner application: the in-person inspection checklist and the decision. */
+export const partnerApplications = pgTable(
+  'partner_applications',
+  {
+    id: text('id').primaryKey(),
+    hostelId: text('hostel_id')
+      .notNull()
+      .references(() => hostels.id, { onDelete: 'cascade' }),
+    status: partnerStatusEnum('status').notNull().default('applied'),
+    /** Ids of the PARTNER_STANDARDS the inspector ticked. */
+    checklist: jsonb('checklist').$type<string[]>().notNull().default([]),
+    note: text('note').notNull().default(''),
+    reason: text('reason'),
+    /** A visit after a verified partner moved (not an application): it renews the check, not the partnership. */
+    recheck: boolean('recheck').notNull().default(false),
+    decidedBy: text('decided_by').references(() => users.id, { onDelete: 'set null' }),
+    appliedAt: timestamp('applied_at', { withTimezone: true }).notNull().defaultNow(),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('partner_applications_hostel_idx').on(t.hostelId, t.appliedAt),
+    uniqueIndex('partner_applications_one_open').on(t.hostelId).where(sql`${t.status} = 'applied'`),
+  ],
+);
+
+/** What admins did, newest first in the console. */
+export const auditEvents = pgTable(
+  'audit_events',
+  {
+    id: text('id').primaryKey(),
+    actorId: text('actor_id').references(() => users.id, { onDelete: 'set null' }),
+    action: text('action').notNull(),
+    targetType: text('target_type').notNull(),
+    targetId: text('target_id').notNull(),
+    summary: text('summary').notNull().default(''),
+    createdAt: createdAt(),
+  },
+  (t) => [index('audit_events_created_idx').on(t.createdAt), index('audit_events_target_idx').on(t.targetType, t.targetId)],
+);
+
+/**
+ * Material edits of live listings (name, address, area, map pin, gender, food, contact numbers), with what each field
+ * was and became, so admins can see a listing change after they approved it.
+ */
+export const listingChanges = pgTable(
+  'listing_changes',
+  {
+    id: text('id').primaryKey(),
+    hostelId: text('hostel_id')
+      .notNull()
+      .references(() => hostels.id, { onDelete: 'cascade' }),
+    changedBy: text('changed_by').references(() => users.id, { onDelete: 'set null' }),
+    /** Field name → [before, after]. */
+    changes: jsonb('changes').$type<Record<string, [unknown, unknown]>>().notNull(),
+    /** The address or pin of a verified partner moved, so its in-person check needs doing again. */
+    partnerRecheck: boolean('partner_recheck').notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [index('listing_changes_created_idx').on(t.createdAt), index('listing_changes_hostel_idx').on(t.hostelId, t.createdAt)],
 );

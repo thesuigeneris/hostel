@@ -1,7 +1,17 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { ApiError, type GenderType, type HostelInput, type OwnerPlanTier, type RentMethod, type SharingType, type VisitStatus } from '@hostels/shared';
+import {
+  ApiError,
+  dateLabel,
+  type GenderType,
+  type HostelInput,
+  istDate,
+  type OwnerPlanTier,
+  type RentMethod,
+  type SharingType,
+  type VisitStatus,
+} from '@hostels/shared';
 import { num, optional, run, safePath, str } from '@/lib/actions';
 import { api } from '@/lib/api';
 import { uploadPhoto } from '@/lib/upload';
@@ -46,9 +56,9 @@ export async function uploadPhotoAction(form: FormData) {
   const id = str(form, 'hostelId');
   await run(`/owner/hostels/${id}`, async () => {
     const client = await api();
-    const url = await uploadPhoto(client, form);
-    if (!url) throw new ApiError(400, 'validation', 'Choose a photo first');
-    return client.owner.addPhoto(id, url);
+    const photo = await uploadPhoto(client, form, 'listing');
+    if (!photo) throw new ApiError(400, 'validation', 'Choose a photo first');
+    return client.owner.addPhoto(id, photo);
   }, { ok: 'Photo added' });
 }
 
@@ -81,6 +91,8 @@ export async function updateRoomAction(form: FormData) {
     advanceAmount: num(form, 'advanceAmount'),
     totalBeds: num(form, 'totalBeds'),
     bedsAvailable: num(form, 'bedsAvailable'),
+    totalBedsWas: num(form, 'totalBedsWas'),
+    bedsAvailableWas: num(form, 'bedsAvailableWas'),
   }), { ok: 'Room updated' });
 }
 
@@ -119,7 +131,15 @@ export async function addResidentAction(form: FormData) {
 
 export async function endResidentAction(form: FormData) {
   const id = str(form, 'hostelId');
-  await run(`/owner/hostels/${id}/residents`, async () => (await api()).owner.endResident(id, str(form, 'residencyId'), str(form, 'endDate')), { ok: 'Marked as moved out' });
+  const endDate = str(form, 'endDate');
+  const invited = str(form, 'status') === 'invited';
+  await run(`/owner/hostels/${id}/residents`, async () => (await api()).owner.endResident(id, str(form, 'residencyId'), endDate), {
+    ok: invited
+      ? 'Invite withdrawn'
+      : endDate > istDate()
+        ? `Leaving on ${dateLabel(endDate)}. They keep access until then.`
+        : 'Marked as moved out',
+  });
 }
 
 export async function recordRentAction(form: FormData) {
@@ -135,15 +155,17 @@ export async function recordRentAction(form: FormData) {
 }
 
 export async function replyReviewAction(form: FormData) {
+  const editing = str(form, 'mode') === 'edit';
   await run(
     back(form),
     async () => {
-      const review = await (await api()).owner.reply(str(form, 'reviewId'), str(form, 'reply'));
+      const client = await api();
+      const review = editing ? await client.owner.editReply(str(form, 'reviewId'), str(form, 'reply')) : await client.owner.reply(str(form, 'reviewId'), str(form, 'reply'));
       // Replies show on the public listing, which caches reviews briefly.
       revalidatePath('/hostels/[slug]', 'page');
       return review;
     },
-    { ok: 'Reply posted' },
+    { ok: editing ? 'Reply updated. It now shows as edited.' : 'Reply posted' },
   );
 }
 
@@ -156,5 +178,8 @@ export async function changePlanAction(form: FormData) {
 }
 
 export async function setVisitAction(form: FormData) {
-  await run('/owner/visits', async () => (await api()).owner.setVisit(str(form, 'visitId'), str(form, 'status') as VisitStatus));
+  const status = str(form, 'status') as VisitStatus;
+  await run(back(form, '/owner/visits'), async () => (await api()).owner.setVisit(str(form, 'visitId'), status), {
+    ok: status === 'contacted' ? 'Marked as contacted' : 'Request closed',
+  });
 }

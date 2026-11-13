@@ -2,6 +2,7 @@ export type IdPrefix =
   | 'usr'
   | 'hst'
   | 'pho'
+  | 'att'
   | 'rmt'
   | 'vis'
   | 'fdp'
@@ -22,7 +23,11 @@ export type IdPrefix =
   | 'rpt'
   | 'opl'
   | 'oin'
-  | 'rnt';
+  | 'rnt'
+  | 'pap'
+  | 'aud'
+  | 'lch'
+  | 'pex';
 
 const ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyz';
 

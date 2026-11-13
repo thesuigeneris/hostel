@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { setClock } from '../src/lib/clock';
 import { runJobs } from '../src/services/jobs';
-import { activeSubscriber, admin, liveHostel, newOwner, newTenant, roomBeds } from './fixtures';
+import { activeSubscriber, admin, liveHostel, liveSubscriber, newOwner, newTenant, roomBeds } from './fixtures';
 import { call, resetDb } from './helpers';
 
 let ownerToken: string;
@@ -109,6 +109,16 @@ describe('meal skips and headcount', () => {
 });
 
 describe('moves', () => {
+  test('a room a tenant is moving into cannot be deleted', async () => {
+    const dest = await liveHostel(ownerToken, adminToken, { partner: true, area: 'Madhapur' });
+    const t = await newTenant();
+    await activeSubscriber(t.token, hostel.id, room.id, 'full');
+    setClock('2026-12-05T06:00:00Z');
+    expect((await call('/me/moves', { token: t.token, body: { toRoomTypeId: dest.rooms[0].id, moveDate: '2026-12-15' } })).status).toBe(201);
+    const del = await call(`/owner/rooms/${dest.rooms[0].id}`, { token: ownerToken, method: 'DELETE' });
+    expect(del.body.error).toBe('invalid_state');
+  });
+
   test('schedule reserves a bed, re-bills unpaid periods at the new rent, completes on the date', async () => {
     const dest = await liveHostel(ownerToken, adminToken, {
       partner: true,
@@ -173,11 +183,13 @@ describe('moves', () => {
 });
 
 describe('payouts', () => {
-  test('gross of paid bills by paid month, fee %, idempotent, mark paid', async () => {
+  test('gross of bills paid with real money by paid month, fee %, idempotent, mark paid', async () => {
     const a = await newTenant();
     const b = await newTenant();
-    await activeSubscriber(a.token, hostel.id, room.id, 'full'); // 16000
-    await activeSubscriber(b.token, hostel.id, room.id, 'none'); // 10000
+    const demo = await newTenant();
+    await liveSubscriber(a.token, hostel.id, room.id, 'full'); // 16000
+    await liveSubscriber(b.token, hostel.id, room.id, 'none'); // 10000
+    await activeSubscriber(demo.token, hostel.id, room.id, 'full'); // 16000 simulated: never paid out
     expect((await call('/admin/payouts/generate', { token: adminToken, body: { month: '2026-11' } })).body.error).toBe('invalid_state');
 
     setClock('2026-12-02T06:00:00Z');

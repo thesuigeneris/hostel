@@ -2,7 +2,8 @@ import type { HostelSummary } from '@hostels/shared';
 import Link from 'next/link';
 import { GENDER_LABEL, rupees, SHARING_LABEL } from '@/lib/format';
 import { Photo } from './Photo';
-import { Badge, Stars, VerifiedLabel } from './ui';
+import { RatingSummary } from './Rating';
+import { Badge, VerifiedLabel } from './ui';
 
 /**
  * A search result. The hostel name is the link, stretched over the card, so the whole card is clickable
@@ -31,7 +32,7 @@ export function HostelCard({ h }: { h: HostelSummary }) {
               {h.distanceKm !== undefined && ` · ${h.distanceKm} km away`}
             </p>
           </div>
-          {h.reviewCount > 0 && <Stars value={h.rating} />}
+          <RatingSummary rating={h.rating} count={h.reviewCount} />
         </div>
         <div className="mt-auto flex items-end justify-between gap-2 pt-3">
           <div>

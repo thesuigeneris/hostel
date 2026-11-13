@@ -43,6 +43,62 @@
       "when": 1792843580308,
       "tag": "0005_beds_updated_at",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793553216672,
+      "tag": "0006_admin_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793554965327,
+      "tag": "0007_owner_admin",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793556737336,
+      "tag": "0008_payment_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793559799742,
+      "tag": "0009_visit_one_open",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794378360073,
+      "tag": "0010_resident_fixes",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794388999345,
+      "tag": "0011_owner_fixes",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794390421417,
+      "tag": "0012_admin_oversight",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794548343630,
+      "tag": "0013_move_cancelled_refund",
+      "breakpoints": true
     }
   ]
 }

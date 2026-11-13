@@ -1,0 +1,106 @@
+# Production stack: Postgres, a one-shot migration, the API, the website, and (profile `tls`) Caddy for HTTPS.
+# Run from the repository root with the settings in deploy/.env.prod (copy deploy/.env.prod.example):
+#   docker compose -f deploy/compose.prod.yml --env-file deploy/.env.prod up -d --build
+# Full runbook: docs/DEPLOY.md.
+name: hostels
+
+x-api-env: &api-env
+  NODE_ENV: production
+  # Only Caddy and the website reach the API (its port is published on 127.0.0.1 only); both put the client's
+  # address last in X-Forwarded-For, which rate limits then count per client.
+  TRUST_PROXY: "1"
+  DATABASE_URL: postgres://hostels:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/hostels
+  UPLOAD_DIR: /data/uploads
+  PORT: "4000"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hostels
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: hostels
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # No published port: only the API reaches the database, over the compose network.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hostels -d hostels"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Applies new migrations before a new API version starts. Runs once and exits.
+  migrate:
+    image: hostels-api:${TAG:-latest}
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+    command: ["bun", "run", "src/db/migrate.ts"]
+    environment:
+      <<: *api-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    image: hostels-api:${TAG:-latest}
+    restart: unless-stopped
+    env_file: .env.prod
+    environment:
+      <<: *api-env
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    # Background jobs run inside the API and photos sit on its volume: run exactly one API container.
+    ports:
+      - "127.0.0.1:${API_HOST_PORT:-4000}:4000"
+
+  web:
+    image: hostels-web:${TAG:-latest}
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+      args:
+        API_PUBLIC_URL: ${API_PUBLIC_URL:?set API_PUBLIC_URL}
+        SITE_URL: ${WEB_URL:?set WEB_URL}
+    restart: unless-stopped
+    environment:
+      API_URL: http://api:4000
+      API_PUBLIC_URL: ${API_PUBLIC_URL}
+      NEXT_PUBLIC_SITE_URL: ${WEB_URL}
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${WEB_HOST_PORT:-3000}:3000"
+
+  # HTTPS in front of both, with certificates from Let's Encrypt. Needs DNS for both domains pointing here.
+  caddy:
+    image: caddy:2.10-alpine
+    profiles: ["tls"]
+    restart: unless-stopped
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:-}
+      API_DOMAIN: ${API_DOMAIN:-}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+      - api
+
+volumes:
+  pgdata:
+  uploads:
+  caddy_data:
+  caddy_config:

@@ -23,8 +23,9 @@ import { getDb, schema } from '../db';
 import { clock } from '../lib/clock';
 import { parseBody, parseQuery } from '../lib/validate';
 import { type AppEnv, requireAuth } from '../middleware/auth';
-import { hostelIdsOwnedBy, ownedHostel } from '../services/access';
+import { hostelIdsOwnedBy } from '../services/access';
 import { openReports, ownerIssues } from '../services/community';
+import { ownerIssueSummary } from '../services/issue-response';
 import { ownerInsights } from '../services/insights';
 import { copyLastWeek, headcount, ownerMenu, saveMenu, subscribers } from '../services/food';
 import {
@@ -41,9 +42,10 @@ import {
   updateRoomType,
 } from '../services/listings';
 import { toHostel } from '../services/mappers';
+import { brandKit, ownerPartnerInfo } from '../services/partners';
 import { ownerPayouts } from '../services/payouts';
 import { changePlan, getPlan } from '../services/plans';
-import { addResident, endResident, hostelReviews, recordRent, rentSheet, replyToReview, roster } from '../services/residents';
+import { addResident, editReviewReply, endResident, ownerReviews, recordRent, rentSheet, replyToReview, roster } from '../services/residents';
 import { ownerVisits, setVisitStatus } from '../services/visits';
 
 const dateQuery = z.object({ date: z.string().refine(isValidDate).optional() });
@@ -65,6 +67,12 @@ export const ownerRoutes = new Hono<AppEnv>()
   )
   .post('/owner/hostels/:id/submit', async (c) => c.json(await submitHostel(c.get('user'), c.req.param('id'))))
   .post('/owner/hostels/:id/partner', async (c) => c.json(await applyForPartner(c.get('user'), c.req.param('id'))))
+  .get('/owner/hostels/:id/partner', async (c) => c.json(await ownerPartnerInfo(c.get('user'), c.req.param('id'))))
+  .get('/owner/hostels/:id/brand-kit', async (c) => c.json(await brandKit(c.get('user'), c.req.param('id'))))
+  .get('/owner/hostels/:id/insights', async (c) => {
+    const { month } = parseQuery(c, z.object({ month: monthSchema.optional() }));
+    return c.json(await ownerInsights(c.get('user'), c.req.param('id'), month));
+  })
 
   // Rooms and photos.
   .post('/owner/hostels/:id/rooms', async (c) =>
@@ -78,8 +86,8 @@ export const ownerRoutes = new Hono<AppEnv>()
     return c.json({ ok: true as const });
   })
   .post('/owner/hostels/:id/photos', async (c) => {
-    const { url } = await parseBody(c, photoInputSchema);
-    return c.json(await addPhoto(c.get('user'), c.req.param('id'), url), 201);
+    const { photo } = await parseBody(c, photoInputSchema);
+    return c.json(await addPhoto(c.get('user'), c.req.param('id'), photo), 201);
   })
   .delete('/owner/hostels/:id/photos/:photoId', async (c) => {
     await deletePhoto(c.get('user'), c.req.param('id'), c.req.param('photoId'));
@@ -143,13 +151,17 @@ export const ownerRoutes = new Hono<AppEnv>()
 
   // Issues, reviews and reports across the owner's hostels.
   .get('/owner/issues', async (c) => c.json(await ownerIssues(c.get('user'))))
-  .get('/owner/hostels/:id/insights', async (c) => c.json(await ownerInsights(c.get('user'), c.req.param('id'))))
+  .get('/owner/issues/summary', async (c) => c.json(await ownerIssueSummary(c.get('user'))))
   .get('/owner/reports', async (c) => c.json(await openReports({ hostelIds: await hostelIdsOwnedBy(c.get('user').id) })))
   .get('/owner/hostels/:id/reviews', async (c) => {
-    const h = await ownedHostel(c.get('user'), c.req.param('id'));
-    return c.json(await hostelReviews(h.id, { includeHidden: true }));
+    const { page } = parseQuery(c, z.object({ page: z.coerce.number().int().min(1).max(500).default(1) }));
+    return c.json(await ownerReviews(c.get('user'), c.req.param('id'), page));
   })
   .post('/owner/reviews/:id/reply', async (c) => {
     const { reply } = await parseBody(c, ownerReplySchema);
     return c.json(await replyToReview(c.get('user'), c.req.param('id'), reply));
+  })
+  .put('/owner/reviews/:id/reply', async (c) => {
+    const { reply } = await parseBody(c, ownerReplySchema);
+    return c.json(await editReviewReply(c.get('user'), c.req.param('id'), reply));
   });

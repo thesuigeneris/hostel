@@ -33,6 +33,7 @@ import type {
   CommunityPost,
   EscalatedIssue,
   OwnerInsights,
+  OwnerIssueSummary,
   ErrorCode,
   FoodPartner,
   Headcount,
@@ -56,8 +57,12 @@ import type {
   OwnerPayouts,
   OwnerPlanInfo,
   OwnerVisit,
+  AdminPaymentException,
+  PaymentExceptionStatus,
+  PaymentMode,
   PaymentPage,
   PayoutView,
+  PlatformRevenue,
   Residency,
   RentSheet,
   Review,
@@ -70,7 +75,25 @@ import type {
   VisitRequest,
   VisitStatus,
 } from './types';
+import type {
+  AdminFlaggedReview,
+  AdminHiddenContent,
+  AdminHiddenReview,
+  AdminHostel,
+  AdminOwnerInvoice,
+  AdminOwnerPlan,
+  AdminPartnerApplication,
+  AdminReport,
+  ListingChange,
+  AuditAction,
+  AuditEvent,
+  BrandKit,
+  OwnerPartnerInfo,
+  PartnerApplication,
+  PartnerStandardId,
+} from './owner-admin';
 import type { Meal } from './pricing';
+import type { Suggestions } from './seeker';
 import type { OwnerPlanTier } from './types';
 
 export class ApiError extends Error {
@@ -147,6 +170,7 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
       move: (input: MoveInput) => request<MoveRequest>('/me/moves', { body: input }),
       cancelMove: (id: string) => request<MoveRequest>(`/me/moves/${id}`, { method: 'DELETE' }),
       visits: () => request<MyVisit[]>('/me/visits'),
+      cancelVisit: (id: string) => request<VisitRequest>(`/me/visits/${seg(id)}`, { method: 'DELETE' }),
       residencies: () => request<MyResidency[]>('/me/residencies'),
       acceptResidency: (id: string) => request<Residency>(`/me/residencies/${id}/accept`, { method: 'POST' }),
       declineResidency: (id: string) => request<Residency>(`/me/residencies/${id}/decline`, { method: 'POST' }),
@@ -156,18 +180,21 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
     },
     hostels: {
       search: (input: SearchInput = {}) => request<SearchResult>('/hostels', { query: input as Query }),
-      get: (slug: string) => request<HostelDetail>(`/hostels/${slug}`),
-      reviews: (slug: string, page = 1) => request<Review[]>(`/hostels/${slug}/reviews`, { query: { page } }),
-      menu: (slug: string, date?: string) => request<MenuWeek | null>(`/hostels/${slug}/menu`, { query: { date } }),
+      // Slugs and ids come from URLs and form fields, so each is one encoded path segment.
+      get: (slug: string) => request<HostelDetail>(`/hostels/${seg(slug)}`),
+      reviews: (slug: string, page = 1) => request<Review[]>(`/hostels/${seg(slug)}/reviews`, { query: { page } }),
+      menu: (slug: string, date?: string) => request<MenuWeek | null>(`/hostels/${seg(slug)}/menu`, { query: { date } }),
+      /** Areas and hostel names matching what a seeker has typed so far. */
+      suggest: (q: string, limit?: number) => request<Suggestions>('/suggest', { query: { q, limit } }),
       areas: () => request<Area[]>('/areas'),
       sitemap: () => request<{ hostels: { slug: string; area: string }[]; areas: Area[] }>('/sitemap-data'),
       foodPartners: () => request<FoodPartner[]>('/food-partners'),
-      recordView: (slug: string) => request<{ ok: true }>(`/hostels/${slug}/view`, { method: 'POST' }),
-      requestVisit: (hostelId: string, input: VisitRequestInput) => request<VisitRequest>(`/hostels/${hostelId}/visits`, { body: input }),
+      recordView: (slug: string) => request<{ ok: true }>(`/hostels/${seg(slug)}/view`, { method: 'POST' }),
+      requestVisit: (hostelId: string, input: VisitRequestInput) => request<VisitRequest>(`/hostels/${seg(hostelId)}/visits`, { body: input }),
       subscribe: (hostelId: string, input: SubscribeInput) =>
-        request<{ subscription: Subscription; invoice: Invoice }>(`/hostels/${hostelId}/subscribe`, { body: input }),
+        request<{ subscription: Subscription; invoice: Invoice }>(`/hostels/${seg(hostelId)}/subscribe`, { body: input }),
       review: (hostelId: string, input: ReviewInput) => request<Review>(`/hostels/${hostelId}/review`, { method: 'PUT', body: input }),
-      flagReview: (reviewId: string, reason: string) => request<{ ok: true }>(`/reviews/${reviewId}/flag`, { body: { reason } }),
+      flagReview: (reviewId: string, reason: string) => request<{ ok: true }>(`/reviews/${seg(reviewId)}/flag`, { body: { reason } }),
     },
     resident: {
       issues: (hostelId: string, status?: IssueStatus) => request<IssueView[]>(`/hostels/${hostelId}/issues`, { query: { status } }),
@@ -187,6 +214,8 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
       report: (type: 'post' | 'comment', id: string, reason: string) =>
         request<{ ok: true }>(`/${type === 'post' ? 'posts' : 'comments'}/${id}/report`, { body: { reason } }),
       directory: (hostelId: string) => request<{ name: string; sharing: SharingType | null; since: string }[]>(`/hostels/${hostelId}/directory`),
+      /** Issues I reported at any hostel, newest first; read-only at hostels I've moved out of. */
+      myIssues: () => request<IssueView[]>('/me/issues'),
     },
     payments: {
       page: (invoiceId: string) => request<PaymentPage>(`/payments/${invoiceId}`),
@@ -196,49 +225,66 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
     },
     owner: {
       hostels: () => request<Hostel[]>('/owner/hostels'),
-      hostel: (id: string) => request<OwnerHostelDetail>(`/owner/hostels/${id}`),
+      hostel: (id: string) => request<OwnerHostelDetail>(`/owner/hostels/${seg(id)}`),
       create: (input: HostelInput) => request<Hostel>('/owner/hostels', { body: input }),
-      update: (id: string, input: HostelUpdateInput) => request<Hostel>(`/owner/hostels/${id}`, { method: 'PATCH', body: input }),
-      submit: (id: string) => request<Hostel>(`/owner/hostels/${id}/submit`, { method: 'POST' }),
-      applyPartner: (id: string) => request<Hostel>(`/owner/hostels/${id}/partner`, { method: 'POST' }),
-      addRoom: (id: string, input: RoomTypeInput) => request<RoomType>(`/owner/hostels/${id}/rooms`, { body: input }),
-      updateRoom: (roomId: string, input: RoomTypeUpdateInput) => request<RoomType>(`/owner/rooms/${roomId}`, { method: 'PATCH', body: input }),
-      deleteRoom: (roomId: string) => request<{ ok: true }>(`/owner/rooms/${roomId}`, { method: 'DELETE' }),
-      addPhoto: (id: string, url: string) => request<HostelPhoto>(`/owner/hostels/${id}/photos`, { body: { url } }),
-      deletePhoto: (id: string, photoId: string) => request<{ ok: true }>(`/owner/hostels/${id}/photos/${photoId}`, { method: 'DELETE' }),
-      reorderPhotos: (id: string, photoIds: string[]) => request<HostelPhoto[]>(`/owner/hostels/${id}/photos/order`, { method: 'PUT', body: { photoIds } }),
+      update: (id: string, input: HostelUpdateInput) => request<Hostel>(`/owner/hostels/${seg(id)}`, { method: 'PATCH', body: input }),
+      submit: (id: string) => request<Hostel>(`/owner/hostels/${seg(id)}/submit`, { method: 'POST' }),
+      applyPartner: (id: string) => request<Hostel>(`/owner/hostels/${seg(id)}/partner`, { method: 'POST' }),
+      addRoom: (id: string, input: RoomTypeInput) => request<RoomType>(`/owner/hostels/${seg(id)}/rooms`, { body: input }),
+      updateRoom: (roomId: string, input: RoomTypeUpdateInput) => request<RoomType>(`/owner/rooms/${seg(roomId)}`, { method: 'PATCH', body: input }),
+      deleteRoom: (roomId: string) => request<{ ok: true }>(`/owner/rooms/${seg(roomId)}`, { method: 'DELETE' }),
+      /** `photo` is the `upload` receipt from `POST /uploads` with purpose `listing`. */
+      addPhoto: (id: string, photo: string) => request<HostelPhoto>(`/owner/hostels/${seg(id)}/photos`, { body: { photo } }),
+      deletePhoto: (id: string, photoId: string) => request<{ ok: true }>(`/owner/hostels/${seg(id)}/photos/${seg(photoId)}`, { method: 'DELETE' }),
+      reorderPhotos: (id: string, photoIds: string[]) => request<HostelPhoto[]>(`/owner/hostels/${seg(id)}/photos/order`, { method: 'PUT', body: { photoIds } }),
       visits: (status?: VisitStatus) => request<OwnerVisit[]>('/owner/visits', { query: { status } }),
-      setVisit: (id: string, status: VisitStatus) => request<VisitRequest>(`/owner/visits/${id}`, { method: 'PATCH', body: { status } }),
-      menu: (id: string, weekStart: string) => request<MenuWeek | null>(`/owner/hostels/${id}/menus/${weekStart}`),
+      setVisit: (id: string, status: VisitStatus) => request<VisitRequest>(`/owner/visits/${seg(id)}`, { method: 'PATCH', body: { status } }),
+      menu: (id: string, weekStart: string) => request<MenuWeek | null>(`/owner/hostels/${seg(id)}/menus/${seg(weekStart)}`),
       saveMenu: (id: string, weekStart: string, input: MenuWeekInput) =>
-        request<MenuWeek>(`/owner/hostels/${id}/menus/${weekStart}`, { method: 'PUT', body: input }),
-      copyLastWeek: (id: string, weekStart: string) => request<MenuWeek>(`/owner/hostels/${id}/menus/${weekStart}/copy-last`, { method: 'POST' }),
-      headcount: (id: string, date?: string) => request<Headcount>(`/owner/hostels/${id}/headcount`, { query: { date } }),
-      subscribers: (id: string) => request<Subscriber[]>(`/owner/hostels/${id}/subscribers`),
+        request<MenuWeek>(`/owner/hostels/${seg(id)}/menus/${seg(weekStart)}`, { method: 'PUT', body: input }),
+      copyLastWeek: (id: string, weekStart: string) => request<MenuWeek>(`/owner/hostels/${seg(id)}/menus/${seg(weekStart)}/copy-last`, { method: 'POST' }),
+      headcount: (id: string, date?: string) => request<Headcount>(`/owner/hostels/${seg(id)}/headcount`, { query: { date } }),
+      subscribers: (id: string) => request<Subscriber[]>(`/owner/hostels/${seg(id)}/subscribers`),
       payouts: () => request<OwnerPayouts>('/owner/payouts'),
-      plan: (id: string) => request<OwnerPlanInfo>(`/owner/hostels/${id}/plan`),
-      insights: (id: string) => request<OwnerInsights>(`/owner/hostels/${id}/insights`),
-      changePlan: (id: string, plan: OwnerPlanTier) => request<OwnerPlanInfo>(`/owner/hostels/${id}/plan`, { body: { plan } }),
-      residents: (id: string) => request<Residency[]>(`/owner/hostels/${id}/residents`),
-      addResident: (id: string, input: ResidentInput) => request<Residency>(`/owner/hostels/${id}/residents`, { body: input }),
+      plan: (id: string) => request<OwnerPlanInfo>(`/owner/hostels/${seg(id)}/plan`),
+      changePlan: (id: string, plan: OwnerPlanTier) => request<OwnerPlanInfo>(`/owner/hostels/${seg(id)}/plan`, { body: { plan } }),
+      residents: (id: string) => request<Residency[]>(`/owner/hostels/${seg(id)}/residents`),
+      addResident: (id: string, input: ResidentInput) => request<Residency>(`/owner/hostels/${seg(id)}/residents`, { body: input }),
       endResident: (id: string, rid: string, endDate: string) =>
-        request<Residency>(`/owner/hostels/${id}/residents/${rid}/end`, { body: { endDate } }),
-      rent: (id: string, month?: string) => request<RentSheet>(`/owner/hostels/${id}/rent`, { query: { month } }),
-      recordRent: (id: string, rid: string, input: RentRecordInput) => request(`/owner/hostels/${id}/rent/${rid}`, { method: 'PUT', body: input }),
+        request<Residency>(`/owner/hostels/${seg(id)}/residents/${seg(rid)}/end`, { body: { endDate } }),
+      rent: (id: string, month?: string) => request<RentSheet>(`/owner/hostels/${seg(id)}/rent`, { query: { month } }),
+      recordRent: (id: string, rid: string, input: RentRecordInput) => request(`/owner/hostels/${seg(id)}/rent/${seg(rid)}`, { method: 'PUT', body: input }),
       issues: () => request<IssueView[]>('/owner/issues'),
+      issueSummary: () => request<OwnerIssueSummary>('/owner/issues/summary'),
       reports: () => request<{ id: string; targetType: string; targetId: string; reason: string; hostelName: string; createdAt: string }[]>('/owner/reports'),
-      reviews: (id: string) => request<Review[]>(`/owner/hostels/${id}/reviews`),
-      reply: (reviewId: string, reply: string) => request<Review>(`/owner/reviews/${reviewId}/reply`, { body: { reply } }),
+      /** Unreplied first, then newest; 20 a page. */
+      reviews: (id: string, page = 1) => request<Review[]>(`/owner/hostels/${seg(id)}/reviews`, { query: { page } }),
+      reply: (reviewId: string, reply: string) => request<Review>(`/owner/reviews/${seg(reviewId)}/reply`, { body: { reply } }),
+      /** Changes a reply already posted; the review then shows it as edited. */
+      editReply: (reviewId: string, reply: string) => request<Review>(`/owner/reviews/${seg(reviewId)}/reply`, { method: 'PUT', body: { reply } }),
+      insights: (id: string, month?: string) => request<OwnerInsights>(`/owner/hostels/${seg(id)}/insights`, { query: { month } }),
+      partnerInfo: (id: string) => request<OwnerPartnerInfo>(`/owner/hostels/${seg(id)}/partner`),
+      brandKit: (id: string) => request<BrandKit>(`/owner/hostels/${seg(id)}/brand-kit`),
     },
     admin: {
       stats: () => request<AdminStats>('/admin/stats'),
       escalatedIssues: () => request<EscalatedIssue[]>('/admin/issues/escalated'),
-      hostels: (filter: { status?: string; partnerStatus?: string } = {}) => request<Hostel[]>('/admin/hostels', { query: filter }),
+      hostels: (filter: { status?: string; partnerStatus?: string; q?: string; recheck?: boolean; limit?: number; offset?: number } = {}) =>
+        request<AdminHostel[]>('/admin/hostels', { query: filter }),
       hostel: (id: string) => request<HostelDetail>(`/admin/hostels/${id}`),
       approve: (id: string) => request<Hostel>(`/admin/hostels/${id}/approve`, { method: 'POST' }),
       reject: (id: string, reason: string) => request<Hostel>(`/admin/hostels/${id}/reject`, { body: { reason } }),
-      verifyPartner: (id: string, platformFeePct: number) => request<Hostel>(`/admin/hostels/${id}/partner/verify`, { body: { platformFeePct } }),
+      verifyPartner: (id: string, platformFeePct: number, inspection?: { checklist: PartnerStandardId[]; note?: string }) =>
+        request<Hostel>(`/admin/hostels/${id}/partner/verify`, { body: { platformFeePct, ...inspection } }),
+      partnerApplications: (status?: 'applied' | 'verified' | 'rejected') =>
+        request<AdminPartnerApplication[]>('/admin/partner-applications', { query: { status } }),
+      saveChecklist: (id: string, checklist: PartnerStandardId[], note = '') =>
+        request<PartnerApplication>(`/admin/hostels/${id}/partner/checklist`, { method: 'PUT', body: { checklist, note } }),
       rejectPartner: (id: string, reason: string) => request<Hostel>(`/admin/hostels/${id}/partner/reject`, { body: { reason } }),
+      listingChanges: (filter: { recheck?: boolean; hostelId?: string; before?: string; limit?: number } = {}) =>
+        request<ListingChange[]>('/admin/listing-changes', { query: filter }),
+      recheckPartner: (id: string, checklist: PartnerStandardId[], note: string) =>
+        request<AdminHostel>(`/admin/hostels/${seg(id)}/partner/recheck`, { body: { checklist, note } }),
       setFee: (id: string, platformFeePct: number) => request<Hostel>(`/admin/hostels/${id}/fee`, { method: 'PATCH', body: { platformFeePct } }),
       foodPartners: () => request<FoodPartner[]>('/admin/food-partners'),
       addFoodPartner: (input: { name: string; cuisine?: string; logoUrl?: string | null; active?: boolean }) =>
@@ -249,21 +295,46 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
         request<{ subscription: Subscription; user: { id: string; name: string; phone: string }; hostelName: string }[]>('/admin/subscriptions', { query: { status } }),
       moves: () => request<MoveRequest[]>('/admin/moves'),
       overdue: () => request<{ invoice: Invoice; userName: string; phone: string; hostelName: string }[]>('/admin/invoices/overdue'),
-      ownerInvoices: () => request<(OwnerInvoice & { hostelName: string })[]>('/admin/owner-invoices'),
+      ownerInvoices: (filter: { status?: string; mode?: PaymentMode; overdue?: boolean; q?: string } = {}) =>
+        request<AdminOwnerInvoice[]>('/admin/owner-invoices', { query: filter }),
+      ownerPlans: (filter: { plan?: OwnerPlanTier; suspended?: boolean; q?: string } = {}) =>
+        request<AdminOwnerPlan[]>('/admin/owner-plans', { query: filter }),
+      voidOwnerInvoice: (id: string, reason: string) => request<OwnerInvoice>(`/admin/owner-invoices/${id}/void`, { body: { reason } }),
+      revenue: (month?: string) => request<PlatformRevenue>('/admin/revenue', { query: { month } }),
+      paymentExceptions: (status?: PaymentExceptionStatus) =>
+        request<AdminPaymentException[]>('/admin/payment-exceptions', { query: { status } }),
+      markRefunded: (id: string, note: string) => request<AdminPaymentException>(`/admin/payment-exceptions/${id}/refunded`, { body: { note } }),
       payouts: (month?: string) => request<PayoutView[]>('/admin/payouts', { query: { month } }),
       generatePayouts: (month: string) => request<PayoutView[]>('/admin/payouts/generate', { body: { month } }),
       markPayoutPaid: (id: string) => request('/admin/payouts/' + id + '/paid', { method: 'POST' }),
-      flaggedReviews: () =>
-        request<{ review: Review & { userId: string }; hostelName: string; flags: number; reasons: string[] }[]>('/admin/reviews/flagged'),
-      hideReview: (id: string, reason: string) => request(`/admin/reviews/${id}/hide`, { body: { reason } }),
-      unhideReview: (id: string) => request(`/admin/reviews/${id}/unhide`, { method: 'POST' }),
-      reports: () => request<{ id: string; targetType: string; targetId: string; reason: string; hostelName: string; hostelId: string; createdAt: string }[]>('/admin/reports'),
+      flaggedReviews: () => request<AdminFlaggedReview[]>('/admin/reviews/flagged'),
+      hiddenReviews: () => request<AdminHiddenReview[]>('/admin/reviews/hidden'),
+      hideReview: (id: string, reason: string) => request(`/admin/reviews/${seg(id)}/hide`, { body: { reason } }),
+      unhideReview: (id: string) => request(`/admin/reviews/${seg(id)}/unhide`, { method: 'POST' }),
+      /** Keeps a flagged review up and dismisses its flags, with the reason. */
+      keepReview: (id: string, reason: string) => request<{ id: string; dismissed: number }>(`/admin/reviews/${seg(id)}/keep`, { body: { reason } }),
+      reports: () => request<AdminReport[]>('/admin/reports'),
+      hiddenContent: () => request<AdminHiddenContent[]>('/admin/content/hidden'),
+      /** Hide (with a reason), show again, or keep (dismiss the reports, with a reason) a post or comment. */
+      moderateContent: (type: 'post' | 'comment', id: string, action: 'hide' | 'unhide' | 'keep', reason?: string) =>
+        request<{ hostelId: string; resolved: number }>(`/admin/content/${type}/${seg(id)}/${action}`, {
+          method: 'POST',
+          body: action === 'unhide' ? undefined : { reason },
+        }),
       runJobs: () => request<Record<string, number>>('/admin/jobs/run', { method: 'POST' }),
+      audit: (filter: { action?: AuditAction; targetId?: string; q?: string; before?: string; limit?: number } = {}) =>
+        request<AuditEvent[]>('/admin/audit', { query: filter }),
     },
   };
 }
 
 export type ApiClient = ReturnType<typeof createApiClient>;
+
+/**
+ * One path segment, so `../me` can't climb out of the route it was meant for. A bare `.` or `..` would still be
+ * read as a dot segment, and is never a real id or slug, so it becomes `...`, which matches nothing.
+ */
+const seg = (value: string) => (value === '.' || value === '..' ? '...' : encodeURIComponent(value));
 
 function safeJson(text: string): unknown {
   try {

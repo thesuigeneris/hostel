@@ -1,4 +1,4 @@
-import type { Invoice, Subscription, User } from '@hostels/shared';
+import type { Invoice, MoveView, Subscription, User } from '@hostels/shared';
 import {
   addDays,
   billingPeriod,
@@ -17,7 +17,6 @@ import { getDb, schema, type Tx } from '../db';
 import { clock } from '../lib/clock';
 import { isUniqueViolation } from '../lib/db-errors';
 import { AppError, notFound } from '../lib/errors';
-import { createOrder } from '../lib/razorpay';
 import { isBookable, planFor } from './access';
 
 type SubRow = typeof schema.subscriptions.$inferSelect;
@@ -142,8 +141,17 @@ export async function subscribe(user: User, hostelId: string, input: z.output<ty
     return await db.transaction(async (tx) => {
       const [hostel] = await tx.select().from(schema.hostels).where(eq(schema.hostels.id, hostelId));
       if (!hostel || hostel.status !== 'live') throw notFound('Hostel');
-      if (!isBookable(hostel, await planFor(hostel.id, tx))) {
-        throw new AppError('not_verified', 'Only verified partner hostels take subscriptions');
+      // Anyone signed in may take a plan (owners and admins live in hostels too), but never at their own hostel:
+      // they would be billing themselves, and their rent records and reviews would count as a resident's.
+      if (hostel.ownerId === user.id) {
+        throw new AppError('cannot_subscribe_own_hostel', 'You own this hostel, so you can’t take a plan here.', 409);
+      }
+      const plan = await planFor(hostel.id, tx);
+      if (!isBookable(hostel, plan)) {
+        // A verified partner whose platform bill is overdue is paused, not unverified: say so, without the billing detail.
+        throw hostel.partnerStatus === 'verified' && plan.suspended
+          ? new AppError('not_verified', 'This hostel isn’t taking new subscriptions right now. Try again later or pick another hostel.')
+          : new AppError('not_verified', 'Only verified partner hostels take subscriptions');
       }
       const [room] = await tx
         .select()
@@ -177,17 +185,10 @@ export async function subscribe(user: User, hostelId: string, input: z.output<ty
         })
         .returning();
       const invoice = await createInvoiceForPeriod(tx, sub!, billingPeriod(today, 0));
-      const order = await createOrder({
-        amountInPaise: invoice!.totalAmount * 100,
-        receipt: invoice!.id,
-        notes: { invoiceId: invoice!.id, subscriptionId: sub!.id },
-      });
-      const [withOrder] = await tx
-        .update(schema.invoices)
-        .set({ razorpayOrderId: order.id })
-        .where(eq(schema.invoices.id, invoice!.id))
-        .returning();
-      return { subscription: toSubscription(sub!), invoice: toInvoice(withOrder!) };
+      // No payment order here: Razorpay can be slow or down, and the room row stays locked until this commits.
+      // The pay page creates the order when the tenant pays (`orderFor`). If that fails or they never pay,
+      // the pending plan expires after PENDING_SUBSCRIPTION_TTL_MINUTES and the bed is released.
+      return { subscription: toSubscription(sub!), invoice: toInvoice(invoice!) };
     });
   } catch (e) {
     if (isUniqueViolation(e, 'subscriptions_one_open_per_user')) {
@@ -197,15 +198,32 @@ export async function subscribe(user: User, hostelId: string, input: z.output<ty
   }
 }
 
-/** Runs when a bill is paid: a pending subscription becomes active and its residency starts. */
-export async function activateIfPending(tx: Tx, subscriptionId: string) {
+/**
+ * Runs when a bill is paid: a pending subscription becomes active and its residency starts. `from: 'expired'` takes
+ * back up a plan whose bed hold ran out before its first payment arrived (see `markOrderPaid`).
+ */
+export async function activateIfPending(tx: Tx, subscriptionId: string, from: 'pending' | 'expired' = 'pending') {
   const [sub] = await tx
     .update(schema.subscriptions)
     .set({ status: 'active' })
-    .where(and(eq(schema.subscriptions.id, subscriptionId), eq(schema.subscriptions.status, 'pending')))
+    .where(and(eq(schema.subscriptions.id, subscriptionId), eq(schema.subscriptions.status, from)))
     .returning();
   if (!sub) return null;
   const [user] = await tx.select().from(schema.users).where(eq(schema.users.id, sub.userId));
+  // Someone the owner already listed as a resident now pays through the platform: their owner-added stay ends the day
+  // before the plan starts (or is withdrawn if never accepted), so the rent tracker doesn't count them twice.
+  const r = schema.residencies;
+  const ownerStays = await tx
+    .select()
+    .from(r)
+    .where(and(eq(r.hostelId, sub.hostelId), eq(r.source, 'owner'), eq(r.phone, user!.phone), inArray(r.status, ['invited', 'active'])));
+  for (const stay of ownerStays) {
+    const endDate = addDays(sub.startDate, -1) < stay.startDate ? stay.startDate : addDays(sub.startDate, -1);
+    await tx
+      .update(r)
+      .set(stay.status === 'invited' ? { status: 'declined' } : { status: 'ended', endDate })
+      .where(and(eq(r.id, stay.id), eq(r.status, stay.status)));
+  }
   await tx.insert(schema.residencies).values({
     id: newId('res'),
     userId: sub.userId,
@@ -232,11 +250,34 @@ export async function openSubscription(userId: string, db: Tx = getDb()) {
   return sub ?? null;
 }
 
+/** The tenant's recent moves with where each goes, newest first. */
+async function moveViews(subscriptionId: string): Promise<MoveView[]> {
+  const db = getDb();
+  const m = schema.moveRequests;
+  const rows = await db
+    .select({ move: m, hostel: schema.hostels, toSharing: schema.roomTypes.sharing })
+    .from(m)
+    .innerJoin(schema.hostels, eq(schema.hostels.id, m.toHostelId))
+    .leftJoin(schema.roomTypes, eq(schema.roomTypes.id, m.toRoomTypeId))
+    .where(eq(m.subscriptionId, subscriptionId))
+    .orderBy(desc(m.createdAt))
+    .limit(5);
+  return Promise.all(
+    rows.map(async ({ move, hostel, toSharing }) => ({
+      ...move,
+      createdAt: move.createdAt.toISOString(),
+      toHostelName: hostel.name,
+      toSharing,
+      toHostelOpen: isBookable(hostel, await planFor(hostel.id, db)),
+    })),
+  );
+}
+
 export async function mySubscription(user: User) {
   const db = getDb();
   const sub = await openSubscription(user.id);
   if (!sub) return null;
-  const [[hostel], [room], invoices, [move]] = await Promise.all([
+  const [[hostel], [room], invoices, moves] = await Promise.all([
     db
       .select({ id: schema.hostels.id, slug: schema.hostels.slug, name: schema.hostels.name, area: schema.hostels.area })
       .from(schema.hostels)
@@ -247,19 +288,20 @@ export async function mySubscription(user: User) {
       .from(schema.invoices)
       .where(and(eq(schema.invoices.subscriptionId, sub.id), inArray(schema.invoices.status, ['due', 'paid'])))
       .orderBy(desc(schema.invoices.periodStart)),
-    db
-      .select()
-      .from(schema.moveRequests)
-      .where(and(eq(schema.moveRequests.subscriptionId, sub.id), eq(schema.moveRequests.status, 'scheduled'))),
+    moveViews(sub.id),
   ]);
   const today = clock.today();
+  const latest = moves[0];
   return {
     subscription: toSubscription(sub),
     hostel: hostel!,
     roomType: room!,
     currentPeriod: periodContaining(sub.startDate, today),
     invoices: invoices.map(toInvoice),
-    scheduledMove: move ? { ...move, createdAt: move.createdAt.toISOString() } : null,
+    scheduledMove: moves.find((m) => m.status === 'scheduled') ?? null,
+    // The latest move, when we cancelled it for them (the destination stopped taking residents): shown for a month so
+    // they know why they're staying put.
+    cancelledMove: latest?.status === 'cancelled' && latest.cancelReason && latest.moveDate >= addDays(today, -30) ? latest : null,
   };
 }
 
@@ -311,7 +353,15 @@ export async function cancelSubscription(user: User) {
       return toSubscription(cancelled);
     }
     if (sub.cancelAt) return toSubscription(sub);
-    const cancelAt = periodContaining(sub.startDate, clock.today()).end;
+    // A bill paid early for the next period keeps the plan running to the end of that period.
+    const [lastPaid] = await tx
+      .select({ periodEnd: schema.invoices.periodEnd })
+      .from(schema.invoices)
+      .where(and(eq(schema.invoices.subscriptionId, sub.id), eq(schema.invoices.status, 'paid')))
+      .orderBy(desc(schema.invoices.periodEnd))
+      .limit(1);
+    const currentEnd = periodContaining(sub.startDate, clock.today()).end;
+    const cancelAt = lastPaid && lastPaid.periodEnd > currentEnd ? lastPaid.periodEnd : currentEnd;
     const [updated] = await tx
       .update(schema.subscriptions)
       .set({ cancelAt })
