@@ -146,8 +146,12 @@ export async function subscribe(user: User, hostelId: string, input: z.output<ty
       if (hostel.ownerId === user.id) {
         throw new AppError('cannot_subscribe_own_hostel', 'You own this hostel, so you can’t take a plan here.', 409);
       }
-      if (!isBookable(hostel, await planFor(hostel.id, tx))) {
-        throw new AppError('not_verified', 'Only verified partner hostels take subscriptions');
+      const plan = await planFor(hostel.id, tx);
+      if (!isBookable(hostel, plan)) {
+        // A verified partner whose platform bill is overdue is paused, not unverified: say so, without the billing detail.
+        throw hostel.partnerStatus === 'verified' && plan.suspended
+          ? new AppError('not_verified', 'This hostel isn’t taking new subscriptions right now. Try again later or pick another hostel.')
+          : new AppError('not_verified', 'Only verified partner hostels take subscriptions');
       }
       const [room] = await tx
         .select()
@@ -206,6 +210,20 @@ export async function activateIfPending(tx: Tx, subscriptionId: string, from: 'p
     .returning();
   if (!sub) return null;
   const [user] = await tx.select().from(schema.users).where(eq(schema.users.id, sub.userId));
+  // Someone the owner already listed as a resident now pays through the platform: their owner-added stay ends the day
+  // before the plan starts (or is withdrawn if never accepted), so the rent tracker doesn't count them twice.
+  const r = schema.residencies;
+  const ownerStays = await tx
+    .select()
+    .from(r)
+    .where(and(eq(r.hostelId, sub.hostelId), eq(r.source, 'owner'), eq(r.phone, user!.phone), inArray(r.status, ['invited', 'active'])));
+  for (const stay of ownerStays) {
+    const endDate = addDays(sub.startDate, -1) < stay.startDate ? stay.startDate : addDays(sub.startDate, -1);
+    await tx
+      .update(r)
+      .set(stay.status === 'invited' ? { status: 'declined' } : { status: 'ended', endDate })
+      .where(and(eq(r.id, stay.id), eq(r.status, stay.status)));
+  }
   await tx.insert(schema.residencies).values({
     id: newId('res'),
     userId: sub.userId,
