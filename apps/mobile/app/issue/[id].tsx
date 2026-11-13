@@ -98,6 +98,7 @@ export default function IssueScreen() {
           <Row>
             <Text style={{ fontWeight: '600', color: theme.colors.text }}>{u.author}</Text>
             {u.byOwner && <Badge label="Hostel" tone="green" />}
+            {u.isNew && <Badge label="New" tone="food" />}
             {u.toStatus && <><P muted>moved it to</P><StatusBadge status={u.toStatus} /></>}
             <P muted>{timeAgo(u.createdAt)}</P>
           </Row>

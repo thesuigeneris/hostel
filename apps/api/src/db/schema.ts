@@ -566,6 +566,21 @@ export const issueUpdates = pgTable(
   (t) => [index('issue_updates_issue_idx').on(t.issueId)],
 );
 
+/** When a person last opened an issue they reported: updates by anyone else after that are unread (product gap 1b). */
+export const issueReads = pgTable(
+  'issue_reads',
+  {
+    issueId: text('issue_id')
+      .notNull()
+      .references(() => issues.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    seenAt: timestamp('seen_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.issueId, t.userId] })],
+);
+
 export const issueUpvotes = pgTable(
   'issue_upvotes',
   {
