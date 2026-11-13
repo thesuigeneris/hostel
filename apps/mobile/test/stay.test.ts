@@ -155,3 +155,25 @@ describe('food plan change (1a)', () => {
     expect(sameAsNow({ mealPlan: 'none', diet: 'veg' }, 'none', 'non-veg')).toBe(true);
   });
 });
+
+describe('in-app signals (1b)', () => {
+  test('the tab badge shows only when an issue has something new', async () => {
+    const { tabBadge } = await import('../lib/signals');
+    expect(tabBadge(null)).toBeUndefined();
+    expect(tabBadge({ issuesWithUpdates: 0, issueUpdates: 0 })).toBeUndefined();
+    expect(tabBadge({ issuesWithUpdates: 2, issueUpdates: 5 })).toBe(2);
+  });
+  test('new updates are counted per hostel and worded for one or many', async () => {
+    const { newUpdatesAt, newUpdatesLabel } = await import('../lib/signals');
+    const issues = [
+      { hostelId: 'a', unreadUpdates: 2 },
+      { hostelId: 'a', unreadUpdates: 0 },
+      { hostelId: 'b', unreadUpdates: 1 },
+    ];
+    expect(newUpdatesAt(issues, 'a')).toBe(1);
+    expect(newUpdatesAt(issues, 'c')).toBe(0);
+    expect(newUpdatesLabel(1)).toBe('1 new update');
+    expect(newUpdatesLabel(3)).toBe('3 new updates');
+    expect(newUpdatesLabel(0)).toBeNull();
+  });
+});

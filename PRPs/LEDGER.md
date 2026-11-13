@@ -379,6 +379,17 @@ Spec: `docs/superpowers/specs/2026-11-13-food-plan-change.md` (approved by the o
 | FOOD-CHANGE-GATES | Gates | — | typecheck 4/4; lint clean (350 files); shared 62; web unit 20; mobile 53 (51 + 2); API 279 (272 + 7); `e2e:fresh` 84/84 (83 + 1); `expo export --platform android` exit 0 | verified 2026-11-13 |
 | FOOD-CHANGE-APP | Same in the app: screen, notice and cancel on My Stay | `apps/mobile/app/food-plan.tsx`, `lib/foodPlan.ts`, `(tabs)/stay.tsx` | `apps/mobile/test/stay.test.ts` › food plan change (2); typecheck | screen logic verified; screen unverified on a device |
 
+## Product gap 1b: in-app signals for residents
+
+Spec: `docs/superpowers/specs/2026-11-13-resident-signals.md` (approved by the owner 2026-11-13). Migration `0015_issue_reads`.
+
+| Req | Requirement | Implementation | Test | Status |
+|---|---|---|---|---|
+| SIGNALS-API | Updates by others on issues I reported are unread until I open (or write on) the issue; only the reporter; automatic closes count | `services/issue-reads.ts` `unreadCounts`, `markSeen`, `mySignals`; `issues.ts` `decorate`, `issueDetail` (`isNew`); `GET /me/signals` | API `resident-signals.test.ts` (4) | verified; revert-checked (without marking read: fails) |
+| SIGNALS-WEB | Menu badge on "My hostel" (words for screen readers), per-hostel link to my issues, "N new updates" in lists, "New" in the timeline | `components/NavLinks.tsx`, `SiteHeader.tsx`, `app/layout.tsx`, `app/stay/page.tsx`, `components/Community.tsx`, `app/issues/[id]/page.tsx` | e2e `resident-journey.spec.ts` › 3 (badge, link, list, New, cleared after; axe) | verified; menu clears on the next page (spec, known limit) |
+| SIGNALS-GATES | Gates | — | typecheck 4/4; lint clean (353 files); shared 62; web unit 20; mobile 55 (53 + 2); API 283 (279 + 4); `e2e:fresh` 84/84; `expo export --platform android` exit 0 | verified 2026-11-13 |
+| SIGNALS-APP | My Stay tab badge (refreshed on start, return to app, each minute), per-stay buttons, list and timeline badges | `apps/mobile/app/(tabs)/_layout.tsx`, `(tabs)/stay.tsx`, `components/Community.tsx`, `app/issue/[id].tsx`, `lib/signals.ts` | `apps/mobile/test/stay.test.ts` › in-app signals (2); typecheck | logic verified; screens unverified on a device |
+
 
 ## Later PRPs (rows filled when each PRP is generated)
 

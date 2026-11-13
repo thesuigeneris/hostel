@@ -451,7 +451,12 @@ export type IssueView = {
   needsResponse: boolean;
   /** When the hostel's answer has been awaited since (the report or the latest reopen); null once answered. */
   awaitingReplySince: string | null;
+  /** For the reporter: updates by others since they last opened it. Always 0 for anyone else. */
+  unreadUpdates: number;
 };
+
+/** In-app signals (no push): what the person hasn't seen yet. */
+export type MySignals = { issuesWithUpdates: number; issueUpdates: number };
 
 export type IssueDetail = IssueView & {
   updates: {
@@ -464,6 +469,8 @@ export type IssueDetail = IssueView & {
     byOwner: boolean;
     /** Written by the platform itself (the issue closed on its own), not by a person. */
     bySystem: boolean;
+    /** For the reporter: new since they last opened the issue (opening it now marks everything read). */
+    isNew: boolean;
   }[];
 };
 

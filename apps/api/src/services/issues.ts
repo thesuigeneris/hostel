@@ -7,6 +7,7 @@ import { clock } from '../lib/clock';
 import { AppError, forbidden, notFound } from '../lib/errors';
 import { claimUpload, photoUrl } from '../lib/uploads';
 import { hostelIdsOwnedBy, requireMember } from './access';
+import { lastSeen, markSeen, unreadCounts } from './issue-reads';
 import { type ResponseState, responseStates } from './issue-response';
 
 type IssueRow = typeof schema.issues.$inferSelect;
@@ -47,6 +48,8 @@ type ViewCtx = {
   upvotes: number;
   upvoted: boolean;
   response: ResponseState;
+  /** Updates by others since the reporter last opened it; 0 for anyone else. */
+  unread?: number;
 };
 
 function toIssue(r: IssueRow, ctx: ViewCtx) {
@@ -70,6 +73,7 @@ function toIssue(r: IssueRow, ctx: ViewCtx) {
     readOnly: ctx.readOnly,
     upvotes: ctx.upvotes,
     upvotedByMe: ctx.upvoted,
+    unreadUpdates: ctx.unread ?? 0,
     // One rule (`issueNeedsResponse`): an owner comment or status move answers it; a reopen asks again.
     ...ctx.response,
   };
@@ -79,7 +83,7 @@ async function decorate(viewer: User, rows: IssueRow[], isOwnerOf: (hostelId: st
   if (!rows.length) return [];
   const db = getDb();
   const ids = rows.map((r) => r.id);
-  const [votes, mineVotes, reporters, responses] = await Promise.all([
+  const [votes, mineVotes, reporters, responses, unread] = await Promise.all([
     db
       .select({ issueId: schema.issueUpvotes.issueId, n: sql<number>`count(*)::int` })
       .from(schema.issueUpvotes)
@@ -94,6 +98,7 @@ async function decorate(viewer: User, rows: IssueRow[], isOwnerOf: (hostelId: st
       .from(schema.users)
       .where(inArray(schema.users.id, [...new Set(rows.map((r) => r.reporterId))])),
     responseStates(rows),
+    unreadCounts(viewer, rows),
   ]);
   return rows.map((r) =>
     toIssue(r, {
@@ -104,6 +109,7 @@ async function decorate(viewer: User, rows: IssueRow[], isOwnerOf: (hostelId: st
       upvotes: votes.find((v) => v.issueId === r.id)?.n ?? 0,
       upvoted: mineVotes.some((v) => v.issueId === r.id),
       response: responses.get(r.id)!,
+      unread: unread.get(r.id) ?? 0,
     }),
   );
 }
@@ -168,6 +174,10 @@ async function loadIssue(user: User, issueId: string) {
 export async function issueDetail(user: User, issueId: string) {
   const { issue, isOwner, hostel, readOnly } = await loadIssue(user, issueId);
   const [decorated] = await decorate(user, [issue], () => isOwner, () => readOnly);
+  // The reporter opening their issue reads it: what is new is marked once, then the badge clears.
+  const mine = issue.reporterId === user.id;
+  const seenBefore = mine ? ((await lastSeen(user.id, issue.id)) ?? issue.createdAt) : null;
+  if (mine) await markSeen(user.id, issue.id);
   const updates = await getDb()
     .select({ update: schema.issueUpdates, authorName: schema.users.name, authorRole: schema.users.role })
     .from(schema.issueUpdates)
@@ -176,6 +186,8 @@ export async function issueDetail(user: User, issueId: string) {
     .orderBy(asc(schema.issueUpdates.createdAt), asc(schema.issueUpdates.id));
   return {
     ...decorated!,
+    // Read now: the count that brought them here is cleared (the timeline still marks what was new).
+    unreadUpdates: 0,
     updates: updates.map(({ update, authorName, authorRole }) => {
       const bySystem = update.authorId === null;
       const byOwner = !bySystem && update.authorId === hostel.ownerId;
@@ -191,6 +203,7 @@ export async function issueDetail(user: User, issueId: string) {
         author: bySystem ? 'Automatic' : byOwner ? 'Hostel' : byTeam ? 'Hostels team' : visible ? publicFirstName(authorName) : 'Resident',
         byOwner,
         bySystem,
+        isNew: seenBefore !== null && update.authorId !== user.id && update.createdAt > seenBefore,
       };
     }),
   };

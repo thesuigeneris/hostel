@@ -5,6 +5,7 @@ import { Image, Pressable, Text, View } from 'react-native';
 import { api } from '@/lib/api';
 import { confirm } from '@/lib/confirm';
 import { charCount, POST_LIMIT, REPLY_LIMIT, textProblem } from '@/lib/stay';
+import { newUpdatesLabel } from '@/lib/signals';
 import { theme } from '@/lib/theme';
 import { type Photo, uploadPhoto } from '@/lib/upload';
 import { PhotoField } from './PhotoField';
@@ -28,12 +29,13 @@ export function IssueList({ issues, emptyText = 'No issues reported. Nice.' }: {
   return (
     <>
       {issues.map((i) => (
-        <Pressable key={i.id} accessibilityRole="link" accessibilityLabel={i.title} onPress={() => router.push(`/issue/${i.id}`)}>
+        <Pressable key={i.id} accessibilityRole="link" accessibilityLabel={i.unreadUpdates > 0 ? `${i.title}, ${newUpdatesLabel(i.unreadUpdates)}` : i.title} onPress={() => router.push(`/issue/${i.id}`)}>
           <Card>
             <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap' }}>
               <Text style={{ fontWeight: '600', color: theme.colors.text, flex: 1 }}>{i.title}</Text>
               <StatusBadge status={i.status} />
             </Row>
+            {i.unreadUpdates > 0 && <Badge label={newUpdatesLabel(i.unreadUpdates)!} tone="food" />}
             {i.needsResponse && <Badge label="Waiting on hostel" tone="red" />}
             <P muted>{titleCase(i.category)} · {i.reporter?.name ?? 'A resident'}{i.mine ? ' (you)' : ''} · {timeAgo(i.createdAt)} · {i.upvotes} me-too</P>
           </Card>

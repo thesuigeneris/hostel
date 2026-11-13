@@ -49,6 +49,7 @@ import type {
   MenuWeek,
   FoodPlanChange,
   MoveRequest,
+  MySignals,
   MyMenu,
   MyResidency,
   MySubscription,
@@ -221,6 +222,8 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
       directory: (hostelId: string) => request<{ name: string; sharing: SharingType | null; since: string }[]>(`/hostels/${hostelId}/directory`),
       /** Issues I reported at any hostel, newest first; read-only at hostels I've moved out of. */
       myIssues: () => request<IssueView[]>('/me/issues'),
+      /** Badge counts: my issues with updates I haven't opened yet. */
+      signals: () => request<MySignals>('/me/signals'),
     },
     payments: {
       page: (invoiceId: string) => request<PaymentPage>(`/payments/${invoiceId}`),

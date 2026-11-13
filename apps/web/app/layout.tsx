@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import { SiteFooter, SiteHeader } from '@/components/SiteHeader';
-import { currentUser, health, SITE_URL } from '@/lib/api';
+import { api, currentUser, health, SITE_URL } from '@/lib/api';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -16,6 +16,8 @@ export const viewport: Viewport = { themeColor: '#1F5C46', width: 'device-width'
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const [user, status] = await Promise.all([currentUser().catch(() => null), health()]);
+  // The badge on "My hostel": issues I reported with updates I haven't opened. Never blocks the page.
+  const signals = user ? await (await api()).resident.signals().catch(() => null) : null;
   // Anything that is not the real thing is said on every page, including Razorpay test keys (no real money moves).
   const devNotes = status
     ? [status.msg91 === 'stub' && 'OTP is 123456', status.payments === 'simulated' && 'payments are simulated', status.payments === 'razorpay_test' && 'Razorpay test mode, no real money moves'].filter(
@@ -35,7 +37,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           <div className="bg-food-soft px-4 py-1 text-center text-xs text-food-ink">Dev mode: {devNotes.join(' · ')}</div>
         )}
         {status === null && <div className="bg-danger-soft px-4 py-1 text-center text-xs text-danger">The API is not reachable. Start it with `bun run dev:api`.</div>}
-        <SiteHeader user={user} />
+        <SiteHeader user={user} signals={signals} />
         <main id="main" tabIndex={-1} className="focus:outline-none">
           {children}
         </main>
