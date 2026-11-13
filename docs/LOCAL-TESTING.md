@@ -143,7 +143,7 @@ docker compose exec postgres createdb -U postgres hostels_e2e     # once (or: cr
 (cd apps/web && bun run e2e:fresh)
 ```
 
-Expected on `dev` today: API 294 pass, shared 63, web unit 20, mobile 56, browser 87 pass, typecheck and lint clean.
+Expected on `dev` today: API 294 pass, shared 65, web unit 21, mobile 58, browser 87 pass, typecheck and lint clean.
 The API and browser tests **wipe** the database they point at: never point them at one with data you want.
 
 ## 7. Optional: the production setup on your laptop
@@ -179,7 +179,7 @@ docker compose -f deploy/compose.prod.yml --env-file deploy/.env.prod down -v   
 | API says `"db":"down"` | Postgres isn't running: `bun run db:up` |
 | Tests hang at the start | The test database doesn't exist: create `hostels_test` (or `hostels_e2e` for browser tests) |
 | Login code not accepted | In local mode the code is always `123456`; too many wrong tries locks the number for a while: `bun run db:reset` |
-| Maps show no tiles | They load from OpenStreetMap; check your internet connection |
+| Maps show no tiles | They load from OpenStreetMap (free, no key; the app also loads Leaflet from unpkg.com); check your internet connection |
 | The app can't reach the API on a phone | Use the LAN address (§3), same Wi-Fi; allow ports 4000/3000 through the laptop's firewall |
 | Ports 3000/4000 in use | Stop the other process, or set `PORT` in `apps/api/.env` and `API_URL` in `apps/web/.env.local` to match |
 | Want a clean slate | `bun run db:reset` (all demo data back); `docker compose down -v` removes the database entirely |

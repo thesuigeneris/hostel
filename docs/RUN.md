@@ -66,7 +66,7 @@ Expo Go is enough for day-to-day work. To get an installable APK (testers) or an
 |---|---|
 | `APP_VARIANT` | `development` (default), `preview` or `production`. Non-production builds are named "Hostels (preview)" etc. |
 | `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_WEB_URL` | The API and website the app talks to. Baked into the bundle at build time. |
-| `GOOGLE_MAPS_ANDROID_API_KEY` | Google Maps key for the hostel map. Without it the map screen does not work on Android builds. |
+| `EXPO_PUBLIC_MAP_TILE_URL`, `EXPO_PUBLIC_MAP_ATTRIBUTION` | Optional: a map tile provider (see "Maps" below). Free OpenStreetMap tiles without them. |
 
 Plain `http://` URLs (an API on your LAN) are allowed only in development and preview builds; production builds allow HTTPS only.
 
@@ -105,13 +105,40 @@ EXPO_PUBLIC_API_URL=https://api.example.com EXPO_PUBLIC_WEB_URL=https://example.
 ```bash
 bunx eas-cli login
 bunx eas-cli init                              # once: links the project to your Expo account
-bunx eas-cli secret:create --name GOOGLE_MAPS_ANDROID_API_KEY --value <key>   # or set it under the project's environment variables
 bun run eas:preview                            # APK
 bun run eas:production                         # AAB
 bunx eas-cli submit --platform android --profile production   # Play Console, internal track
 ```
 
 EAS stores the Play signing key for you on the first production build. With local builds, raise `android.versionCode` in `app.json` for every Play upload.
+
+## Maps (free by default)
+
+The website and the app both use **Leaflet** with **OpenStreetMap** tiles: free, no API key, no billing account. (The
+app shows Leaflet in a WebView, so there is no Google Maps SDK and no Google key.) Map data © OpenStreetMap
+contributors; the credit line is always shown on the map, as the licence requires.
+
+OpenStreetMap's own tile servers are run by volunteers. Their [tile policy](https://operations.osmfoundation.org/policies/tiles/)
+is fine for development and a small launch but asks heavy users to move to a tile provider. When traffic grows, switch
+with a setting, no code change. Give any **raster** tile URL with `{z}`, `{x}`, `{y}` (and the key, if the provider needs
+one) and its credit line:
+
+| Where | Settings | When read |
+|---|---|---|
+| Website | `NEXT_PUBLIC_MAP_TILE_URL`, `NEXT_PUBLIC_MAP_ATTRIBUTION` in `apps/web/.env.local` (or the build environment) | At build: rebuild the site |
+| App | `EXPO_PUBLIC_MAP_TILE_URL`, `EXPO_PUBLIC_MAP_ATTRIBUTION` | At build: rebuild the app |
+
+The website's Content Security Policy allows the configured tile host automatically. A URL that isn't `https` or lacks
+the placeholders is ignored, and the map keeps using OpenStreetMap.
+
+Options, roughly from free to scalable (check each provider's current free limits and commercial terms before choosing;
+they change):
+1. **OpenStreetMap tiles** (today): free, no key; for development and a small launch.
+2. **A provider's free tier** (MapTiler, Stadia Maps, Thunderforest, Geoapify and others offer raster tiles with a free
+   monthly quota and an API key): same maps, more headroom; set the two variables above.
+3. **Paid tier of the same provider** when the free quota runs out: the same two variables.
+4. **Self-hosted tiles** (e.g. an OpenStreetMap extract for Telangana served by your own tile server): no per-request
+   cost, but a server to run.
 
 ## 6. Going live
 

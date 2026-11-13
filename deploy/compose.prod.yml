@@ -67,6 +67,9 @@ services:
       args:
         API_PUBLIC_URL: ${API_PUBLIC_URL:?set API_PUBLIC_URL}
         SITE_URL: ${WEB_URL:?set WEB_URL}
+        # Optional map tile provider (free OpenStreetMap tiles when empty): docs/RUN.md, "Maps".
+        MAP_TILE_URL: ${MAP_TILE_URL:-}
+        MAP_ATTRIBUTION: ${MAP_ATTRIBUTION:-}
     restart: unless-stopped
     environment:
       API_URL: http://api:4000

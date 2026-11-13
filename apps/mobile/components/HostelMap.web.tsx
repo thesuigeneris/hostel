@@ -2,7 +2,7 @@ import type { HostelSummary } from '@hostels/shared';
 import { Linking, Pressable, Text, View } from 'react-native';
 import { theme } from '@/lib/theme';
 
-// react-native-maps has no web build. The web preview (used for smoke tests) shows a link to OpenStreetMap instead.
+// The WebView map has no web build. The web preview (used for smoke tests) shows a link to OpenStreetMap instead.
 export function HostelMap({ hostels, height = 200 }: { hostels: Pick<HostelSummary, 'id' | 'slug' | 'name' | 'lat' | 'lng' | 'isVerified' | 'minRent'>[]; height?: number; center?: { lat: number; lng: number } }) {
   const first = hostels[0];
   return (

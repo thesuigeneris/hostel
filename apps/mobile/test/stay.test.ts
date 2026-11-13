@@ -188,3 +188,30 @@ describe('data rights (1c)', () => {
     expect(exportText({ a: 1 })).toBe('{\n  "a": 1\n}');
   });
 });
+
+describe('free maps (Leaflet in a WebView)', () => {
+  test('the page pins Leaflet with integrity hashes, uses the tiles given, and hostel names cannot break out of the script', async () => {
+    const { leafletHtml, scriptJson } = await import('../lib/leafletMap');
+    const { DEFAULT_MAP_TILES } = await import('@hostels/shared');
+    const html = leafletHtml({
+      pins: [{ id: 'a', lat: 17.44, lng: 78.35, label: 'Sri Sai </script><script>alert(1)</script>', slug: 'sri-sai' }],
+      center: { lat: 17.44, lng: 78.35 },
+      zoom: 13,
+      tiles: DEFAULT_MAP_TILES,
+      colors: { verified: '#1F5C46', other: '#E08A2E' },
+    });
+    expect(html).toContain('integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="');
+    expect(html).toContain('tile.openstreetmap.org');
+    expect(html).not.toContain('</script><script>alert(1)');
+    expect(scriptJson('</script>')).toBe('"\\u003c/script\\u003e"');
+  });
+
+  test('messages from the map are checked before use', async () => {
+    const { mapMessage } = await import('../lib/leafletMap');
+    expect(mapMessage('{"type":"open","slug":"sri-sai-pg"}')).toEqual({ type: 'open', slug: 'sri-sai-pg' });
+    expect(mapMessage('{"type":"open","slug":"../admin"}')).toBeNull();
+    expect(mapMessage('{"type":"pin","lat":17.4412345678,"lng":78.35}')).toEqual({ type: 'pin', lat: 17.441235, lng: 78.35 });
+    expect(mapMessage('{"type":"pin","lat":200,"lng":0}')).toBeNull();
+    expect(mapMessage('not json')).toBeNull();
+  });
+});
