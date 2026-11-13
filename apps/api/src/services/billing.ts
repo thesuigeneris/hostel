@@ -18,6 +18,7 @@ import { clock } from '../lib/clock';
 import { isUniqueViolation } from '../lib/db-errors';
 import { AppError, notFound } from '../lib/errors';
 import { isBookable, planFor } from './access';
+import { cancelFoodChangesAfter, planOn, scheduledFoodChange, toFoodPlanChange } from './food-plan-state';
 
 type SubRow = typeof schema.subscriptions.$inferSelect;
 type InvoiceRow = typeof schema.invoices.$inferSelect;
@@ -53,7 +54,7 @@ export async function releaseBed(tx: Tx, roomTypeId: string) {
 // --- invoices --------------------------------------------------------------
 
 /** The hostel and room a subscription will be in on a date, counting a scheduled move. */
-async function placeOn(tx: Tx, sub: SubRow, date: string) {
+export async function placeOn(tx: Tx, sub: SubRow, date: string) {
   const [move] = await tx
     .select()
     .from(schema.moveRequests)
@@ -94,7 +95,9 @@ export async function createInvoiceForPeriod(tx: Tx, sub: SubRow, period: Billin
     const w = creditWindow(sub.startDate, period.index);
     return skipCredits(tx, sub.id, w.from, w.to);
   })();
-  const bill = computeBill({ rent: room.monthlyRent, mealPlan: sub.mealPlan, skipCredits: credits });
+  // A food plan change counts from the first period it covers.
+  const { mealPlan } = planOn(sub, await scheduledFoodChange(tx, sub.id), period.start);
+  const bill = computeBill({ rent: room.monthlyRent, mealPlan, skipCredits: credits });
   const rows = await tx
     .insert(schema.invoices)
     .values({
@@ -277,7 +280,7 @@ export async function mySubscription(user: User) {
   const db = getDb();
   const sub = await openSubscription(user.id);
   if (!sub) return null;
-  const [[hostel], [room], invoices, moves] = await Promise.all([
+  const [[hostel], [room], invoices, moves, foodChange] = await Promise.all([
     db
       .select({ id: schema.hostels.id, slug: schema.hostels.slug, name: schema.hostels.name, area: schema.hostels.area })
       .from(schema.hostels)
@@ -289,6 +292,7 @@ export async function mySubscription(user: User) {
       .where(and(eq(schema.invoices.subscriptionId, sub.id), inArray(schema.invoices.status, ['due', 'paid'])))
       .orderBy(desc(schema.invoices.periodStart)),
     moveViews(sub.id),
+    scheduledFoodChange(db, sub.id),
   ]);
   const today = clock.today();
   const latest = moves[0];
@@ -302,6 +306,7 @@ export async function mySubscription(user: User) {
     // The latest move, when we cancelled it for them (the destination stopped taking residents): shown for a month so
     // they know why they're staying put.
     cancelledMove: latest?.status === 'cancelled' && latest.cancelReason && latest.moveDate >= addDays(today, -30) ? latest : null,
+    scheduledFoodChange: foodChange ? toFoodPlanChange(foodChange) : null,
   };
 }
 
@@ -350,6 +355,7 @@ export async function cancelSubscription(user: User) {
         .where(and(eq(schema.invoices.subscriptionId, sub.id), eq(schema.invoices.status, 'due')));
       await releaseBed(tx, sub.roomTypeId);
       await cancelScheduledMoves(tx, sub.id);
+      await cancelFoodChangesAfter(tx, sub.id);
       return toSubscription(cancelled);
     }
     if (sub.cancelAt) return toSubscription(sub);
@@ -372,6 +378,7 @@ export async function cancelSubscription(user: User) {
       .set({ status: 'void' })
       .where(and(eq(schema.invoices.subscriptionId, sub.id), eq(schema.invoices.status, 'due'), gt(schema.invoices.periodStart, cancelAt)));
     await cancelScheduledMoves(tx, sub.id, cancelAt);
+    await cancelFoodChangesAfter(tx, sub.id, cancelAt);
     return toSubscription(updated!);
   });
 }

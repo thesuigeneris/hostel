@@ -11,6 +11,7 @@ import {
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import {
+  cancelFoodPlanChangeAction,
   cancelMoveAction,
   cancelSubscriptionAction,
   cancelVisitAction,
@@ -108,9 +109,22 @@ export default async function AccountPage({ searchParams }: Props) {
                       )}
                     </form>
                   )}
+                  {mine.scheduledFoodChange && (
+                    <form action={cancelFoodPlanChangeAction} className="mt-4 rounded-xl bg-food-soft p-3 text-sm text-food-ink">
+                      <input type="hidden" name="changeId" value={mine.scheduledFoodChange.id} />
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span>
+                          Food plan changes to {planLabel(mine.scheduledFoodChange.mealPlan)}
+                          {mine.scheduledFoodChange.mealPlan !== 'none' && ` (${mine.scheduledFoodChange.diet})`} from {dateLabel(mine.scheduledFoodChange.effectiveFrom)}, with that bill.
+                        </span>
+                        <SubmitButton variant="secondary" size="sm" pendingText="Cancelling…">Keep my current plan</SubmitButton>
+                      </div>
+                    </form>
+                  )}
                   {sub.status === 'active' && !sub.cancelAt && (
                     <div className="mt-4 flex flex-wrap gap-2">
                       {!mine.scheduledMove && <LinkButton href="/account/move" variant="secondary" size="sm">Move hostel or room</LinkButton>}
+                      <LinkButton href="/account/food" variant="secondary" size="sm">Change food plan</LinkButton>
                       <LinkButton href={`/stay/${mine.hostel.id}`} variant="secondary" size="sm">Hostel community</LinkButton>
                       <form action={cancelSubscriptionAction}>
                         <SubmitButton variant="ghost" size="sm" confirm="Cancel your plan at the end of this billing period?">Cancel plan</SubmitButton>

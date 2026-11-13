@@ -4,6 +4,7 @@ import { ApiError, type Diet, type Meal, type MealPlan } from '@hostels/shared';
 import { redirect } from 'next/navigation';
 import { run, safePath, str } from '@/lib/actions';
 import { api } from '@/lib/api';
+import { dateLabel } from '@/lib/format';
 
 const back = (form: FormData, fallback: string) => safePath(str(form, '_back'), fallback);
 
@@ -107,6 +108,18 @@ export async function scheduleMoveAction(form: FormData) {
   await run('/account', async () => (await api()).me.move({ toRoomTypeId: str(form, 'toRoomTypeId'), moveDate: str(form, 'moveDate') }), {
     ok: 'Move scheduled. Your bed is held and your next bill uses the new rent.',
   });
+}
+
+export async function changeFoodPlanAction(form: FormData) {
+  const mealPlan = str(form, 'mealPlan') as MealPlan;
+  const diet = (str(form, 'diet') || 'veg') as Diet;
+  await run('/account/food', async () => (await api()).me.changeFoodPlan({ mealPlan, diet }), {
+    to: (c) => `/account?ok=${encodeURIComponent(`Food plan change saved. It starts with your bill from ${dateLabel(c.effectiveFrom)}.`)}`,
+  });
+}
+
+export async function cancelFoodPlanChangeAction(form: FormData) {
+  await run('/account', async () => (await api()).me.cancelFoodPlanChange(str(form, 'changeId')), { ok: 'Food plan change cancelled. Your plan stays as it is.' });
 }
 
 export async function cancelMoveAction(form: FormData) {

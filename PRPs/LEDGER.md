@@ -365,6 +365,20 @@ Branch `persona-admin` (admin/ops work, migration `0012_admin_oversight`) merged
 Not done here: `docs/product/audit-admin.md` (the admin agent's checklist was never written); the "Recently changed"
 screens are covered by typecheck and API tests only, the app screen is unverified on a device.
 
+## Product gap 1a: change food plan or diet from the next bill
+
+Spec: `docs/superpowers/specs/2026-11-13-food-plan-change.md` (approved by the owner 2026-11-13). Migration
+`0014_food_plan_changes`.
+
+| Req | Requirement | Implementation | Test | Status |
+|---|---|---|---|---|
+| FOOD-CHANGE | Change food plan/diet from the first unpaid period; unpaid bills from then re-made; paid ones kept; job applies it on its day | `services/food-plan.ts` `scheduleFoodChange`, `cancelFoodChange`, `applyDueFoodChanges`; `food-plan-state.ts` `planOn`; `billing.ts` `createInvoiceForPeriod`, `mySubscription`, `cancelSubscription`; `routes/tenant.ts` | API `food-plan-change.test.ts` (7) | verified; revert-checked (billing: 3 fail; headcount: 1 fails) |
+| FOOD-CHANGE-DATES | Menu, skips and kitchen headcount use the plan in force on each date; dropped meals' skips removed | `food.ts` `myMenu`, `checkSkippable`, `headcount` | API › skips and the kitchen follow the plan in force | verified; revert-checked (headcount) |
+| FOOD-CHANGE-RULES | Same plan refused (diet ignored without food); food only where served (incl. a move's hostel); a move to a no-food hostel refused while a food change waits; plan ending drops it | `food-plan.ts`, `moves.ts` `scheduleMove` | API › cancelled or replaced; › no food; › a plan that ends | verified |
+| FOOD-CHANGE-WEB | `/account/food`; notice with "Keep my current plan" on `/account`; errors in plain words | `app/account/food/page.tsx`, `app/account/actions.ts`, `app/account/page.tsx` | e2e `resident-daily.spec.ts` › 2b (axe on both pages; plan picked by keyboard) | verified |
+| FOOD-CHANGE-GATES | Gates | — | typecheck 4/4; lint clean (350 files); shared 62; web unit 20; mobile 53 (51 + 2); API 279 (272 + 7); `e2e:fresh` 84/84 (83 + 1); `expo export --platform android` exit 0 | verified 2026-11-13 |
+| FOOD-CHANGE-APP | Same in the app: screen, notice and cancel on My Stay | `apps/mobile/app/food-plan.tsx`, `lib/foodPlan.ts`, `(tabs)/stay.tsx` | `apps/mobile/test/stay.test.ts` › food plan change (2); typecheck | screen logic verified; screen unverified on a device |
+
 
 ## Later PRPs (rows filled when each PRP is generated)
 

@@ -137,3 +137,21 @@ describe('meal skips (M4, M6)', () => {
     expect(skipControl(day, { ...meal, credit: 0, skipped: true })).toMatchObject({ title: 'Undo skip', skippedNote: 'Skipped · no credit' });
   });
 });
+
+describe('food plan change (1a)', () => {
+  const sub = { mealPlan: 'full', diet: 'veg' } as const;
+  test('a hostel without food offers only no food; a scheduled change is picked first', async () => {
+    const { foodPlanChoices } = await import('../lib/foodPlan');
+    const mine = { subscription: sub, scheduledFoodChange: null } as never;
+    expect(foodPlanChoices(mine, true)).toEqual({ plans: ['full', 'two-meals', 'none'], mealPlan: 'full', diet: 'veg' });
+    expect(foodPlanChoices(mine, false).plans).toEqual(['none']);
+    const pending = { subscription: sub, scheduledFoodChange: { mealPlan: 'two-meals', diet: 'non-veg' } } as never;
+    expect(foodPlanChoices(pending, true)).toMatchObject({ mealPlan: 'two-meals', diet: 'non-veg' });
+  });
+  test('saving the plan already in force is caught before asking; diet does not matter without food', async () => {
+    const { sameAsNow } = await import('../lib/foodPlan');
+    expect(sameAsNow(sub, 'full', 'veg')).toBe(true);
+    expect(sameAsNow(sub, 'full', 'non-veg')).toBe(false);
+    expect(sameAsNow({ mealPlan: 'none', diet: 'veg' }, 'none', 'non-veg')).toBe(true);
+  });
+});
