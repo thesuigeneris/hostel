@@ -233,6 +233,28 @@ export function Pagination({ page, pages, href }: { page: number; pages: number;
   );
 }
 
+/**
+ * Previous / Next for admin tables that page without a total: the page fetches one row more than it shows to know
+ * whether there is a next page. `label` names the table for screen readers when a page has several.
+ */
+export function PrevNext({ page, hasMore, href, label = 'Pages' }: { page: number; hasMore: boolean; href: (page: number) => string; label?: string }) {
+  if (page <= 1 && !hasMore) return null;
+  const item = cx('grid h-11 min-w-11 place-items-center rounded-xl bg-surface px-3 text-sm text-ink-soft no-underline hover:text-brand', focusRing);
+  return (
+    <nav aria-label={label} className="mt-4 flex items-center justify-center gap-3 text-sm">
+      {page > 1 && <a href={href(page - 1)} className={item} rel="prev">Previous</a>}
+      <span className="text-ink-muted">Page {page}</span>
+      {hasMore && <a href={href(page + 1)} className={item} rel="next">Next</a>}
+    </nav>
+  );
+}
+
+/** Page number from a query string value: 1 for anything that isn't a whole number from 1 to 1000. */
+export function pageParam(value: string | undefined): number {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 1 && n <= 1000 ? n : 1;
+}
+
 /** A filter link in a row of filters (36 px target). The current one is filled; pair it with `aria-current`. */
 export function pillClass(active: boolean) {
   return cx(

@@ -40,16 +40,21 @@ Each needs: a spec note in `docs/superpowers/specs/`, API + web + app, edge case
 
 ## 2. Bugs and gaps found in the code (each needs a test that fails without the fix)
 
-- [ ] **Completed move after an early-paid bill** (confirmed 2026-11-13 with a throwaway test): the next period's bill
+- [x] **Completed move after an early-paid bill**: fixed with the safe default (b), a move date inside a month
+      already paid at the current room is refused with the date it can be (ledger MOVE-PAID-AHEAD). Option (a), moving
+      the paid month with a top-up or refund, stays open for the owner. Original note:
+      (confirmed 2026-11-13 with a throwaway test): the next period's bill
       paid at the old room's rent before the move was scheduled is left alone by `regenerateUnpaidFrom` (it only redoes
       unpaid bills). After the move completes, that period stays attributed to the old hostel at the old rent, so the
       new hostel is never paid for it. The mirror of the 0013 fix. **Owner decision needed (money):** (a) move the bill
       to the new hostel and bill the rent difference as a top-up (refund it if the new room is cheaper), or (b) refuse
       move dates inside a period already paid. Safest default if no answer: (b).
-- [ ] **`cancelSubscription` racing a payment** (`billing.ts`): releasing a held bed re-reads the plan, but a small window
-      remains.
-- [ ] **First bill payable after the 30-minute hold** until the expiry job runs: money is covered by the late-payment
-      revive; check what the payer sees.
+- [x] **`cancelSubscription` racing a payment**: it was a real deadlock (cancel locked the plan then the bill, a
+      payment the bill then the plan; one request failed with a 500). Cancel now locks the bills first. Ledger
+      CANCEL-PAY-RACE; `cancel-payment-race.test.ts` (both orders; fails without the fix).
+- [x] **First bill payable after the 30-minute hold**: until the job runs the bed is still held, so paying confirms
+      the plan, and the pay page says the hold has run out and to pay now; once the job has run the bill is void.
+      Tests: `cancel-payment-race.test.ts` › paying a first bill after the hold; shared `seeker.test.ts` › bed hold.
 - [ ] **Owner-added residents can be fictitious**: their reviews count. Consider rent records or an admin spot-check
       before they count in the rating.
 - [ ] **Signed private-photo links** can be shared for up to 90 minutes, including by someone who has just left.
@@ -58,10 +63,10 @@ Each needs: a spec note in `docs/superpowers/specs/`, API + web + app, edge case
 
 ## 3. Admin per-screen audit (the gap in `audit-admin.md`)
 
-- [ ] Loading, empty, error and success states of every admin page; error codes in plain words.
-- [ ] Keyboard-only completion of moderation and the partner checklist.
-- [ ] Admin tables are capped (e.g. 500 rows) with no paging UI.
-- [ ] `admin:revoke` script: `admin:grant` exists (`apps/api/package.json`), revoking does not.
+- [x] Loading, empty, error and success states of every admin page; error codes in plain words (`audit-admin.md`).
+- [x] Keyboard-only completion of moderation and the partner checklist (e2e).
+- [x] Admin tables page beyond their caps on the web (listings, partners, subscriptions, moves). App: first page only.
+- [x] `admin:revoke` script.
 - [ ] Cross-cutting rules X1–X8 in `edge-cases.md`: give each a status and evidence.
 
 ## 4. Docker production test run

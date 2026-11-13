@@ -1,12 +1,16 @@
-import { type AdminOwnerInvoice, OWNER_PLAN_TIERS, OWNER_PLANS, type OwnerPlanTier, REFUND_REASON_LABEL } from '@hostels/shared';
+import { type AdminOwnerInvoice, OWNER_PLAN_TIERS, OWNER_PLANS, type OwnerPlanTier, phoneLabel, REFUND_REASON_LABEL } from '@hostels/shared';
 import Link from 'next/link';
 import { SubmitButton } from '@/components/SubmitButton';
-import { Back, Badge, Checkbox, Field, Flash, Input, PageHeader, pillClass, Select, Stat, StatusBadge, Table, Td } from '@/components/ui';
+import { Back, Badge, Checkbox, Field, Flash, Input, PageHeader, pageParam, pillClass, PrevNext, Select, Stat, StatusBadge, Table, Td } from '@/components/ui';
 import { api } from '@/lib/api';
 import { dateLabel, monthLabel, notCountedLabel, PAYMENT_MODE_LABEL, planLabel, rupees } from '@/lib/format';
 import { markRefundedAction, voidOwnerBillAction } from '../actions';
 
-type Props = { searchParams: Promise<{ q?: string; plan?: string; paused?: string; bills?: string; error?: string; ok?: string }> };
+type Props = {
+  searchParams: Promise<{ q?: string; plan?: string; paused?: string; bills?: string; subs?: string; moves?: string; error?: string; ok?: string }>;
+};
+
+const PAGE = 50;
 
 const BILL_FILTERS = { all: 'All', due: 'Unpaid', overdue: 'Overdue', paid: 'Paid', waived: 'Waived' } as const;
 
@@ -19,8 +23,11 @@ export default async function AdminBilling({ searchParams }: Props) {
   const billFilter = (q.bills && q.bills in BILL_FILTERS ? q.bills : 'all') as keyof typeof BILL_FILTERS;
   const client = await api();
   const filtered = !!(q.q || plan || q.paused === '1');
-  const [subs, overdue, plans, allPlans, ownerBills, moves, refunds, revenue] = await Promise.all([
-    client.admin.subscriptions(),
+  const subsPage = pageParam(q.subs);
+  const movesPage = pageParam(q.moves);
+  const [subsFound, overdue, plans, allPlans, ownerBills, movesFound, refunds, revenue] = await Promise.all([
+    // One more than a page, to know whether there is a next one.
+    client.admin.subscriptions({ limit: PAGE + 1, offset: (subsPage - 1) * PAGE }),
     client.admin.overdue(),
     client.admin.ownerPlans({ q: q.q, plan, suspended: q.paused === '1' ? true : undefined }),
     filtered ? client.admin.ownerPlans() : null,
@@ -30,12 +37,22 @@ export default async function AdminBilling({ searchParams }: Props) {
       status: billFilter === 'due' || billFilter === 'paid' ? billFilter : undefined,
       mode: billFilter === 'waived' ? 'waived' : undefined,
     }),
-    client.admin.moves(),
+    client.admin.moves({ limit: PAGE + 1, offset: (movesPage - 1) * PAGE }),
     client.admin.paymentExceptions(),
     client.admin.revenue(),
   ]);
+  const subs = subsFound.slice(0, PAGE);
+  const moves = movesFound.slice(0, PAGE);
   const params = new URLSearchParams(Object.entries({ q: q.q, plan: q.plan, paused: q.paused, bills: q.bills }).filter((e): e is [string, string] => !!e[1]));
   const path = `/admin/billing${params.size ? `?${params}` : ''}`;
+  // Each table pages on its own and keeps the other's page and the filters.
+  const pageHref = (key: 'subs' | 'moves', p: number) => {
+    const next = new URLSearchParams(params);
+    if (subsPage > 1) next.set('subs', String(subsPage));
+    if (movesPage > 1) next.set('moves', String(movesPage));
+    next.set(key, String(p));
+    return `/admin/billing?${next}#${key}`;
+  };
   const totals = allPlans ?? plans;
   const refundsDue = refunds.filter((r) => r.status === 'refund_due');
 
@@ -54,7 +71,7 @@ export default async function AdminBilling({ searchParams }: Props) {
           <Table head={['Payer', 'Hostel', 'Amount', 'Why', 'Received', 'Refund']}>
             {refunds.map((r) => (
               <tr key={r.id}>
-                <Td><div>{r.payer.name || '—'}</div><div className="text-xs text-ink-muted">+91 {r.payer.phone}</div></Td>
+                <Td><div>{r.payer.name || '—'}</div><div className="text-xs text-ink-muted">{phoneLabel(r.payer.phone)}</div></Td>
                 <Td>{r.hostelName}<div className="text-xs text-ink-muted">{r.billKind === 'owner' ? 'Owner plan bill' : 'Tenant bill'}</div></Td>
                 <Td>{rupees(r.amount)}<div className="text-xs text-ink-muted">{PAYMENT_MODE_LABEL[r.paymentMode]} · {r.razorpayPaymentId}</div></Td>
                 <Td className="max-w-xs text-sm">{REFUND_REASON_LABEL[r.reason]}</Td>
@@ -179,17 +196,17 @@ export default async function AdminBilling({ searchParams }: Props) {
         <div className="mb-8">
           <Table head={['Tenant', 'Phone', 'Hostel', 'Amount', 'Due']}>
             {overdue.map((o) => (
-              <tr key={o.invoice.id}><Td>{o.userName}</Td><Td>+91 {o.phone}</Td><Td>{o.hostelName}</Td><Td>{rupees(o.invoice.totalAmount)}</Td><Td className="text-danger">{dateLabel(o.invoice.dueDate)}</Td></tr>
+              <tr key={o.invoice.id}><Td>{o.userName}</Td><Td>{phoneLabel(o.phone)}</Td><Td>{o.hostelName}</Td><Td>{rupees(o.invoice.totalAmount)}</Td><Td className="text-danger">{dateLabel(o.invoice.dueDate)}</Td></tr>
             ))}
           </Table>
         </div>
       )}
-      <h2 className="mb-3 text-lg font-semibold">Subscriptions ({subs.length})</h2>
+      <h2 id="subs" className="mb-3 text-lg font-semibold">Subscriptions{subsPage === 1 && subsFound.length <= PAGE ? ` (${subs.length})` : ''}</h2>
       <div className="mb-8">
         <Table head={['Tenant', 'Hostel', 'Food', 'Since', 'Status']}>
           {subs.map((s) => (
             <tr key={s.subscription.id}>
-              <Td><div>{s.user.name || '—'}</div><div className="text-xs text-ink-muted">+91 {s.user.phone}</div></Td>
+              <Td><div>{s.user.name || '—'}</div><div className="text-xs text-ink-muted">{phoneLabel(s.user.phone)}</div></Td>
               <Td>{s.hostelName}</Td>
               <Td>{planLabel(s.subscription.mealPlan)}</Td>
               <Td>{dateLabel(s.subscription.startDate)}{s.subscription.cancelAt && <div className="text-xs text-ink-muted">ends {dateLabel(s.subscription.cancelAt)}</div>}</Td>
@@ -197,11 +214,13 @@ export default async function AdminBilling({ searchParams }: Props) {
             </tr>
           ))}
         </Table>
+        <PrevNext page={subsPage} hasMore={subsFound.length > PAGE} href={(p) => pageHref('subs', p)} label="Subscription pages" />
       </div>
-      <h2 className="mb-3 text-lg font-semibold">Scheduled moves ({moves.filter((m) => m.status === 'scheduled').length})</h2>
+      <h2 id="moves" className="mb-3 text-lg font-semibold">Moves (newest first)</h2>
       <Table head={['Move date', 'Status', 'Created']}>
         {moves.map((m) => <tr key={m.id}><Td>{dateLabel(m.moveDate)}</Td><Td><StatusBadge kind="move" status={m.status} /></Td><Td>{dateLabel(m.createdAt)}</Td></tr>)}
       </Table>
+      <PrevNext page={movesPage} hasMore={movesFound.length > PAGE} href={(p) => pageHref('moves', p)} label="Move pages" />
     </>
   );
 }

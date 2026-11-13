@@ -4,7 +4,7 @@ A pass over the API, website and app before the first real users. Each item list
 
 ## Checked and in place
 
-- **Login.** OTPs are stored as HMACs with a server pepper, expire in 5 minutes, allow 5 wrong tries, and at most 5 texts per phone per hour. Sessions are random tokens stored as SHA-256 hashes and last 30 days. Nobody can make themselves admin; only phones in `ADMIN_PHONES` (and accounts granted admin on the server with `admin:grant`) are admins, and removing a phone from `ADMIN_PHONES` takes admin away from its next request, including live sessions; it drops to owner. Stub OTP is refused in production. (`apps/api/src/services/auth.ts`)
+- **Login.** OTPs are stored as HMACs with a server pepper, expire in 5 minutes, allow 5 wrong tries, and at most 5 texts per phone per hour. Sessions are random tokens stored as SHA-256 hashes and last 30 days. Nobody can make themselves admin; only phones in `ADMIN_PHONES` (and accounts granted admin on the server with `admin:grant`, removed with `admin:revoke`) are admins, and removing a phone from `ADMIN_PHONES` takes admin away from its next request, including live sessions; it drops to owner. Stub OTP is refused in production. (`apps/api/src/services/auth.ts`)
 - **Login without SMS (PRP-01).**
   - Phone and password with argon2id, 15–128 characters, a blocklist, and generic errors that don't reveal whether a phone has an account.
   - A per-phone lockout (5 tries, then 15 minutes) that also covers phones with no account and parallel guesses.

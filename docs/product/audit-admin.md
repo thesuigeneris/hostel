@@ -31,12 +31,25 @@ Anything marked "not audited" has had no dedicated state, error or keyboard revi
 | CSP scripts carry a per-request nonce (M14) | `e2e/csp.spec.ts`, `web/test/csp.test.ts` |
 | Owners and tenants cannot reach `/admin` (redirect) or admin API (403/404) | `e2e/workspaces.spec.ts`, `owner-admin.test.ts` |
 
-## Not audited (do these when working on admin)
+## Per-screen review (2026-11-13)
 
-- **Per-screen states**: loading, empty, error and success states of each admin page, and plain-words error mapping, were
-  not reviewed one by one. The sweep only proves no serious axe findings and no horizontal overflow.
-- **Keyboard-only completion** of the moderation and partner-checklist flows was not tested.
-- **Android admin screens** (including the new "Recently changed" screen) are checked by typecheck, unit tests of their
-  logic and the Android export only, never on a device.
-- **Admin search and pagination at scale** (several thousand rows): tables are capped (e.g. 500 rows) with no paging UI.
-- **No way to revoke an admin granted with `admin:grant`** (a revoke script is missing).
+Done after the first version of this file, by reading every admin page and adding browser checks where it mattered.
+
+| Item | Finding | Fix / evidence |
+|---|---|---|
+| Admin menu | No accessible name, no "current page" mark, and "Recently changed" (`/admin/changes`) was missing from it | `components/AdminNav.tsx`: `nav aria-label="Admin"`, `aria-current`, all ten sections; `/admin/changes` added to the axe and overflow sweep (`e2e/workspaces.spec.ts`) |
+| Empty states | Every list page says when there is nothing, except Food partners | "No food partners yet" added (`app/admin/food/page.tsx`) |
+| Errors in plain words | Every page with actions shows `Flash` from `run()`, which maps API errors to their message | read; pages without actions (audit, changes, issues) have none to show |
+| Keyboard only: partner checklist | Each box takes focus, Space ticks it, Enter on Verify sends it | `e2e/personas.spec.ts` › 1 (now keyboard-only) |
+| Keyboard only: moderation | Note typed, Tab to "Keep it", Enter: kept, with the message | `e2e/owner-admin.spec.ts` › moderation: keep with the keyboard only… |
+| **Bug found: moderation buttons** | **"Keep it" hid the review, and "Show again" did nothing.** The pressed button's `name`/`value` (`action=keep`) never reached the server action, so the action fell through to "hide" (with a note) or failed validation (without one). Earlier tests drove the API, not this form | The choice now travels in a hidden `decision` field, and "Keep it" sends the form to its own action (`formAction`, the pattern the partner page already uses); an unknown decision is refused, never guessed. e2e: keep (keyboard), then hide with a rule, then show again, checking the public page after each |
+| Paging beyond the caps | Listings, verified partners, subscriptions and moves page with Previous / Next (one extra row fetched to know if there is more), filters kept, stable order | API `admin-paging.test.ts`; e2e `owner-admin.spec.ts` › admin tables page; `components/ui.tsx` `PrevNext` |
+| Revoking an admin | Missing | `bun run admin:revoke <phone>` (`src/scripts/revoke-admin.ts`, `auth.ts` `revokeAdmin`); `auth.test.ts` › admin:revoke |
+| Deleted accounts in tables | Would show "+91 deleted:usr_…" | `phoneLabel` shows "Deleted account" (admin billing, owner roster and rent; web and app) |
+
+## Still not audited
+
+- **Android admin screens** (including "Recently changed"): typecheck, logic tests and the Android export only, never on a
+  device. The app's admin lists show the first page (100 rows); paging there is not built.
+- Owner plans, owner bills and the audit log are filtered lists without paging; they grow per hostel and per month, so
+  they stay small for now. Add `PrevNext` the same way when they pass a few hundred rows.

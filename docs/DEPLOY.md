@@ -48,6 +48,7 @@ accounts are marked.
 4. **First admin.** Sign up on the website with your phone and a password, then on the server:
    ```bash
    docker compose -f deploy/compose.prod.yml --env-file deploy/.env.prod exec api bun run src/scripts/grant-admin.ts <phone>
+   # and to take it away: ... exec api bun run src/scripts/revoke-admin.ts <phone>
    ```
 5. **Payments (when the Razorpay account is approved).** Set `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` and
    `RAZORPAY_WEBHOOK_SECRET`, and point the Razorpay webhook (`payment.captured`, `order.paid`) at

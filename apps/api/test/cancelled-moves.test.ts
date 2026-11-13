@@ -100,3 +100,28 @@ describe('a move cancelled after its first bill was paid', () => {
     expect(dest.hostel.id).not.toBe(origin.hostel.id);
   });
 });
+
+describe('a move after the next month was paid early at the current room', () => {
+  test('a move date on or before that month is refused, saying when it can be; after it, the move is scheduled', async () => {
+    const dest = await liveHostel(ownerToken, adminToken, {
+      partner: true,
+      area: 'Madhapur',
+      rooms: [{ sharing: 'private', monthlyRent: 15000, totalBeds: 3, bedsAvailable: 2 }],
+    });
+    const t = await newTenant();
+    await liveSubscriber(t.token, origin.hostel.id, origin.rooms[0]!.id, 'none');
+    setClock('2026-12-05T06:00:00Z');
+    await runJobs(); // the bill from 9 December, at the current room
+    const next = (await call('/me/invoices', { token: t.token })).body.find((b: { status: string }) => b.status === 'due');
+    await withRazorpay('live', () => payByCheckout(t.token, next.id));
+
+    for (const moveDate of ['2026-12-09', '2026-12-06']) {
+      const refused = await call('/me/moves', { token: t.token, body: { toRoomTypeId: dest.rooms[0]!.id, moveDate } });
+      expect(refused.body).toMatchObject({ error: 'move_not_allowed', message: "You've already paid for 9 Dec 2026 to 8 Jan 2027 here. Pick a move date after 8 Jan 2027." });
+    }
+    // Inside the paid month itself the move is fine: that month stays with this hostel, the next bill is the new room's.
+    expect((await call('/me/moves', { token: t.token, body: { toRoomTypeId: dest.rooms[0]!.id, moveDate: '2026-12-20' } })).status).toBe(201);
+    const bills = (await call('/me/invoices', { token: t.token })).body as { periodStart: string; status: string; hostelId: string }[];
+    expect(bills.find((b) => b.periodStart === '2026-12-09')).toMatchObject({ status: 'paid', hostelId: origin.hostel.id });
+  });
+});

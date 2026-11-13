@@ -121,7 +121,7 @@ Run `bun run db:migrate` (in `apps/api`) before starting a new API version. The 
 
 Login works without SMS (phone + password). On a production standard instance, seeded demo accounts can't sign in and `db:reset` refuses to run. For a public demo instead, set `APP_MODE=demo` on a separate database; see the README.
 
-If SMS isn't set up, make your first admin from the server shell after they sign up: `bun run admin:grant <phone>`.
+If SMS isn't set up, make your first admin from the server shell after they sign up: `bun run admin:grant <phone>`. To take admin away again: `bun run admin:revoke <phone>` (live sessions lose it at their next request; if the phone is also in `ADMIN_PHONES`, remove it there too).
 
 ### Production settings
 

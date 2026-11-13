@@ -1,6 +1,6 @@
 'use server';
 
-import { moderationReason, type PartnerStandardId } from '@hostels/shared';
+import { ApiError, moderationReason, type PartnerStandardId } from '@hostels/shared';
 import { revalidatePath } from 'next/cache';
 import { num, run, safePath, str } from '@/lib/actions';
 import { api } from '@/lib/api';
@@ -61,38 +61,66 @@ export async function markPayoutPaidAction(form: FormData) {
 }
 const KEEP_REASON = 'Does not break the rules';
 
-/** Hide (a rule and note), show again, or keep (a note) a flagged review. Public pages update at once. */
-export async function moderateReviewAction(form: FormData) {
+/**
+ * What the admin decided. The choice travels in a hidden `decision` field (the form's own choice) or in which action
+ * the pressed button sends the form to (`formAction`, for "Keep it"), never in the pressed button's name and value:
+ * that value was lost on this page, so "Keep it" and "Show again" arrived empty and fell through to hiding.
+ * Anything unknown is refused rather than guessed.
+ */
+type Decision = 'hide' | 'unhide' | 'keep';
+function decisionOf(form: FormData): Decision | null {
+  const d = str(form, 'decision');
+  return d === 'hide' || d === 'unhide' || d === 'keep' ? d : null;
+}
+const noDecision = () => new ApiError(400, 'validation', 'Choose whether to hide, keep or show it again.');
+/** Keeping needs no rule: the note, or a plain default, is the reason on the record. */
+const reasonFor = (decision: Decision, form: FormData) =>
+  decision === 'keep' ? str(form, 'note') || KEEP_REASON : moderationReason(str(form, 'rule'), str(form, 'note'));
+
+const REVIEW_DONE: Record<Decision, string> = { unhide: 'Review is visible again', keep: 'Review kept; its flags are dismissed', hide: 'Review hidden' };
+const CONTENT_DONE: Record<Decision, string> = { unhide: 'Visible again', keep: 'Kept; its reports are dismissed', hide: 'Hidden from the board' };
+
+async function moderateReview(form: FormData, decision: Decision | null) {
   const id = str(form, 'id');
-  const action = str(form, 'action');
-  // Keeping needs no rule: the note, or a plain default, is the reason on the record.
-  const reason = action === 'keep' ? str(form, 'note') || KEEP_REASON : moderationReason(str(form, 'rule'), str(form, 'note'));
   await run(
     back(form, '/admin/moderation'),
     async () => {
+      if (!decision) throw noDecision();
       const client = await api();
-      if (action === 'unhide') return publicChange(client.admin.unhideReview(id));
-      if (action === 'keep') return client.admin.keepReview(id, reason);
-      return publicChange(client.admin.hideReview(id, reason));
+      if (decision === 'unhide') return publicChange(client.admin.unhideReview(id));
+      if (decision === 'keep') return client.admin.keepReview(id, reasonFor(decision, form));
+      return publicChange(client.admin.hideReview(id, reasonFor(decision, form)));
     },
-    { ok: action === 'unhide' ? 'Review is visible again' : action === 'keep' ? 'Review kept; its flags are dismissed' : 'Review hidden' },
+    { ok: decision ? REVIEW_DONE[decision] : undefined },
   );
 }
-/** The same for a reported post or comment. */
-export async function moderateContentAction(form: FormData) {
-  const action = str(form, 'action') as 'hide' | 'unhide' | 'keep';
+
+async function moderateContent(form: FormData, decision: Decision | null) {
   const type = str(form, 'type') === 'comment' ? 'comment' : 'post';
   await run(
     back(form, '/admin/moderation'),
-    async () =>
-      (await api()).admin.moderateContent(
-        type,
-        str(form, 'id'),
-        action,
-        action === 'keep' ? str(form, 'note') || KEEP_REASON : moderationReason(str(form, 'rule'), str(form, 'note')),
-      ),
-    { ok: action === 'unhide' ? 'Visible again' : action === 'keep' ? 'Kept; its reports are dismissed' : 'Hidden from the board' },
+    async () => {
+      if (!decision) throw noDecision();
+      return (await api()).admin.moderateContent(type, str(form, 'id'), decision, reasonFor(decision, form));
+    },
+    { ok: decision ? CONTENT_DONE[decision] : undefined },
   );
+}
+
+/** Hide (a rule and note) or show again a flagged review, as the form's hidden `decision` says. Public pages update at once. */
+export async function moderateReviewAction(form: FormData) {
+  await moderateReview(form, decisionOf(form));
+}
+/** "Keep it" on a flagged review: the button sends the form here, whatever the form's own decision is. */
+export async function keepReviewAction(form: FormData) {
+  await moderateReview(form, 'keep');
+}
+/** The same for a reported post or comment. */
+export async function moderateContentAction(form: FormData) {
+  await moderateContent(form, decisionOf(form));
+}
+export async function keepContentAction(form: FormData) {
+  await moderateContent(form, 'keep');
 }
 export async function recheckPartnerAction(form: FormData) {
   await run(back(form, '/admin/partners'), async () => publicChange((await api()).admin.recheckPartner(str(form, 'hostelId'), checklist(form), str(form, 'note'))), {
