@@ -113,6 +113,13 @@
       "when": 1794554791517,
       "tag": "0015_issue_reads",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794555423408,
+      "tag": "0016_account_deletion",
+      "breakpoints": true
     }
   ]
 }

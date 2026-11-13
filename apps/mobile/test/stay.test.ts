@@ -177,3 +177,14 @@ describe('in-app signals (1b)', () => {
     expect(newUpdatesLabel(0)).toBeNull();
   });
 });
+
+describe('data rights (1c)', () => {
+  test('the delete form needs DELETE typed, and the password when the account has one', async () => {
+    const { deleteFormProblem, exportText } = await import('../lib/privacy');
+    expect(deleteFormProblem('delete', '', false)).toBe('Type DELETE to confirm.');
+    expect(deleteFormProblem(' DELETE ', '', false)).toBeNull();
+    expect(deleteFormProblem('DELETE', '', true)).toBe('Enter your password.');
+    expect(deleteFormProblem('DELETE', 'secret words', true)).toBeNull();
+    expect(exportText({ a: 1 })).toBe('{\n  "a": 1\n}');
+  });
+});

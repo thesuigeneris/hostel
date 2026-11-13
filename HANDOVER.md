@@ -32,7 +32,7 @@ Specs (the personas addendum wins on conflicts): `docs/superpowers/specs/2026-10
 
 ## 2. Repository and Git state (verified 2026-11-13)
 
-- `main` = `b58a0e9` (production); `dev` = `main` + docs/test commits. Migrations `0000`–`0013`.
+- `main` = `b58a0e9` (production); `dev` = `main` + docs/test commits. Migrations `0000`–`0016` on `dev` (`0014`–`0016`: the three product gaps).
 - `mudgala5540/Hostel` (the owner's other account) is an **empty repo**: no commits, branches or PRs. Pushing there was refused by the permission classifier; ask the owner if it is wanted.
 - `CLAUDE.md` says no merges/PRs/deployments without the owner's approval; the owner has approved merging to `main` and pushing to `dev` for this body of work. For anything new, ask first.
 - Commit trailers: follow the attribution instruction given in the session (earlier commits carry `Co-Authored-By` and `Claude-Session` lines).
@@ -44,7 +44,7 @@ Bun 1.4.4 monorepo (the lockfile is format v2; Bun 1.3 cannot read it).
 | Area | What | Where |
 |---|---|---|
 | API | Hono, Drizzle ORM, postgres-js, zod. Routes thin; logic and authz in services | `apps/api/src/{routes,services,lib,db}` |
-| DB | PostgreSQL 16, forward-only Drizzle migrations `0000`–`0013` | `apps/api/src/db/schema.ts`, `apps/api/migrations/` |
+| DB | PostgreSQL 16, forward-only Drizzle migrations `0000`–`0016` | `apps/api/src/db/schema.ts`, `apps/api/migrations/` |
 | Contract | zod schemas, types, typed client, pricing/time rules | `packages/shared/src/` |
 | Website | Next.js 15 App Router, server actions, Tailwind, tokens in `lib/tokens.ts`, primitives `components/ui.tsx` | `apps/web` |
 | Mobile | Expo SDK 58, expo-router; owner/admin/seeker/resident screens | `apps/mobile` |

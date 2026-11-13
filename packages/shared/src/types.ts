@@ -455,6 +455,9 @@ export type IssueView = {
   unreadUpdates: number;
 };
 
+/** Whether the signed-in person can delete their account now, and if not, what to do first. */
+export type DeletionStatus = { canDelete: boolean; reason: string | null };
+
 /** In-app signals (no push): what the person hasn't seen yet. */
 export type MySignals = { issuesWithUpdates: number; issueUpdates: number };
 

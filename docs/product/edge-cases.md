@@ -100,4 +100,4 @@ only when a test proves it (and, for a bug, fails without the fix).
 - **Change food plan or diet** without cancelling: **built** (approved 2026-11-13): from the first unpaid bill; spec `docs/superpowers/specs/2026-11-13-food-plan-change.md`, tests `food-plan-change.test.ts`.
 - **Edit an owner reply:** decided and built (owner persona): editable, marked "edited" with the date.
 - **In-app signals** (not push): the owner's Issues tab counts "needs response"; residents now see unread updates on issues they reported (**built** 2026-11-13: spec `docs/superpowers/specs/2026-11-13-resident-signals.md`, tests `resident-signals.test.ts`).
-- **Account deletion and data export:** India's DPDP Act 2023 gives people rights over their data. Proposal: a deletion request flow that keeps reviews anonymised.
+- **Account deletion and data export:** **built** 2026-11-13 (DPDP Act 2023): spec `docs/superpowers/specs/2026-11-13-account-deletion-and-export.md`, tests `account-deletion.test.ts`; reviews kept anonymised. Three open questions (bill retention period, a waiting period, owners) are in the spec.

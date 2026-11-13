@@ -1,5 +1,6 @@
 import type {
   ChangePasswordInput,
+  DeleteAccountInput,
   HostelInput,
   HostelUpdateInput,
   IssueInput,
@@ -47,6 +48,7 @@ import type {
   IssueStatus,
   IssueView,
   MenuWeek,
+  DeletionStatus,
   FoodPlanChange,
   MoveRequest,
   MySignals,
@@ -163,6 +165,11 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
       get: () => request<User>('/me'),
       update: (input: UpdateMeInput) => request<User>('/me', { method: 'PATCH', body: input }),
       setPassword: (input: ChangePasswordInput) => request<{ ok: true }>('/me/password', { body: input }),
+      /** Everything we hold about me, as one JSON document (DPDP Act 2023). */
+      exportData: () => request<Record<string, unknown>>('/me/export'),
+      deletionStatus: () => request<DeletionStatus>('/me/deletion'),
+      /** Deletes the account and signs out everywhere. Cannot be undone. */
+      deleteAccount: (input: DeleteAccountInput) => request<{ ok: true }>('/me/delete', { body: input }),
       subscription: () => request<MySubscription | null>('/me/subscription'),
       cancelSubscription: () => request<Subscription>('/me/subscription/cancel', { method: 'POST' }),
       invoices: () => request<Invoice[]>('/me/invoices'),

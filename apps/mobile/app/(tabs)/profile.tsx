@@ -1,11 +1,12 @@
 import { dateLabel, istDate, type MyVisit, titleCase, VISIT_STATUS_LABEL, visitNextStep } from '@hostels/shared';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Linking, Pressable, Text } from 'react-native';
+import { Linking, Pressable, Share, Text } from 'react-native';
 import { Badge, Button, Card, Empty, ErrorText, Field, H2, Loading, Notice, P, Row, Screen } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { confirm } from '@/lib/confirm';
+import { exportText } from '@/lib/privacy';
 import { theme } from '@/lib/theme';
 import { useLoad } from '@/lib/useLoad';
 
@@ -19,6 +20,21 @@ export default function Profile() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  /** The export goes to the phone's share sheet (save to files, send to yourself). */
+  async function shareMyData() {
+    setExporting(true);
+    setExportError(null);
+    try {
+      await Share.share({ title: 'My data from Hostels', message: exportText(await api.me.exportData()) });
+    } catch (e) {
+      setExportError(errorMessage(e));
+    } finally {
+      setExporting(false);
+    }
+  }
 
   useEffect(() => {
     setName(user?.name ?? '');
@@ -104,6 +120,16 @@ export default function Profile() {
           )}
         </Card>
       ))}
+
+      {!user.isDemo && (
+        <Card>
+          <H2>Your data</H2>
+          <P muted>Get a copy of everything we hold about you, or delete your account.</P>
+          <ErrorText>{exportError}</ErrorText>
+          <Button small variant="secondary" title="Download my data" busy={exporting} onPress={shareMyData} />
+          <Button small variant="ghost" title="Delete my account" onPress={() => router.push('/delete-account')} />
+        </Card>
+      )}
 
       <P muted>Signed in as {titleCase(user.role)}.</P>
       <Button title="Log out" variant="ghost" onPress={signOut} />

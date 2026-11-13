@@ -53,6 +53,9 @@ export const changePasswordSchema = z.object({
   newPassword: rawPassword,
 });
 export type ChangePasswordInput = z.input<typeof changePasswordSchema>;
+/** Deleting an account (DPDP Act 2023): typed confirmation, and the password when the account has one. */
+export const deleteAccountSchema = z.object({ confirm: z.string().max(20), password: rawPassword.optional() });
+export type DeleteAccountInput = z.input<typeof deleteAccountSchema>;
 export type RequestOtpInput = z.input<typeof requestOtpSchema>;
 
 export const verifyOtpSchema = z.object({
