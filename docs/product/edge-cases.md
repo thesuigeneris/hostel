@@ -97,7 +97,7 @@ only when a test proves it (and, for a bug, fails without the fix).
 
 ## 7. Product gaps noted (not in the specs; decide before building)
 
-- **Change food plan or diet** without cancelling: likely needed by residents. Proposal: takes effect from the next bill.
+- **Change food plan or diet** without cancelling: **built** (approved 2026-11-13): from the first unpaid bill; spec `docs/superpowers/specs/2026-11-13-food-plan-change.md`, tests `food-plan-change.test.ts`.
 - **Edit an owner reply:** decided and built (owner persona): editable, marked "edited" with the date.
 - **In-app signals** (not push): the owner's Issues tab now counts "needs response" (owner persona, web and app); a resident's changed issue is still open.
 - **Account deletion and data export:** India's DPDP Act 2023 gives people rights over their data. Proposal: a deletion request flow that keeps reviews anonymised.

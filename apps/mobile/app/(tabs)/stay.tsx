@@ -156,9 +156,25 @@ export default function MyStay() {
               )}
             </View>
           )}
+          {mine.scheduledFoodChange && (
+            <Row style={{ justifyContent: 'space-between' }}>
+              <P>
+                Food plan changes to {FOOD_PLANS[mine.scheduledFoodChange.mealPlan].label}
+                {mine.scheduledFoodChange.mealPlan !== 'none' ? ` (${mine.scheduledFoodChange.diet})` : ''} from {dateLabel(mine.scheduledFoodChange.effectiveFrom)}, with that bill.
+              </P>
+              <Button
+                small
+                variant="secondary"
+                title="Keep my current plan"
+                busy={busyKey === 'food'}
+                onPress={() => act('food', () => api.me.cancelFoodPlanChange(mine.scheduledFoodChange!.id), 'Food plan change cancelled. Your plan stays as it is.')}
+              />
+            </Row>
+          )}
           {sub.status === 'active' && !sub.cancelAt && (
             <Row>
               {!mine.scheduledMove && <Button small variant="secondary" title="Move hostel or room" onPress={() => router.push('/move')} />}
+              <Button small variant="secondary" title="Change food plan" onPress={() => router.push('/food-plan')} />
               <Button small variant="secondary" title="Hostel community" onPress={() => router.push(`/home/${mine.hostel.id}`)} />
               <Button
                 small

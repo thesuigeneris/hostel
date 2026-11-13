@@ -25,6 +25,7 @@ import {
   MEAL_PLANS,
   MEALS,
   MOVE_STATUSES,
+  FOOD_CHANGE_STATUSES,
   OWNER_PLAN_TIERS,
   PARTNER_STATUSES,
   PAYMENT_EXCEPTION_REASONS,
@@ -53,6 +54,7 @@ export const dietEnum = pgEnum('diet', DIETS);
 export const subscriptionStatusEnum = pgEnum('subscription_status', SUBSCRIPTION_STATUSES);
 export const invoiceStatusEnum = pgEnum('invoice_status', INVOICE_STATUSES);
 export const moveStatusEnum = pgEnum('move_status', MOVE_STATUSES);
+export const foodChangeStatusEnum = pgEnum('food_change_status', FOOD_CHANGE_STATUSES);
 export const payoutStatusEnum = pgEnum('payout_status', PAYOUT_STATUSES);
 export const paymentModeEnum = pgEnum('payment_mode', PAYMENT_MODES);
 export const paymentExceptionReasonEnum = pgEnum('payment_exception_reason', PAYMENT_EXCEPTION_REASONS);
@@ -400,6 +402,28 @@ export const payouts = pgTable(
 
 // ---------------------------------------------------------------------------
 // Personas addendum: residencies, reviews, issues, community, owner plans.
+
+/** A food plan or diet change from the next unpaid bill (product gap 1a). Applied to the subscription by the daily job. */
+export const foodPlanChanges = pgTable(
+  'food_plan_changes',
+  {
+    id: text('id').primaryKey(),
+    subscriptionId: text('subscription_id')
+      .notNull()
+      .references(() => subscriptions.id),
+    mealPlan: mealPlanEnum('meal_plan').notNull(),
+    diet: dietEnum('diet').notNull(),
+    effectiveFrom: day('effective_from').notNull(),
+    status: foodChangeStatusEnum('status').notNull().default('scheduled'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('food_plan_changes_subscription_idx').on(t.subscriptionId),
+    uniqueIndex('food_plan_changes_one_scheduled')
+      .on(t.subscriptionId)
+      .where(sql`${t.status} = 'scheduled'`),
+  ],
+);
 
 export const residencySourceEnum = pgEnum('residency_source', RESIDENCY_SOURCES);
 export const residencyStatusEnum = pgEnum('residency_status', RESIDENCY_STATUSES);

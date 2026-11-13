@@ -8,6 +8,7 @@ import { AppError, notFound } from '../lib/errors';
 import type { ReceivedMode } from '../lib/razorpay';
 import { isBookable, type PlanState, planFor } from './access';
 import { openSubscription, regenerateUnpaidFrom, releaseBed, reserveBed } from './billing';
+import { scheduledFoodChange } from './food-plan-state';
 import { recordPaymentException } from './refunds';
 
 type MoveRow = typeof schema.moveRequests.$inferSelect;
@@ -79,7 +80,10 @@ export async function scheduleMove(user: User, input: { toRoomTypeId: string; mo
       if (hostel.ownerId === user.id) {
         throw new AppError('cannot_subscribe_own_hostel', 'You own that hostel, so you can’t move your plan there.', 409);
       }
-      if (sub.mealPlan !== 'none' && !hostel.foodAvailable) throw new AppError('move_not_allowed', 'That hostel does not serve food');
+      // The food plan they will have there: a scheduled change from the next bill counts too.
+      const change = await scheduledFoodChange(tx, sub.id);
+      const eats = sub.mealPlan !== 'none' || (change !== null && change.mealPlan !== 'none');
+      if (eats && !hostel.foodAvailable) throw new AppError('move_not_allowed', 'That hostel does not serve food');
       if (!(await reserveBed(tx, room.id))) throw new AppError('no_beds_available', 'No beds left in that room type');
       const [move] = await tx
         .insert(schema.moveRequests)

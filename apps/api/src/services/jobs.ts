@@ -1,6 +1,7 @@
 import { clock } from '../lib/clock';
 import { endCancelledSubscriptions, expirePendingSubscriptions, generateUpcomingInvoices } from './billing';
 import { autoCloseResolvedIssues } from './community';
+import { applyDueFoodChanges } from './food-plan';
 import { completeDueMoves } from './moves';
 import { applyPendingPlanChanges, generateOwnerInvoices, refreshSuspensions } from './plans';
 import { endDueResidencies } from './residents';
@@ -18,6 +19,8 @@ export async function runJobs() {
     completedMoves: moves.completed,
     // Moves into a hostel that stopped taking residents, cancelled on their day.
     cancelledMoves: moves.cancelled,
+    // Food plan or diet changes reaching their first day.
+    foodPlanChanges: await applyDueFoodChanges(today),
     endedSubscriptions: await endCancelledSubscriptions(today),
     tenantInvoices: await generateUpcomingInvoices(today),
     planChanges: await applyPendingPlanChanges(today),

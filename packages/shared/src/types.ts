@@ -59,6 +59,9 @@ export const PAYMENT_EXCEPTION_STATUSES = ['refund_due', 'refunded'] as const;
 export type PaymentExceptionStatus = (typeof PAYMENT_EXCEPTION_STATUSES)[number];
 
 export const MOVE_STATUSES = ['scheduled', 'completed', 'cancelled'] as const;
+/** A food plan or diet change waits for the next unpaid bill, then is applied by the daily job. */
+export const FOOD_CHANGE_STATUSES = ['scheduled', 'applied', 'cancelled'] as const;
+export type FoodChangeStatus = (typeof FOOD_CHANGE_STATUSES)[number];
 export type MoveStatus = (typeof MOVE_STATUSES)[number];
 
 export const PAYOUT_STATUSES = ['pending', 'paid'] as const;
@@ -488,6 +491,19 @@ export type MySubscription = {
   scheduledMove: MoveView | null;
   /** A move we cancelled for the tenant in the last 30 days, with the reason, so they know why they're staying. */
   cancelledMove: MoveView | null;
+  /** A food plan or diet change waiting for its first bill. */
+  scheduledFoodChange: FoodPlanChange | null;
+};
+
+export type FoodPlanChange = {
+  id: string;
+  subscriptionId: string;
+  mealPlan: MealPlan;
+  diet: Diet;
+  /** First day of the billing period the change starts with: the first period whose bill is not paid yet. */
+  effectiveFrom: ISODate;
+  status: FoodChangeStatus;
+  createdAt: string;
 };
 
 export type MenuDay = {
