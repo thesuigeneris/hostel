@@ -147,6 +147,31 @@ describe('cancel', () => {
     expect(await roomBeds(ownerToken, hostel.id, room.id)).toBe(4);
   });
 
+  // Ported from PR #7.
+  test('cancelling after paying next month early keeps the plan to the end of that month', async () => {
+    const { token } = await newTenant();
+    await activeSubscriber(token, hostel.id, room.id);
+    setClock('2026-12-05T06:00:00Z');
+    await runJobs(); // generates the 10 December bill
+    const next = (await call('/me/invoices', { token })).body[0];
+    expect(next).toMatchObject({ periodStart: '2026-12-10', periodEnd: '2027-01-09', status: 'due' });
+    expect((await call(`/payments/${next.id}/simulate`, { token, method: 'POST' })).body.status).toBe('paid');
+
+    setClock('2026-12-06T06:00:00Z');
+    expect((await cancel(token)).body).toMatchObject({ status: 'active', cancelAt: '2027-01-09' });
+    const bills = (await call('/me/invoices', { token })).body;
+    expect(bills.map((b: { status: string }) => b.status)).toEqual(['paid', 'paid']);
+
+    setClock('2026-12-10T06:00:00Z');
+    expect((await runJobs()).endedSubscriptions).toBe(0);
+    setClock('2027-01-05T06:00:00Z');
+    expect((await runJobs()).tenantInvoices).toBe(0);
+    expect(await roomBeds(ownerToken, hostel.id, room.id)).toBe(4);
+    setClock('2027-01-10T06:00:00Z');
+    expect((await runJobs()).endedSubscriptions).toBe(1);
+    expect(await roomBeds(ownerToken, hostel.id, room.id)).toBe(5);
+  });
+
   test('the bill of a cancelled pending plan can no longer be paid', async () => {
     const { token } = await newTenant();
     const sub = await subscribe(token);
