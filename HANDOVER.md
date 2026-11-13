@@ -8,11 +8,13 @@ All work is on GitHub (`thesuigeneris/hostel`) and **merged into `main`**. All 1
 
 | Branch | Commit | Note |
 |---|---|---|
-| `main`, `dev`, `persona-admin`, `claude/eager-hawking-4exijr` | `b58a0e9` plus this docs commit | Same code. `main` is the line to build on. |
+| `main`, `dev`, `persona-admin`, `claude/eager-hawking-4exijr` | `b58a0e9` plus this docs commit | Same code. `main` is production; build on `dev`. |
 | `claude/loving-euler-m0b2ku` | `b58a0e9` | Working branch of the session that landed the admin work; safe to delete. |
 | `claude/project-thread-*`, `claude/hostels-best-of-both`, `claude/hostels-platform` | old | Fully merged history; safe to delete (owner's call). |
 
-A new session: clone, `git checkout main`, read this file, then `CLAUDE.md`. The agent worktrees under `.claude/worktrees/` from the old container do not exist in a new one and are not needed.
+A new session: clone, `git checkout dev`, read this file, then `CLAUDE.md`. The agent worktrees under `.claude/worktrees/` from the old container do not exist in a new one and are not needed.
+
+**Branch workflow (owner's rule):** all work goes to **`dev`**. **`main` is production**: nothing reaches it until the owner says a piece is finalized, and then only by a PR from `dev`. Never push to `main` directly. Feature branches are fine, merged into `dev`.
 
 ## 1. What this project is
 
