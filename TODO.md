@@ -67,12 +67,15 @@ Each needs: a spec note in `docs/superpowers/specs/`, API + web + app, edge case
 - [x] Keyboard-only completion of moderation and the partner checklist (e2e).
 - [x] Admin tables page beyond their caps on the web (listings, partners, subscriptions, moves). App: first page only.
 - [x] `admin:revoke` script.
-- [ ] Cross-cutting rules X1–X8 in `edge-cases.md`: give each a status and evidence.
+- [x] Cross-cutting rules X1–X8 in `edge-cases.md`: each has a status and evidence (2026-11-13). Open within them:
+      paging for the community feed, my issues and the moderation queues (capped, not paged); keyboard-only runs of
+      every journey; a real screen reader; network loss tested on a phone.
 
 ## 4. Docker production test run
 
-- [ ] Build the images, run the stack with Caddy HTTPS, check login, search, pay (simulated), uploads and the CSP nonce
-      behind the proxy; repeat the backup/restore drill (`docs/DEPLOY.md`, "What was tested").
+- [x] Docker production run on `dev` (2026-11-13): images built, stack healthy in order, 17 migrations, browser check
+      (search, photos, sign-in, new pages, no console errors / 5xx / CSP violations), backup → check → real restore,
+      Caddy HTTPS with local certificates (`docs/DEPLOY.md`, "What was tested"). Real certificates need real DNS.
 
 ## 5. Before running more than one API instance
 

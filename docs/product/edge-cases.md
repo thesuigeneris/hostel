@@ -84,16 +84,16 @@ only when a test proves it (and, for a bug, fails without the fix).
 
 ## 6. Cross-cutting
 
-| ID | Case | Must happen |
-|---|---|---|
-| X1 | Every list endpoint | Paged, with a hard limit; stable sort. |
-| X2 | Every write | Validated by the shared zod schema at the API; idempotent or guarded against double submit. |
-| X3 | Every state change | Conditional `UPDATE … WHERE <expected state>`; the loser gets 409 and a "refresh" message, never a 500. |
-| X4 | Every date | IST calendar dates; tests pin the clock at boundaries (midnight IST, 18:30 UTC). |
-| X5 | Phones | `+91`, spaces and leading 0 normalised the same way at sign-up, invite and admin list. |
-| X6 | Errors | API codes map to plain words on web and mobile; unknown errors show a retry and are logged. |
-| X7 | Network loss (mobile) | Every data screen shows an error with retry; writes don't silently drop. |
-| X8 | Accessibility | Keyboard-only completion of every journey; screen-reader names on every control. |
+| ID | Case | Must happen | Status |
+|---|---|---|---|
+| X1 | Every list endpoint | Paged, with a hard limit; stable sort. | **Holds, with known gaps** (2026-11-13): search, admin listings/partners/subscriptions/moves, listing changes and the audit log page with a hard limit and an id tie-break (`seeker.test.ts` › paging, `admin-paging.test.ts`); community feed (100), my issues (100) and moderation queues are capped, newest first, without paging; owner plans and owner bills are filtered but unpaged (small per hostel). |
+| X2 | Every write | Validated by the shared zod schema at the API; idempotent or guarded against double submit. | **Holds** (2026-11-13): every route parses with the shared zod schemas (`parseBody`/`parseQuery`); double submits are guarded where they matter: subscribe, visits, invites, posts and comments, review replies, issue updates, payments (`subscriptions.test.ts`, `seeker.test.ts` › a form sent twice, `owner-operations.test.ts` › T8, `duplicates.test.ts`, `owner-replies.test.ts` › double tap, `resident-issues.test.ts`). |
+| X3 | Every state change | Conditional `UPDATE … WHERE <expected state>`; the loser gets 409 and a "refresh" message, never a 500. | **Holds** (2026-11-13): state changes are conditional updates and the loser gets 409 with "refresh" (`admin-decisions.test.ts`, `owner-operations.test.ts` › visit inbox, `resident-trust.test.ts` › T9, `admin-money.test.ts` › O8, `cancel-payment-race.test.ts`, which also fixed a lock-order deadlock). |
+| X4 | Every date | IST calendar dates; tests pin the clock at boundaries (midnight IST, 18:30 UTC). | **Holds** (2026-11-13): all time through `clock`, IST `YYYY-MM-DD` dates; tests pin the clock at boundaries (`resident-life.test.ts` › M6 skip cut-offs to the minute with UTC server time, › M5 periods on the 29th–31st; `resident-trust.test.ts` › T7 day 13/14 and 180/181). |
+| X5 | Phones | `+91`, spaces and leading 0 normalised the same way at sign-up, invite and admin list. | **Holds** (2026-11-13): one `phoneSchema` strips spaces and dashes and a leading `+91`, `91` or `0` for sign-up, login, invites and admin scripts (`time.test.ts`, `passwords.test.ts` › `+91 98765 43210`). |
+| X6 | Errors | API codes map to plain words on web and mobile; unknown errors show a retry and are logged. | **Holds** (2026-11-13): web forms go through `run()`, which shows the API's message, or a plain "can't reach" message, and lets real bugs surface; the app uses `errorMessage()` the same way. Retries: web pages reload; app screens below. |
+| X7 | Network loss (mobile) | Every data screen shows an error with retry; writes don't silently drop. | **Holds by code review, not on a device** (2026-11-13): app data screens use `useLoad` with `ErrorState` or the owner/admin `whileLoading` → `Failed` with Retry, plus pull-to-refresh; writes show their error and keep the form. Not run with the network cut on a phone. |
+| X8 | Accessibility | Keyboard-only completion of every journey; screen-reader names on every control. | **Partly** (2026-11-13): axe and phone-width overflow sweeps on every workspace page (`workspaces.spec.ts`), axe on new pages in the journeys, keyboard-only tests for search suggestions, the gallery, the food plan picker, the partner checklist and moderation. Not every journey is driven by keyboard only; screen-reader names checked by axe and role-based locators, not with a real screen reader. |
 
 ## 7. Product gaps noted (not in the specs; decide before building)
 

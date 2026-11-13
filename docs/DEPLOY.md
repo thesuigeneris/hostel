@@ -1,7 +1,7 @@
 # Deploying Hostels
 
 How to run the platform for real users on one Linux server with Docker, keep it backed up, upgrade it and roll back.
-Everything here was run end to end on 2026-11-02 (see "What was tested"); the parts that need a real domain or paid
+Everything here was run end to end on 2026-11-02 and again on 2026-11-13 (see "What was tested"); the parts that need a real domain or paid
 accounts are marked.
 
 ## What runs
@@ -111,7 +111,24 @@ can't run on, restore the backup taken just before the upgrade instead.
   page; refund them in the Razorpay dashboard, then mark them refunded.
 - **Disk:** watch the `pgdata` and `uploads` volumes and `deploy/backups/`.
 
-## What was tested (2026-11-02, this repository's container)
+## What was tested (2026-11-13, on `dev` after the three product gaps and the admin fixes)
+
+- Both images built again (Bun 1.4.4, Node 22). Without settings the production API exits listing five problems.
+- Demo instance on localhost: database healthy → `migrate` exit 0 (17 migrations, `0000`–`0016`) → API healthy →
+  website healthy; seeded inside the API container.
+- Browser check against the containers: home, search (12 hostels, all 12 photos loaded from the API), a hostel page,
+  demo sign-in (httpOnly session cookie), `/account`, `/account/food`, `/stay`, `/me/signals`; no console errors, no 5xx
+  and no Content Security Policy violations (pages carry a per-request script nonce, no `unsafe-eval`).
+- Backups: `backup.sh` → `restore.sh --check` loaded it into a scratch database; then every review and a photo were
+  deleted and `restore.sh` brought them back (bills that came due were made by the jobs on start); the browser check
+  passed again.
+- HTTPS front (`--profile tls`) with `SITE_DOMAIN=localhost`, `API_DOMAIN=api.localhost`: Caddy served both over HTTPS
+  with its own local certificates, HTTP/2, plain HTTP redirected (308), security headers passed through. Real Let's
+  Encrypt certificates need real DNS: not tested.
+- **`ACME_EMAIL` must be set for the `tls` profile**: left empty, Caddy stops with "parsing caddyfile tokens for
+  'email'". (Compose can't require it only for that profile without breaking the commands that don't use it.)
+
+## What was tested earlier (2026-11-02, this repository's container)
 
 - Both images built from a clean context (`docker build`), using Bun 1.4.4 (the lockfile format needs it) and Node 22.
 - Without settings, the production API image exits listing six problems; with valid settings it starts.
