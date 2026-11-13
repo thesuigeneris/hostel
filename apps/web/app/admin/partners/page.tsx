@@ -1,21 +1,28 @@
 import { DEFAULT_PLATFORM_FEE_PCT, standardsFor } from '@hostels/shared';
 import Link from 'next/link';
 import { SubmitButton } from '@/components/SubmitButton';
-import { Back, Badge, Card, Checkbox, Empty, Field, Flash, Input, PageHeader, Table, Td, Textarea } from '@/components/ui';
+import { Back, Badge, Card, Checkbox, Empty, Field, Flash, Input, PageHeader, pageParam, PrevNext, Table, Td, Textarea } from '@/components/ui';
 import { api } from '@/lib/api';
 import { dateLabel, rupees } from '@/lib/format';
 import { rejectPartnerAction, saveChecklistAction, setFeeAction, verifyPartnerAction } from '../actions';
 
-type Props = { searchParams: Promise<{ q?: string; error?: string; ok?: string }> };
+type Props = { searchParams: Promise<{ q?: string; page?: string; error?: string; ok?: string }> };
+
+const PAGE = 50;
 
 export default async function AdminPartners({ searchParams }: Props) {
   const q = await searchParams;
   const client = await api();
-  const [applications, verified] = await Promise.all([
+  const page = pageParam(q.page);
+  const [applications, found] = await Promise.all([
     client.admin.partnerApplications('applied'),
-    client.admin.hostels({ partnerStatus: 'verified', q: q.q }),
+    // One more than a page, to know whether there is a next one.
+    client.admin.hostels({ partnerStatus: 'verified', q: q.q, limit: PAGE + 1, offset: (page - 1) * PAGE }),
   ]);
-  const path = q.q ? `/admin/partners?q=${encodeURIComponent(q.q)}` : '/admin/partners';
+  const verified = found.slice(0, PAGE);
+  const base = q.q ? `/admin/partners?q=${encodeURIComponent(q.q)}` : '/admin/partners';
+  const pageHref = (p: number) => `${base}${base.includes('?') ? '&' : '?'}page=${p}`;
+  const path = page > 1 ? pageHref(page) : base;
   return (
     <>
       <PageHeader title="Partners" subtitle="Visit in person before verifying. Tick each brand standard as you check it; progress is saved between visits." />
@@ -79,7 +86,7 @@ export default async function AdminPartners({ searchParams }: Props) {
         </div>
       )}
       <div className="mb-3 mt-8 flex flex-wrap items-end justify-between gap-3">
-        <h2 className="text-lg font-semibold">Verified partners ({verified.length})</h2>
+        <h2 className="text-lg font-semibold">Verified partners{page === 1 && found.length <= PAGE ? ` (${verified.length})` : ''}</h2>
         <form className="flex w-full items-end gap-2 sm:w-auto">
           <div className="min-w-0 flex-1 sm:w-64">
             <Field label="Search partners">
@@ -107,6 +114,7 @@ export default async function AdminPartners({ searchParams }: Props) {
           ))}
         </Table>
       )}
+      <PrevNext page={page} hasMore={found.length > PAGE} href={pageHref} label="Verified partner pages" />
     </>
   );
 }

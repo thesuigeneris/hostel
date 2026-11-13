@@ -342,6 +342,14 @@ export async function cancelSubscription(user: User) {
   return db.transaction(async (tx) => {
     const sub = await openSubscription(user.id, tx);
     if (!sub) throw notFound('Subscription');
+    // Same lock order as a payment (the bill, then the plan): taking the plan first while a payment holds the bill and
+    // waits for the plan was a deadlock, and one of the two requests failed.
+    await tx
+      .select({ id: schema.invoices.id })
+      .from(schema.invoices)
+      .where(and(eq(schema.invoices.subscriptionId, sub.id), eq(schema.invoices.status, 'due')))
+      .orderBy(asc(schema.invoices.id))
+      .for('update');
     if (sub.status === 'pending') {
       const [cancelled] = await tx
         .update(schema.subscriptions)
@@ -459,7 +467,8 @@ export async function endCancelledSubscriptions(today = clock.today()) {
 
 // --- admin -----------------------------------------------------------------
 
-export async function adminSubscriptions(status?: Subscription['status']) {
+/** Newest first, a page at a time (`limit` + `offset`); id breaks ties so pages never repeat or skip a row. */
+export async function adminSubscriptions(status?: Subscription['status'], page: { limit?: number; offset?: number } = {}) {
   const db = getDb();
   const s = schema.subscriptions;
   const rows = await db
@@ -468,8 +477,9 @@ export async function adminSubscriptions(status?: Subscription['status']) {
     .innerJoin(schema.users, eq(schema.users.id, s.userId))
     .innerJoin(schema.hostels, eq(schema.hostels.id, s.hostelId))
     .where(status ? eq(s.status, status) : undefined)
-    .orderBy(desc(s.createdAt))
-    .limit(500);
+    .orderBy(desc(s.createdAt), desc(s.id))
+    .limit(page.limit ?? 100)
+    .offset(page.offset ?? 0);
   return rows.map((r) => ({ ...r, subscription: toSubscription(r.subscription) }));
 }
 

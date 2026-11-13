@@ -74,9 +74,15 @@ test('1. owner lists a hostel; admin approves it and verifies the partner', asyn
 
   await admin.goto('/admin/partners');
   const application = admin.locator('div.rounded-2xl', { hasText: HOSTEL }).last();
-  // Verifying needs every brand standard ticked after the in-person visit.
-  for (const box of await application.getByRole('checkbox').all()) await box.check();
-  await application.getByRole('button', { name: 'Verify' }).click();
+  // Verifying needs every brand standard ticked after the in-person visit. Done with the keyboard only (admin audit):
+  // each box takes focus and Space ticks it; Enter on the focused Verify button sends the form.
+  for (const box of await application.getByRole('checkbox').all()) {
+    await box.focus();
+    await admin.keyboard.press('Space');
+    await expect(box).toBeChecked();
+  }
+  await application.getByRole('button', { name: 'Verify' }).focus();
+  await admin.keyboard.press('Enter');
   await expect(admin.getByText('Partner verified')).toBeVisible();
   await admin.context().close();
 

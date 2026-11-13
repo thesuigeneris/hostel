@@ -354,3 +354,21 @@ export async function grantAdmin(phone: string) {
   if (!row) throw new AppError('not_found', `No account with phone ${phone}. Ask them to sign up first.`, 404);
   return toUser(row);
 }
+
+/**
+ * Server-side admin removal (no HTTP route), the other half of `grantAdmin`. Takes effect on live sessions at their
+ * next request. They become an owner if they own a hostel, otherwise a tenant. A phone still in ADMIN_PHONES would be
+ * made admin again at its next OTP login, so the caller is told to remove it there too.
+ */
+export async function revokeAdmin(phone: string) {
+  const db = getDb();
+  const [user] = await db.select().from(schema.users).where(eq(schema.users.phone, phone)).limit(1);
+  if (!user) throw new AppError('not_found', `No account with phone ${phone}.`, 404);
+  const [owned] = await db.select({ id: schema.hostels.id }).from(schema.hostels).where(eq(schema.hostels.ownerId, user.id)).limit(1);
+  const [row] = await db
+    .update(schema.users)
+    .set({ role: owned ? 'owner' : 'tenant', adminGrantedAt: null })
+    .where(and(eq(schema.users.id, user.id), eq(schema.users.role, 'admin')))
+    .returning();
+  return { user: toUser(row ?? user), wasAdmin: !!row, stillInAdminPhones: env.adminPhones.includes(phone) };
+}

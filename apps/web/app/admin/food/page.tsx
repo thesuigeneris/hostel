@@ -18,6 +18,7 @@ export default async function AdminFood({ searchParams }: { searchParams: Promis
           <SubmitButton>Add</SubmitButton>
         </form>
       </Card>
+      {partners.length === 0 && <p className="mb-3 text-sm text-ink-soft">No food partners yet. Add the first one with the form above.</p>}
       <Table head={['Name', 'Cuisine', 'Status', '']}>
         {partners.map((p) => (
           <tr key={p.id}>

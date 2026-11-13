@@ -1,6 +1,6 @@
 import type { User } from '@hostels/shared';
-import { addDays, newId } from '@hostels/shared';
-import { and, eq, gte, lte } from 'drizzle-orm';
+import { addDays, dateLabel, newId } from '@hostels/shared';
+import { and, desc, eq, gte, lte } from 'drizzle-orm';
 import { getDb, schema, type Tx } from '../db';
 import { clock } from '../lib/clock';
 import { isUniqueViolation } from '../lib/db-errors';
@@ -70,6 +70,20 @@ export async function scheduleMove(user: User, input: { toRoomTypeId: string; mo
       if (!sub || sub.status !== 'active') throw new AppError('move_not_allowed', 'You need an active plan to move');
       if (sub.cancelAt && input.moveDate > sub.cancelAt) throw new AppError('move_not_allowed', 'Your plan ends before that date');
       if (input.toRoomTypeId === sub.roomTypeId) throw new AppError('move_not_allowed', 'You are already in this room type');
+      // A month already paid for this room, starting on or after the move date, would stay with this hostel at this
+      // rent while they live elsewhere. Until moving a paid month is supported, the move waits for it to end.
+      const [paidAhead] = await tx
+        .select({ periodStart: schema.invoices.periodStart, periodEnd: schema.invoices.periodEnd })
+        .from(schema.invoices)
+        .where(and(eq(schema.invoices.subscriptionId, sub.id), eq(schema.invoices.status, 'paid'), gte(schema.invoices.periodStart, input.moveDate)))
+        .orderBy(desc(schema.invoices.periodEnd))
+        .limit(1);
+      if (paidAhead) {
+        throw new AppError(
+          'move_not_allowed',
+          `You've already paid for ${dateLabel(paidAhead.periodStart)} to ${dateLabel(paidAhead.periodEnd)} here. Pick a move date after ${dateLabel(paidAhead.periodEnd)}.`,
+        );
+      }
       const [room] = await tx.select().from(schema.roomTypes).where(eq(schema.roomTypes.id, input.toRoomTypeId));
       if (!room) throw notFound('Room type');
       const [hostel] = await tx.select().from(schema.hostels).where(eq(schema.hostels.id, room.hostelId));
@@ -215,7 +229,14 @@ export async function completeDueMoves(today = clock.today()) {
   return { completed: done, cancelled };
 }
 
-export async function adminMoves() {
-  const rows = await getDb().select().from(schema.moveRequests);
-  return rows.map(toMove).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+/** Newest first, a page at a time; id breaks ties so pages never repeat or skip a row. */
+export async function adminMoves(page: { limit?: number; offset?: number } = {}) {
+  const m = schema.moveRequests;
+  const rows = await getDb()
+    .select()
+    .from(m)
+    .orderBy(desc(m.createdAt), desc(m.id))
+    .limit(page.limit ?? 100)
+    .offset(page.offset ?? 0);
+  return rows.map(toMove);
 }

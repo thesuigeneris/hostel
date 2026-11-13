@@ -97,3 +97,9 @@ export function refundMessage(r: Pick<PaymentException, 'amount' | 'reason' | 's
   if (r.status === 'refunded') return `${what} We refunded it on ${r.refundedAt ? dateLabel(istDate(new Date(r.refundedAt))) : '—'}.`;
   return `${what} We'll refund it to the account you paid from within ${REFUND_WITHIN_DAYS} days.`;
 }
+
+/** A person's phone for staff screens: "+91 98…", or what is left of it after they deleted their account. */
+export function phoneLabel(phone: string | null | undefined): string {
+  if (!phone) return 'No number';
+  return phone.startsWith('deleted:') ? 'Deleted account' : `+91 ${phone}`;
+}

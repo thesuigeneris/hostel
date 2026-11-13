@@ -404,6 +404,21 @@ questions recorded there with safe defaults). Migration `0016_account_deletion`.
 | DATA-GATES | Gates | — | typecheck 4/4; lint clean (361 files); shared 62; web unit 20; mobile 56 (55 + 1); API 288 (283 + 5); `e2e:fresh` 85/85 (84 + 1); `expo export --platform android` exit 0 | verified 2026-11-13 |
 | DATA-APP | Profile → share the export; delete screen | `apps/mobile/app/(tabs)/profile.tsx`, `app/delete-account.tsx`, `lib/privacy.ts` | `apps/mobile/test/stay.test.ts` › data rights; typecheck | logic verified; screens unverified on a device |
 
+## Admin per-screen review, admin:revoke, paging; paid-early move guard
+
+| Req | Requirement | Implementation | Test | Status |
+|---|---|---|---|---|
+| MOVE-PAID-AHEAD | A move date on or before a month already paid at the current room is refused, saying when it can be (owner default (b), 2026-11-13) | `moves.ts` `scheduleMove` | API `cancelled-moves.test.ts` › a move after the next month was paid early | verified; revert-checked |
+| CANCEL-PAY-RACE | Cancelling and paying a pending plan at the same moment: one outcome, no deadlock | `billing.ts` `cancelSubscription` (locks the plan's unpaid bills first, as payments do) | API `cancel-payment-race.test.ts` (cancel first; payment first) | verified; revert-checked (deadlock, 500) |
+| HOLD-AFTER-30 | A first bill paid after the 30-minute hold but before the job confirms the plan (bed still held); after the job it is void | `billing.ts`, `payments.ts` (unchanged); web pay page hold text | API › paying a first bill after the hold; shared › bed hold | verified |
+| ADMIN-REVOKE | `admin:revoke` takes admin away (live sessions too); owner if they own a hostel, else tenant; warns when the phone is still in ADMIN_PHONES | `auth.ts` `revokeAdmin`; `src/scripts/revoke-admin.ts`; docs RUN, DEPLOY, security review | API `auth.test.ts` › admin:revoke | verified |
+| ADMIN-PAGING | Admin listings, verified partners, subscriptions and moves page through every row, stable order, limits enforced | `routes/admin.ts` `pageQuery`; `billing.ts` `adminSubscriptions`; `moves.ts` `adminMoves`; web `PrevNext`, `pageParam`; listings, partners, billing pages | API `admin-paging.test.ts`; e2e `owner-admin.spec.ts` › admin tables page | verified (web); app shows the first page |
+| ADMIN-NAV | Admin menu named, current page marked, "Recently changed" listed; empty Food partners state | `components/AdminNav.tsx`; `app/admin/food/page.tsx` | e2e `workspaces.spec.ts` admin sweep (now with `/admin/changes`) | see gates |
+| ADMIN-MODERATION-FORM | Keep keeps, hide hides, show again shows (web form): the choice is a hidden field or the button's own action, never the button's value; unknown refused | `app/admin/actions.ts` `moderateReviewAction`, `keepReviewAction`, `moderateContentAction`, `keepContentAction`; `app/admin/moderation/page.tsx` | e2e `owner-admin.spec.ts` › moderation (keep, hide, show again; public page checked) | verified; it failed before the fix (keep → hidden) |
+| ADMIN-KEYBOARD | Partner checklist and moderation completed with the keyboard only | — (native controls) | e2e `personas.spec.ts` › 1; `owner-admin.spec.ts` › moderation keyboard | see gates |
+| ADMIN-BATCH-GATES | Gates for this batch | — | typecheck 4/4; lint clean (365 files); shared 63 (+1); web unit 20; mobile 56; API 294 (288 + 6); `e2e:fresh` 87/87 (85 + 2); `expo export --platform android` exit 0 (before the moderation fix; app unchanged since) | verified 2026-11-13 |
+| PHONE-LABEL | Deleted accounts read "Deleted account" in staff tables, not a placeholder phone | `@hostels/shared` `phoneLabel`; admin billing, owner roster and rent (web and app) | typecheck | verified by type and read-through |
+
 
 ## Later PRPs (rows filled when each PRP is generated)
 

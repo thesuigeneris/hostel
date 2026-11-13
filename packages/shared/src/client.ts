@@ -306,9 +306,10 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
         request<FoodPartner>('/admin/food-partners', { body: input }),
       updateFoodPartner: (id: string, input: Partial<{ name: string; cuisine: string; logoUrl: string | null; active: boolean }>) =>
         request<FoodPartner>(`/admin/food-partners/${id}`, { method: 'PATCH', body: input }),
-      subscriptions: (status?: string) =>
-        request<{ subscription: Subscription; user: { id: string; name: string; phone: string }; hostelName: string }[]>('/admin/subscriptions', { query: { status } }),
-      moves: () => request<MoveRequest[]>('/admin/moves'),
+      /** Newest first, a page at a time (default 100, at most 200). */
+      subscriptions: (filter: { status?: string; limit?: number; offset?: number } = {}) =>
+        request<{ subscription: Subscription; user: { id: string; name: string; phone: string }; hostelName: string }[]>('/admin/subscriptions', { query: filter }),
+      moves: (page: { limit?: number; offset?: number } = {}) => request<MoveRequest[]>('/admin/moves', { query: page }),
       overdue: () => request<{ invoice: Invoice; userName: string; phone: string; hostelName: string }[]>('/admin/invoices/overdue'),
       ownerInvoices: (filter: { status?: string; mode?: PaymentMode; overdue?: boolean; q?: string } = {}) =>
         request<AdminOwnerInvoice[]>('/admin/owner-invoices', { query: filter }),

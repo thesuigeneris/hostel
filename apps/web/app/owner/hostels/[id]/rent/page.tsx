@@ -1,4 +1,4 @@
-import { ApiError, istDate, monthOf, RENT_METHODS } from '@hostels/shared';
+import { ApiError, istDate, monthOf, phoneLabel, RENT_METHODS } from '@hostels/shared';
 import { recordRentAction } from '@/app/owner/actions';
 import { SubmitButton } from '@/components/SubmitButton';
 import { Upsell } from '@/components/Upsell';
@@ -51,7 +51,7 @@ export default async function RentPage({ params, searchParams }: Props) {
         <Table head={['Resident', 'Due', 'Paid', 'On', 'How', 'Note', 'Status', '']}>
           {sheet.rows.map((r) => (
             <tr key={r.residencyId}>
-              <Td><div className="font-medium">{r.name || '—'}</div><div className="text-xs text-ink-muted">+91 {r.phone}</div></Td>
+              <Td><div className="font-medium">{r.name || '—'}</div><div className="text-xs text-ink-muted">{phoneLabel(r.phone)}</div></Td>
               <Td>{rupees(r.amountDue)}</Td>
               <Td colSpan={4}>
                 <form id={`rent-${r.residencyId}`} action={recordRentAction} className="grid grid-cols-[100px_140px_100px_1fr] gap-2">
