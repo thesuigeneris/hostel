@@ -81,7 +81,11 @@ Each needs: a spec note in `docs/superpowers/specs/`, API + web + app, edge case
 - [ ] A real domain for Caddy HTTPS; copying `deploy/backups/` off the machine.
 - [ ] Print shops rendering Devanagari in the brand kit.
 
-## 7. Tidy (owner's call)
+## 7. Branches
 
-- [ ] Delete merged branches: `claude/project-thread-*`, `claude/hostels-best-of-both`, `claude/hostels-platform`,
-      `claude/loving-euler-m0b2ku`.
+- [x] **Owner decision (2026-11-13): keep every branch.** Do not delete any branch, merged or not.
+
+## 8. Phase 2 and later
+
+- Ideas (food add-ons, coupons, rewards, referrals, UPI AutoPay, staff accounts and more) with verdicts and owner
+  questions: `docs/product/future-enhancements.md`. Nothing there is approved yet.
