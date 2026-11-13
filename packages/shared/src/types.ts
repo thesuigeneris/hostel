@@ -51,6 +51,8 @@ export const PAYMENT_EXCEPTION_REASONS = [
   'bill_cancelled',
   'bill_waived',
   'duplicate_payment',
+  /** A paid bill for a move that was then cancelled: the rent paid above the room the payer stayed in is owed back. */
+  'move_cancelled',
 ] as const;
 export type PaymentExceptionReason = (typeof PAYMENT_EXCEPTION_REASONS)[number];
 export const PAYMENT_EXCEPTION_STATUSES = ['refund_due', 'refunded'] as const;

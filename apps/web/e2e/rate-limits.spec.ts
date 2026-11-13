@@ -26,7 +26,8 @@ test('a network that used up its sign-up limit is told so in plain words, and ot
   await blocked.getByLabel('Mobile number').fill(`96${String(Date.now()).slice(-8)}`);
   await blocked.getByLabel('Password').fill('mango tree by the old gate');
   await blocked.getByRole('button', { name: 'Create account' }).click();
-  await expect(blocked.getByRole('alert')).toContainText(/Too many sign-ups from this network\. Please try again in \d+ minutes\./);
+  // Next.js keeps its own (empty) route announcer with role="alert" on the page, so pick the message by its text.
+  await expect(blocked.getByRole('alert').filter({ hasText: 'Too many' })).toContainText(/Too many sign-ups from this network\. Please try again in \d+ minutes\./);
   await expect(blocked).toHaveURL(/\/login/);
   await blocked.context().close();
 

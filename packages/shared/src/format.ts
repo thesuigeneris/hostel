@@ -72,6 +72,7 @@ export const REFUND_REASON_LABEL: Record<PaymentExceptionReason, string> = {
   bill_cancelled: 'Bill was cancelled',
   bill_waived: 'Bill was waived',
   duplicate_payment: 'Bill was already paid',
+  move_cancelled: 'Move cancelled after paying the new room’s rent',
 };
 
 /** Why a payment could not be used, completing "We received ₹X, but …" for the payer. */
@@ -82,11 +83,16 @@ export const REFUND_REASON_TEXT: Record<PaymentExceptionReason, string> = {
   bill_cancelled: 'this bill was cancelled before the payment reached us',
   bill_waived: 'this bill was waived, so there was nothing to pay',
   duplicate_payment: 'this bill had already been paid',
+  move_cancelled: 'your move was cancelled, so you stay in your current room at its lower rent',
 };
 
 /** What the payer reads on the bill: what happened to their money and when it comes back. */
 export function refundMessage(r: Pick<PaymentException, 'amount' | 'reason' | 'status' | 'refundedAt' | 'paymentMode'>): string {
-  const what = `We received ${rupees(r.amount)}, but ${REFUND_REASON_TEXT[r.reason]}.`;
+  // A cancelled move refunds only part of the bill: the rent paid above the room the payer stayed in.
+  const what =
+    r.reason === 'move_cancelled'
+      ? `You paid ${rupees(r.amount)} more than your room costs, because ${REFUND_REASON_TEXT[r.reason]}.`
+      : `We received ${rupees(r.amount)}, but ${REFUND_REASON_TEXT[r.reason]}.`;
   if (r.paymentMode === 'simulated') return `${what} It was a simulated payment, so no money moved.`;
   if (r.status === 'refunded') return `${what} We refunded it on ${r.refundedAt ? dateLabel(istDate(new Date(r.refundedAt))) : '—'}.`;
   return `${what} We'll refund it to the account you paid from within ${REFUND_WITHIN_DAYS} days.`;

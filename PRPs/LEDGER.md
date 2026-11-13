@@ -343,6 +343,28 @@ Gates: see the table's last row.
 | OWN-ISSUE-FROM | The app's owner issue buttons send the status they showed (`from`), like the web form | `apps/mobile/app/owner/issue/[id].tsx` | typecheck | unverified: no device run |
 | OWN-GATES | Final gates on the merged branch (base `2f2a17f`) | — | typecheck 4/4; lint clean (319 files); shared 59 (46 + 13); web unit 18 (11 + 7); mobile 51 (50 + 1); API 237 (206 + 31) at `592bdf2`; `e2e:fresh` 78/78 (69 + 9) at `49effd3`; `npx expo export --platform android` exit 0 | verified; databases `hostels_test_o`, `hostels_e2e_o` (recreated after the migration renumbering) |
 
+## Admin/ops work landed, and the cancelled-move paid-bill fix
+
+Branch `persona-admin` (admin/ops work, migration `0012_admin_oversight`) merged with `dev` (clean merge), then:
+- **E2E-RATE**: `e2e/rate-limits.spec.ts` matched two `role=alert` elements (Next.js's empty route announcer); now
+  picks the message by its text. Test-only change.
+- **M14 (CSP nonces)**: the WIP commit's middleware verified: `e2e/csp.spec.ts` 4/4, and the full e2e suite passes
+  with the stricter policy (Razorpay Checkout's script allowed).
+- **MOVE-PAID**: a move cancelled (by the job, because the destination closed, or by the resident) after a bill for a
+  period from the move date on was already paid at the destination's rent. The bill is moved back to the origin hostel
+  with its rent cut to the origin room's rent (so payouts count only what the origin earned), and the rent paid above
+  it is a `refund_due` row with reason `move_cancelled` (partial amount: `recordPaymentException(…, amount)`). A cheaper
+  destination is never charged extra: the bill keeps what was paid. Waived bills are moved back with no refund.
+
+| Req | Requirement | Implementation | Test | Status |
+|---|---|---|---|---|
+| MOVE-PAID | Paid bills of a cancelled move: back to the origin, extra rent owed back once, never charged extra | `moves.ts` `settlePaidBillsOfCancelledMove` (in `cancelMove` and `completeDueMoves`); `refunds.ts` `recordPaymentException` partial `amount`; shared `move_cancelled` reason, `REFUND_REASON_*`, `refundMessage`; migration `0013_move_cancelled_refund` | API `cancelled-moves.test.ts` (overpaid + job rerun + payout attribution; underpaid; resident cancel) | verified; revert-checked (3/3 fail without the call) |
+| E2E-RATE | Rate-limit e2e picks the sign-up message, not the route announcer | `e2e/rate-limits.spec.ts` | the spec itself | verified |
+| ADMIN-GATES | Gates on `persona-admin` + `dev` merged | — | typecheck 4/4; lint clean (343 files); shared 62; web unit 20; mobile 51; API 269 (266 + 3); `e2e:fresh` 83/83 (82 in the full run + the fixed rate-limit spec re-run with csp); `npx expo export --platform android` exit 0 | verified 2026-11-13 |
+
+Not done here: `docs/product/audit-admin.md` (the admin agent's checklist was never written); the "Recently changed"
+screens are covered by typecheck and API tests only, the app screen is unverified on a device.
+
 
 ## Later PRPs (rows filled when each PRP is generated)
 

@@ -43,6 +43,8 @@ export async function recordPaymentException(
   bill: Bill,
   payment: { orderId: string; paymentId: string; mode: ReceivedMode },
   reason: PaymentExceptionReason,
+  /** Only part of the bill is owed back (a cancelled move); the whole bill when omitted. */
+  amount?: number,
 ) {
   const t = schema.paymentExceptions;
   await tx
@@ -53,14 +55,14 @@ export async function recordPaymentException(
       ownerInvoiceId: bill.kind === 'owner' ? bill.row.id : null,
       userId: bill.kind === 'tenant' ? bill.row.userId : bill.row.ownerId,
       hostelId: bill.row.hostelId,
-      amount: bill.kind === 'tenant' ? bill.row.totalAmount : bill.row.amount,
+      amount: amount ?? (bill.kind === 'tenant' ? bill.row.totalAmount : bill.row.amount),
       paymentMode: payment.mode,
       reason,
       razorpayOrderId: payment.orderId,
       razorpayPaymentId: payment.paymentId,
     })
     .onConflictDoNothing({ target: t.razorpayPaymentId });
-  console.warn(`[payments] payment ${payment.paymentId} for bill ${bill.row.id} could not be applied (${reason}); refund due`);
+  console.warn(`[payments] payment ${payment.paymentId} for bill ${bill.row.id}: refund due (${reason})`);
 }
 
 /** The latest late payment on a bill, for the payer's bill page. */
