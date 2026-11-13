@@ -18,9 +18,11 @@ The build follows [the platform design](docs/superpowers/specs/2026-10-12-hostel
 
 Postgres (via Drizzle), MSG91 and Razorpay are wired in. Postgres is required. MSG91 and Razorpay run in stub mode until their keys are set in `apps/api/.env`: OTP is always `123456` without MSG91, and payments are simulated without Razorpay. See [Configuration](#configuration) for every key and how to get it.
 
+**Pulling this to run and test it on your laptop? Follow [`docs/LOCAL-TESTING.md`](docs/LOCAL-TESTING.md)** (setup, logins, a checklist of what to try, the checks, troubleshooting).
+
 ## Prerequisites
 
-- [Bun](https://bun.sh) 1.3+
+- [Bun](https://bun.sh) 1.4.4 (the lockfile needs it; Bun 1.3 can't read it)
 - Docker (for Postgres), or any Postgres 16 with `hostels` and `hostels_test` databases
 - For the mobile app: Expo Go on a phone, or an Android/iOS simulator
 
@@ -49,7 +51,7 @@ bun run dev:mobile   # Expo
 
 The website reads `API_URL` (default `http://localhost:4000`) and `NEXT_PUBLIC_SITE_URL` (default `http://localhost:3000`); see `apps/web/.env.example`. It keeps the session token in an httpOnly cookie and talks to the API only from the server, so the API needs no CORS entry for it. Log in with a demo phone above; each role lands on its own home (`/account`, `/owner`, `/admin`).
 
-On a physical phone with Expo Go, point the app at your laptop's LAN address for both the API and the website (the website handles bill payment): `EXPO_PUBLIC_API_URL=http://192.168.1.10:4000 EXPO_PUBLIC_WEB_URL=http://192.168.1.10:3000 bun run dev:mobile`. Expo Go must be on SDK 58. Maps use react-native-maps, which needs no key in Expo Go. The web preview (`bun --filter @hostels/mobile web`) is for quick checks only; it shows a link instead of the map.
+On a physical phone with Expo Go, point the app at your laptop's LAN address for both the API and the website (the website handles bill payment): `EXPO_PUBLIC_API_URL=http://192.168.1.10:4000 EXPO_PUBLIC_WEB_URL=http://192.168.1.10:3000 bun run dev:mobile`. Expo Go must be on SDK 58. Maps use Leaflet with free OpenStreetMap tiles on the website and in the app (a WebView): no API key anywhere; see `docs/RUN.md`, "Maps". The web preview (`bun --filter @hostels/mobile web`) is for quick checks only; it shows a link instead of the map.
 
 ## Configuration
 

@@ -419,6 +419,14 @@ questions recorded there with safe defaults). Migration `0016_account_deletion`.
 | ADMIN-BATCH-GATES | Gates for this batch | — | typecheck 4/4; lint clean (365 files); shared 63 (+1); web unit 20; mobile 56; API 294 (288 + 6); `e2e:fresh` 87/87 (85 + 2); `expo export --platform android` exit 0 (before the moderation fix; app unchanged since) | verified 2026-11-13 |
 | PHONE-LABEL | Deleted accounts read "Deleted account" in staff tables, not a placeholder phone | `@hostels/shared` `phoneLabel`; admin billing, owner roster and rent (web and app) | typecheck | verified by type and read-through |
 
+## Free maps (owner, 2026-11-13: "use Leaflet / free maps, scalable")
+
+| Req | Requirement | Implementation | Test | Status |
+|---|---|---|---|---|
+| MAPS-FREE | Website and app use Leaflet with free OpenStreetMap tiles; no Google Maps SDK or key | web `components/Map.tsx`; app `components/LeafletView.tsx`, `HostelMap.tsx`, `owner/PinPicker.tsx`, `lib/leafletMap.ts`; `react-native-maps` removed, `react-native-webview` 14.0.1 (Expo SDK 58's version); `app.config.ts` without the maps plugin | mobile `stay.test.ts` › free maps (2: pinned Leaflet hashes, script-safe names, checked messages); the generated page loaded in Chromium with Leaflet served from the npm copy (hashes match; markers, popup "open", picker tap and `setPin` messages, no errors); `expo export --platform android` exit 0 | verified in Chromium; not run on a device |
+| MAPS-GATES | Gates | — | typecheck 4/4; lint clean (369 files); shared 65 (+2); web unit 21 (+1); mobile 58 (+2); API 294; `e2e:fresh` 87/87; `expo export --platform android` exit 0 | verified 2026-11-13 |
+| MAPS-SCALE | Tile provider is a setting: URL + credit line (web build, app build, Docker build args); CSP allows the configured host; bad values fall back to OpenStreetMap | `@hostels/shared` `mapTiles`, `tileImageSource`, `DEFAULT_MAP_TILES`, `LEAFLET_CDN`; web `middleware.ts`, `lib/csp.ts`; `deploy/web.Dockerfile`, `compose.prod.yml`, `.env.prod.example`; docs `RUN.md` "Maps" | shared `maps.test.ts` (2); web `csp.test.ts` › map tiles; Docker web image built with a provider URL: its CSP `img-src` named that host | verified |
+
 
 ## Later PRPs (rows filled when each PRP is generated)
 

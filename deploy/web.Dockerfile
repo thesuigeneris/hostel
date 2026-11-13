@@ -22,12 +22,17 @@ COPY packages/shared ./packages/shared
 COPY apps/web ./apps/web
 ARG API_PUBLIC_URL
 ARG SITE_URL
+# Optional map tile provider; empty means free OpenStreetMap tiles (docs/RUN.md, "Maps"). Baked in at build.
+ARG MAP_TILE_URL=""
+ARG MAP_ATTRIBUTION=""
 RUN test -n "$API_PUBLIC_URL" && test -n "$SITE_URL" || (echo "Pass --build-arg API_PUBLIC_URL and SITE_URL" >&2; exit 1)
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     NEXT_OUTPUT=standalone \
     API_PUBLIC_URL=$API_PUBLIC_URL \
-    NEXT_PUBLIC_SITE_URL=$SITE_URL
+    NEXT_PUBLIC_SITE_URL=$SITE_URL \
+    NEXT_PUBLIC_MAP_TILE_URL=$MAP_TILE_URL \
+    NEXT_PUBLIC_MAP_ATTRIBUTION=$MAP_ATTRIBUTION
 WORKDIR /app/apps/web
 # The site has no public/ folder today; make one so the runtime copy below works if files are added later.
 RUN mkdir -p public && node node_modules/next/dist/bin/next build

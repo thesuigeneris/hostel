@@ -93,6 +93,13 @@ Each needs: a spec note in `docs/superpowers/specs/`, API + web + app, edge case
 
 - [x] **Owner decision (2026-11-13): keep every branch.** Do not delete any branch, merged or not.
 
+## 7b. Maps
+
+- [x] Free maps everywhere (owner, 2026-11-13): Leaflet + OpenStreetMap on the website and in the app (WebView); no
+      Google key. Scaling is a setting (`docs/RUN.md`, "Maps"): a provider's free tier, then paid or self-hosted.
+- [ ] Before heavy traffic: pick a tile provider and set its URL and credit line (OpenStreetMap's tile policy).
+- [ ] Try the app's maps on a phone (Leaflet loads from unpkg.com, so the phone needs internet; not run here).
+
 ## 8. Phase 2 and later
 
 - Ideas (food add-ons, coupons, rewards, referrals, UPI AutoPay, staff accounts and more) with verdicts and owner

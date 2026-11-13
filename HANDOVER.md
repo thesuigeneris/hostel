@@ -67,6 +67,7 @@ Services worth knowing: `billing.ts` (subscribe, invoices, jobs), `payments.ts` 
 - **Production refuses to start** on unsafe settings (`apps/api/src/lib/config-check.ts`); `UPLOAD_SIGNING_SECRET` is separate from `OTP_PEPPER`.
 - **Browser tests** start `apps/api/src/e2e-server.ts` (adds an unauthenticated test clock route; refuses to run in production; excluded from Docker images). Production starts `src/index.ts`.
 - Loading skeletons were removed from the hostel page and account/stay/issue pages: with Next 15.5 a form post under a `loading.tsx` could leave the page stuck. Search/area pages keep theirs in a `(list)` route group.
+- **Maps are free**: Leaflet + OpenStreetMap tiles on web and app (WebView), no Google key; the tile provider is a setting for scaling (`docs/RUN.md`, "Maps").
 - Design: warm off-white + deep green, tokens with measured contrast. The UI/UX Pro Max palette (purple) was deliberately **not** adopted.
 
 ## 4. Completed work (all on `main`)
@@ -155,7 +156,7 @@ PGPASSWORD=postgres createdb -h localhost -U postgres hostels_e2e_x 2>/dev/null
 | Edge cases + status | `docs/product/edge-cases.md` |
 | What is verified, with commands | `PRPs/LEDGER.md`, `PRPs/00-completion-map.md` |
 | Security posture and open items | `docs/security-review.md` |
-| Run and settings | `docs/RUN.md`, `README.md`, `apps/api/.env.example` |
+| Run and settings | `docs/LOCAL-TESTING.md` (laptop, step by step), `docs/RUN.md`, `README.md`, `apps/api/.env.example` |
 | Deploy, backup, restore, rollback | `docs/DEPLOY.md`, `deploy/` |
 | Per-persona audits | `docs/product/audit-{seeker,resident,owner,admin}.md` |
 | What is left (live checklist) | `TODO.md` |
