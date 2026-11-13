@@ -1,17 +1,18 @@
 # HANDOVER: Hostels platform
 
-Written 2026-11-12 from the live repository state. Read this first, then `CLAUDE.md`, `PRPs/LEDGER.md` and `docs/product/*`.
+Rewritten 2026-11-13 after verifying the live repository, GitHub and the test suites. Read this first, then `CLAUDE.md`, `PRPs/LEDGER.md` and `docs/product/*`.
 
-## 0. Start here: where the unmerged work lives
+## 0. Start here: where everything is
 
-Everything is now on GitHub (`thesuigeneris/hostel`). Nothing is container-only any more.
+All work is on GitHub (`thesuigeneris/hostel`) and **merged into `main`**. All 15 PRs (#1–#15) are merged; none are open.
 
-| Branch | Commit | What it is |
+| Branch | Commit | Note |
 |---|---|---|
-| `dev` and `claude/eager-hawking-4exijr` | the commit that adds this file on top of `3e7b22a` | The integrated, tested line of work. Always push to **both**. |
-| **`persona-admin`** | `7782bdf` | The admin/ops agent's work, **unmerged**. Its last commit is a WIP commit of previously uncommitted files (CSP nonces, "Recently changed" screens), **not yet run through any gate**. See section 6. |
+| `main`, `dev`, `persona-admin`, `claude/eager-hawking-4exijr` | `b58a0e9` plus this docs commit | Same code. `main` is the line to build on. |
+| `claude/loving-euler-m0b2ku` | `b58a0e9` | Working branch of the session that landed the admin work; safe to delete. |
+| `claude/project-thread-*`, `claude/hostels-best-of-both`, `claude/hostels-platform` | old | Fully merged history; safe to delete (owner's call). |
 
-A new session should clone the repo, `git fetch origin dev persona-admin`, and work from there. The old agent worktrees under `.claude/worktrees/` are local to the old container and are not needed.
+A new session: clone, `git checkout main`, read this file, then `CLAUDE.md`. The agent worktrees under `.claude/worktrees/` from the old container do not exist in a new one and are not needed.
 
 ## 1. What this project is
 
@@ -26,19 +27,12 @@ The loop: owners run their hostel on the app → residents are known → reviews
 
 Specs (the personas addendum wins on conflicts): `docs/superpowers/specs/2026-10-12-hostels-platform-design.md`, `docs/superpowers/specs/2026-10-24-personas-addendum.md`. The bar for "done": `docs/product/acceptance.md`. Edge cases and their status: `docs/product/edge-cases.md`. Requirement → code → test ledger: `PRPs/LEDGER.md`.
 
-## 2. Repository and Git state (verified 2026-11-12)
+## 2. Repository and Git state (verified 2026-11-13)
 
-- Remote: `thesuigeneris/hostel` (public). `main` is still the initial commit `bd774a8`.
-- **`dev` = `claude/eager-hawking-4exijr` = `3e7b22a`**. This is the integrated, tested line of work. Always push to **both**.
-- Main checkout `/home/user/hostel` is on `claude/eager-hawking-4exijr`, clean apart from this file.
-- **PRs #1–#9 are all still open** (all from the same account, nothing new since 24 Oct):
-  - #9 (`claude/hostels-best-of-both`) is the base `dev` was built on; `dev` contains all its commits.
-  - #1–#5 (phases 1–5) and #8 (phase 6): every valid change is ported into `dev` with tests. #6 (README env keys) and #7 (API edge tests) were already in #9. **All superseded; none closed yet.**
-  - `claude/hostels-platform` (no PR): a third from-scratch build; nothing left in it that `dev` lacks (its two bug fixes were already handled differently).
-- `mudgala5540/Hostel` (the other account) is an **empty repo**: no commits, branches or PRs. An `add_repo` with push access was refused by the permission classifier; read access works.
-- Local branches in worktrees (all merged into `dev` except `persona-admin`): `port-review-fixes`, `port-phase6`, `backend-fixes`, `payment-mode`, `persona-seeker`, `persona-resident`, `persona-owner`.
-- `CLAUDE.md` says no merges/PRs/deployments without the owner's approval. The owner did ask for merging/pushing to `dev`; **ask before merging into `main` or closing PRs** unless told again.
-- Commit trailers: follow the attribution instruction given in the new session (earlier commits here carry `Co-Authored-By: Claude Opus 5.5` and `Claude-Session: …`).
+- `main` = `dev` = `b58a0e9` (+ the commit that adds the docs in this file's commit). Migrations `0000`–`0013`.
+- `mudgala5540/Hostel` (the owner's other account) is an **empty repo**: no commits, branches or PRs. Pushing there was refused by the permission classifier; ask the owner if it is wanted.
+- `CLAUDE.md` says no merges/PRs/deployments without the owner's approval; the owner has approved merging to `main` and pushing to `dev` for this body of work. For anything new, ask first.
+- Commit trailers: follow the attribution instruction given in the session (earlier commits carry `Co-Authored-By` and `Claude-Session` lines).
 
 ## 3. Architecture and stack
 
@@ -72,21 +66,19 @@ Services worth knowing: `billing.ts` (subscribe, invoices, jobs), `payments.ts` 
 - Loading skeletons were removed from the hostel page and account/stay/issue pages: with Next 15.5 a form post under a `loading.tsx` could leave the page stuck. Search/area pages keep theirs in a `(list)` route group.
 - Design: warm off-white + deep green, tokens with measured contrast. The UI/UX Pro Max palette (purple) was deliberately **not** adopted.
 
-## 4. Completed work (all on `dev`)
+## 4. Completed work (all on `main`)
 
-Each area has a ledger section in `PRPs/LEDGER.md` with file, function, test and command:
+Each area has a ledger section in `PRPs/LEDGER.md` with file, function, test and command.
 
-- Combined build (#9): password login, demo isolation, frontend redesign, board likes, page views, insights.
-- Review fixes from #1–#5: open redirect, billing edges, admin-removal, plan visibility.
-- Phase 6 (#8): Android parity for all personas, owner/admin screens, brand-standards checklist, brand kit, audit log, owner billing oversight.
-- Backend fixes M5 (overbooking), M6 (payment call out of transaction), M8/M9/M10 (private photos, relative URLs, EXIF stripping), photo receipts, CSP images.
-- PRP-04: payment modes (M7), late payments and refund queue (M1), order-overwrite race (M2).
-- Persona audits with checklists: `docs/product/audit-seeker.md`, `audit-resident.md`, `audit-owner.md`. ~80 defects fixed, each with a test that fails when the fix is reverted.
-- Deployment (M12, M13): `deploy/` + `docs/DEPLOY.md`; built and run end to end, backup/restore drill tested.
-- Production settings check; separate upload signing secret; health reports OTP `off` in production without SMS.
-- Last three fixes (`3e7b22a`): an owner-added resident who subscribes is counted once; paused-partner subscribe message; photo reorder must list every photo once.
+- **Seekers**: search with suggestions, filters in the URL, no-results recovery, stable paging, fair rating order ("New" under 3 reviews), hostel pages with verified reviews and the public issue record, visit requests, subscribe/pay, held-bed states.
+- **Owners / partners**: for-owners page, listing, rooms, photos (own uploads only, EXIF stripped), plans with upgrade credit, partner application with brand-standards checklist, brand kit, roster/rent tracker, issues inbox with needs-response badge, editable review replies, menus/headcount, dashboard, next-step guidance.
+- **Residents**: invites, issues with timeline and private photos, board, reviews, meal skips with IST cut-offs, moves, cancel.
+- **Admins**: listing and partner decisions (conditional, whole checklist enforced), moderation, owner billing (waive audited), refunds due, payouts, revenue from live payments only, audit log, recently changed listings, audited admin actions in owner workspaces.
+- **Money**: payment modes (live/test/simulated/waived), late-payment revive or refund queue, cancelled-move refund (migration 0013), no payment call inside the booking transaction, no overbooking.
+- **Platform**: password login without SMS, demo isolation, rate limits (`TRUST_PROXY`), CSP nonces, production settings check, Docker deployment with HTTPS and backup/restore, Android app (all personas).
+- **Docs**: `docs/product/acceptance.md`, `edge-cases.md` (all rows now closed or verified), `audit-{seeker,resident,owner,admin}.md`.
 
-Test baselines on `dev`: **API 241/241** (verified at `3e7b22a`), shared 59, web unit 18, mobile 51, **web e2e 78/78** (last full run was at the owner merge, before `3e7b22a`; re-run), `expo export --platform android` exit 0.
+Verified on `b58a0e9` on 2026-11-13: typecheck 4/4, lint clean, shared 62, web unit 20, mobile 51, **API 270/270**, **browser suite 83/83 (6.5 min)**. Added after that: `apps/api/test/trust-boundaries.test.ts` (2 tests). Never run: Android on a device, real Razorpay/MSG91, real TLS certificates, off-machine backup copy.
 
 ## 5. Environment and exact commands
 
@@ -121,52 +113,31 @@ PGPASSWORD=postgres createdb -h localhost -U postgres hostels_e2e_x 2>/dev/null
 - Python helper skill (read-only design rules): `/tmp/claude-0/-home-user-hostel/f53b5d03-9720-5113-97b7-2c21dbe01388/scratchpad/ext/uiux/` will be gone in a new session; re-clone `nextlevelbuilder/ui-ux-pro-max-skill` if wanted (treat as recommendations only).
 - Network in this sandbox blocks: `getlayers.ai`, `devshreebharatia.substack.com`, the ThreeUI Notion page (owner wanted them used for design; **never read**), Android SDK/Maven (no APK built), OpenStreetMap tiles (maps show no tiles in tests).
 
-## 6. The unfinished admin/ops work (in the `persona-admin` worktree)
+## 6. Task status (what is and is not finished)
 
-Branch `persona-admin` (pushed, `7782bdf`) is based on `dev`'s predecessor merge (includes owner work, migration 0011).
-
-**Committed there (8 commits, `10d98de`…`80e77f2`):**
-- Partner verification requires every brand standard on every path; admin decisions are conditional updates.
-- Review flags can be re-raised after un-hide; flags on non-live hostels refused; moderation queues.
-- Recently-changed listings feed (O3) with partner re-check; audited admin actions through owner routes (O7).
-- Waive-vs-pay and day-16 pause proven (O8, M10).
-- Rate limits (M4) with `TRUST_PROXY` handling; page views de-duplicated.
-- Duplicate comment/post sent twice saved once.
-- An admin's comment/status move is not the hostel's "response".
-- Migration **`0012_admin_oversight`**.
-
-**In the final WIP commit `7782bdf` (14 files, unverified):** `apps/web/middleware.ts`, `apps/web/lib/csp.ts`, `apps/web/e2e/csp.spec.ts`, `apps/web/test/csp.test.ts` (CSP nonces, M14, **state and test results unknown**), `apps/web/next.config.ts`, admin "Recently changed" web page (`apps/web/app/admin/changes/`) and mobile screen (`apps/mobile/app/admin/changes.tsx`), edits to admin moderation/partners/index screens and `actions.ts`, `packages/shared/src/owner-admin.ts`, `packages/shared/test/admin.test.ts`.
-
-**Not done / unknown:** final gates (API/e2e/mobile) on this branch; `docs/product/audit-admin.md`; ledger/edge-case/security-review updates for admin rows; the agent's final report (it was stopped by a usage limit mid-way through the "Recently changed" page). Verify that CSP nonces don't break pages, Razorpay Checkout or the e2e suite; if they do, keep `'unsafe-inline'` and document the trade-off in `docs/security-review.md`.
-
-To resume: `git checkout persona-admin`, merge `dev` into it (expect conflicts only in docs/ledger), regenerate nothing unless the schema changed (its migration is 0012, so it must stay 0012 and land **before** the cancelled-move migration), run all gates, then fast-forward `dev` and `claude/eager-hawking-4exijr`.
+| Task | Status | Evidence |
+|---|---|---|
+| Port review fixes, owner plans, phase 6, backend fixes, payment modes, deployment | **Done, merged** | Ledger sections; PRs #1–#15 merged |
+| Seeker, resident, owner persona audits | **Done, merged** | `audit-seeker.md`, `audit-resident.md`, `audit-owner.md` |
+| Admin persona agent + ops hardening | **Done, merged** (rate limits, CSP nonces, O3, O7, O8, M10, verification enforcement) | `audit-admin.md`; one gap: the per-screen state/keyboard review was never done (listed in that file) |
+| Cancelled-move paid bill: re-attribute + refund overpaid rent | **Done, merged** | migration `0013_move_cancelled_refund`; commit `b329085` |
+| Final E2E verification, merge to main, close superseded PRs | **Done** for the code: gates pass on `b58a0e9`; merged to `main`; all PRs merged | see section 4 |
 
 ## 7. Next tasks, in priority order
 
-1. **Land the admin/ops work** (section 6): merge `dev` into `persona-admin`, run every gate, fix failures, push to `dev` and `claude/eager-hawking-4exijr`.
-2. **Cancelled-move paid-bill fix** (new migration `0013`, after admin's 0012). In `completeDueMoves` (cancel path, `apps/api/src/services/moves.ts`): a bill already **paid** for a period on/after the move date at the destination's rent stays attributed to the destination hostel. Move it back to the origin hostel (payout attribution) and turn any rent paid above the origin room's rent into a `refund_due` row with a **new** reason `move_cancelled` (enum value in `packages/shared/src/types.ts` + `format.ts` text + migration `ALTER TYPE … ADD VALUE`). `recordPaymentException` (`services/refunds.ts`) always refunds the full bill, so add an optional partial amount. Never charge extra if the origin costs more. Tests: overpaid, underpaid, job rerun idempotent, payout attribution.
-3. **Full end-to-end verification on the integrated branch**: every gate in section 5, plus a Docker production-stack smoke (see `docs/DEPLOY.md`, "What was tested"). Update `PRPs/LEDGER.md`.
-4. **Close out the PRs** (ask the owner first): open `dev` → `main` PR (or fast-forward #9's branch), merge, close #1–#8 with a comment pointing at it. Keep or delete old branches per the owner.
-5. **Remaining small defects** (below).
-6. **Owner decisions** needed (section 8), then product gaps: change food plan from the next bill; in-app signals; account deletion/export (DPDP Act 2023).
-7. **Verification that needs outside resources**: real device/emulator run of the Android app; real Razorpay (test then live) and MSG91; real HTTPS certificates; backups copied off-machine; print shops rendering Devanagari in the brand kit.
+1. **Build the three approved product gaps** (owner said yes): (a) change food plan or diet from the next bill without cancelling; (b) in-app signals: unread counts for residents' issue updates (the owner's needs-response badge exists); (c) account deletion and data export for India's DPDP Act 2023, keeping reviews anonymised. Each needs a spec note in `docs/superpowers/specs/`, API + web + app, edge cases and tests.
+2. **Admin per-screen audit** (the gap in `audit-admin.md`): states, error words, keyboard-only, admin table paging beyond 500 rows; add an `admin:revoke` script (admin granted with `admin:grant` cannot be revoked today).
+3. **Real-world verification (needs the owner's accounts)**: Android build on a device or emulator (SDK/Maven are blocked in the cloud sandbox: build with EAS or locally per `docs/RUN.md`); Razorpay test then live with **separate webhook secrets per mode** (owner approved); MSG91; a real domain for Caddy HTTPS; copy `deploy/backups/` off the machine.
+4. **Scale items** before more than one API instance: move uploads to object storage; move rate limits and the job scheduler out of process.
+5. **Small known items**: older private photos keep public keys; signed photo links last up to 90 minutes and can be shared; owner-added residents can still be fictitious (consider rent-record or admin spot-check before their reviews count in the rating).
+6. Tidy: delete merged branches (owner's call).
 
-## 8. Known bugs, risks and open questions
+## 8. Decisions made (by the owner, 2026-11-13: "yes for all decisions")
 
-Small defects reported by agents and **not yet fixed** (each needs a test that fails without the fix):
-- `cancelSubscription` can't be limited to plans still pending: releasing a held bed re-reads the plan first, but a small race with a payment remains (`billing.ts`).
-- Review flags: flags on hostels that stopped being live were accepted (the admin branch fixes this; confirm after merge).
-- Two payments paths: a first bill can still be paid after the 30-min hold until the expiry job runs (late-payment revive covers the money, check the UX).
-- Photos from before the photo fixes keep public `pho_` keys; outside links in old rows still show in the app (no real users; resetting dev DBs is enough).
-- Signed private-photo links can be shared for up to 90 minutes, including by someone who just left the hostel.
-- A transient axe failure ("Document does not have a non-empty title" on `/stay` after a Like) appeared once in `resident-journey` e2e and did not recur; watch for flakiness.
-- Mobile seed photos load on a phone only if `API_PUBLIC_URL` is the computer's LAN address.
-- Owner-added residents: an owner could still add people who never lived there (consider rent-record or admin spot-check before their reviews count).
-
-**Questions for the owner (safest default chosen in code):**
-- Refund promise: payers are told refunds come within **7 days** (`REFUND_WITHIN_DAYS`); not in the specs. Refunds are manual (Razorpay dashboard → "Mark refunded" in admin).
-- Use **different webhook secrets** for Razorpay test and live mode (documented in `docs/RUN.md`).
-- Upload signing/OTP secrets must be set in production or the API will not start.
+- Refund promise to payers: **within 7 days** (`REFUND_WITHIN_DAYS`); refunds stay manual in the Razorpay dashboard, then "Mark refunded" in admin.
+- Use **different webhook secrets** for Razorpay test and live mode.
+- Build the three product gaps in section 7.1.
+- Product rules chosen during the work and kept: owners may take a plan anywhere but their own hostel; no second free month; "4★ and up" needs 3 reviews; transparency panel from 3 issues in 90 days; a move into a closed hostel is cancelled with a reason and the resident is never charged extra.
 
 **Budget/safety (CLAUDE.md):** at most ₹100 external spend, target ₹0; no paid services, live transactions, public deployments or app-store builds without explicit approval; never commit secrets; never reset a database that may hold real data.
 
@@ -180,4 +151,4 @@ Small defects reported by agents and **not yet fixed** (each needs a test that f
 | Security posture and open items | `docs/security-review.md` |
 | Run and settings | `docs/RUN.md`, `README.md`, `apps/api/.env.example` |
 | Deploy, backup, restore, rollback | `docs/DEPLOY.md`, `deploy/` |
-| Per-persona audits | `docs/product/audit-{seeker,resident,owner}.md` (admin's does not exist yet) |
+| Per-persona audits | `docs/product/audit-{seeker,resident,owner,admin}.md` |
