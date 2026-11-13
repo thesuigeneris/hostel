@@ -155,7 +155,7 @@ PGPASSWORD=postgres createdb -h localhost -U postgres hostels_e2e_x 2>/dev/null
 | Edge cases + status | `docs/product/edge-cases.md` |
 | What is verified, with commands | `PRPs/LEDGER.md`, `PRPs/00-completion-map.md` |
 | Security posture and open items | `docs/security-review.md` |
-| Run and settings | `docs/RUN.md`, `README.md`, `apps/api/.env.example` |
+| Run and settings | `docs/LOCAL-TESTING.md` (laptop, step by step), `docs/RUN.md`, `README.md`, `apps/api/.env.example` |
 | Deploy, backup, restore, rollback | `docs/DEPLOY.md`, `deploy/` |
 | Per-persona audits | `docs/product/audit-{seeker,resident,owner,admin}.md` |
 | What is left (live checklist) | `TODO.md` |

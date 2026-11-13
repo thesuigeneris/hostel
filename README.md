@@ -18,9 +18,11 @@ The build follows [the platform design](docs/superpowers/specs/2026-10-12-hostel
 
 Postgres (via Drizzle), MSG91 and Razorpay are wired in. Postgres is required. MSG91 and Razorpay run in stub mode until their keys are set in `apps/api/.env`: OTP is always `123456` without MSG91, and payments are simulated without Razorpay. See [Configuration](#configuration) for every key and how to get it.
 
+**Pulling this to run and test it on your laptop? Follow [`docs/LOCAL-TESTING.md`](docs/LOCAL-TESTING.md)** (setup, logins, a checklist of what to try, the checks, troubleshooting).
+
 ## Prerequisites
 
-- [Bun](https://bun.sh) 1.3+
+- [Bun](https://bun.sh) 1.4.4 (the lockfile needs it; Bun 1.3 can't read it)
 - Docker (for Postgres), or any Postgres 16 with `hostels` and `hostels_test` databases
 - For the mobile app: Expo Go on a phone, or an Android/iOS simulator
 
