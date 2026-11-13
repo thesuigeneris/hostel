@@ -10,8 +10,8 @@ All work is on GitHub (`thesuigeneris/hostel`) and **merged into `main`**. All 1
 |---|---|---|
 | `main`, `persona-admin`, `claude/eager-hawking-4exijr` | `b58a0e9` | `main` is production. |
 | `dev` | `main` + docs/test commits | Build here. |
-| `claude/loving-euler-m0b2ku` | `b58a0e9` | Working branch of the session that landed the admin work; safe to delete. |
-| `claude/project-thread-*`, `claude/hostels-best-of-both`, `claude/hostels-platform` | old | Fully merged history; safe to delete (owner's call). |
+| `claude/loving-euler-m0b2ku` | feature branch | Working branch; merged into `dev` by PRs. Keep. |
+| `claude/project-thread-*`, `claude/hostels-best-of-both`, `claude/hostels-platform` | old | Fully merged history. **Keep: the owner wants no branch deleted.** |
 
 A new session: clone, `git checkout dev`, read this file, then `CLAUDE.md`. The agent worktrees under `.claude/worktrees/` from the old container do not exist in a new one and are not needed.
 
@@ -135,7 +135,8 @@ PGPASSWORD=postgres createdb -h localhost -U postgres hostels_e2e_x 2>/dev/null
 3. **Real-world verification (needs the owner's accounts)**: Android build on a device or emulator (SDK/Maven are blocked in the cloud sandbox: build with EAS or locally per `docs/RUN.md`); Razorpay test then live with **separate webhook secrets per mode** (owner approved); MSG91; a real domain for Caddy HTTPS; copy `deploy/backups/` off the machine.
 4. **Scale items** before more than one API instance: move uploads to object storage; move rate limits and the job scheduler out of process.
 5. **Small known items**: older private photos keep public keys; signed photo links last up to 90 minutes and can be shared; owner-added residents can still be fictitious (consider rent-record or admin spot-check before their reviews count in the rating).
-6. Tidy: delete merged branches (owner's call).
+6. Branches: **keep every branch** (owner, 2026-11-13). Never delete one.
+7. Phase 2 ideas: `docs/product/future-enhancements.md` (not approved yet).
 
 ## 8. Decisions made (by the owner, 2026-11-13: "yes for all decisions")
 
@@ -157,3 +158,5 @@ PGPASSWORD=postgres createdb -h localhost -U postgres hostels_e2e_x 2>/dev/null
 | Run and settings | `docs/RUN.md`, `README.md`, `apps/api/.env.example` |
 | Deploy, backup, restore, rollback | `docs/DEPLOY.md`, `deploy/` |
 | Per-persona audits | `docs/product/audit-{seeker,resident,owner,admin}.md` |
+| What is left (live checklist) | `TODO.md` |
+| Phase 2 ideas | `docs/product/future-enhancements.md` |
