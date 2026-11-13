@@ -1,16 +1,21 @@
+import { fileURLToPath } from 'node:url';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
+import { env } from '../lib/env';
 
-const url = process.env.DATABASE_URL;
-if (!url) {
-  console.error('DATABASE_URL not set; skipping migration.');
-  process.exit(0);
+export const migrationsFolder = fileURLToPath(new URL('../../migrations', import.meta.url));
+
+export async function runMigrations(url = env.databaseUrl) {
+  const client = postgres(url, { max: 1, onnotice: () => {} });
+  try {
+    await migrate(drizzle(client), { migrationsFolder });
+  } finally {
+    await client.end();
+  }
 }
 
-const client = postgres(url, { max: 1 });
-const db = drizzle(client);
-
-await migrate(db, { migrationsFolder: './migrations' });
-console.log('migrations complete');
-await client.end();
+if (import.meta.main) {
+  await runMigrations();
+  console.log('migrations complete');
+}

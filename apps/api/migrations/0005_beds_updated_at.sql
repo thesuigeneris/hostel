@@ -1,0 +1,1 @@
+ALTER TABLE "room_types" ADD COLUMN "beds_updated_at" timestamp with time zone;
