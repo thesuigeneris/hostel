@@ -295,6 +295,16 @@ export default async function AccountPage({ searchParams }: Props) {
               </form>
             </Card>
           )}
+          {!user.isDemo && (
+            <Card>
+              <h2 className="font-semibold">Your data</h2>
+              <p className="mt-1 text-sm text-ink-soft">Get a copy of everything we hold about you, or delete your account.</p>
+              <div className="mt-3 flex flex-col gap-2">
+                <LinkButton href="/account/export" variant="secondary" className="w-full">Download my data</LinkButton>
+                <LinkButton href="/account/delete" variant="ghost" className="w-full">Delete my account</LinkButton>
+              </div>
+            </Card>
+          )}
           <Card>
             <h2 className="font-semibold">Living in a hostel?</h2>
             <p className="mt-1 text-sm text-ink-soft">Report issues, talk to your neighbours and review your stay.</p>

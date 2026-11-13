@@ -76,6 +76,8 @@ export const users = pgTable('users', {
   phoneVerifiedAt: timestamp('phone_verified_at', { withTimezone: true }),
   /** argon2id (PHC string) from Bun.password; null for OTP-only accounts. */
   passwordHash: text('password_hash'),
+  /** Set when the person deleted their account (DPDP Act 2023): name, phone and email are already erased. */
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
   /**
    * Set when admin was granted on the server (`admin:grant`, demo seed). Such admins keep the role;
    * any other admin holds it only while their phone is in ADMIN_PHONES.

@@ -390,6 +390,20 @@ Spec: `docs/superpowers/specs/2026-11-13-resident-signals.md` (approved by the o
 | SIGNALS-GATES | Gates | — | typecheck 4/4; lint clean (353 files); shared 62; web unit 20; mobile 55 (53 + 2); API 283 (279 + 4); `e2e:fresh` 84/84; `expo export --platform android` exit 0 | verified 2026-11-13 |
 | SIGNALS-APP | My Stay tab badge (refreshed on start, return to app, each minute), per-stay buttons, list and timeline badges | `apps/mobile/app/(tabs)/_layout.tsx`, `(tabs)/stay.tsx`, `components/Community.tsx`, `app/issue/[id].tsx`, `lib/signals.ts` | `apps/mobile/test/stay.test.ts` › in-app signals (2); typecheck | logic verified; screens unverified on a device |
 
+## Product gap 1c: account deletion and data export (DPDP Act 2023)
+
+Spec: `docs/superpowers/specs/2026-11-13-account-deletion-and-export.md` (approved by the owner 2026-11-13; three open
+questions recorded there with safe defaults). Migration `0016_account_deletion`.
+
+| Req | Requirement | Implementation | Test | Status |
+|---|---|---|---|---|
+| DATA-EXPORT | A copy of everything we hold about me, without secrets or payment references | `services/privacy.ts` `exportMyData`; `GET /me/export` | API `account-deletion.test.ts` › a copy of my data | verified |
+| DATA-DELETE-GUARD | Not while a plan runs, a bill is due, a refund is owed, or for owners/admins/demo; told why | `privacy.ts` `blocker`, `deletionStatus`; `GET /me/deletion` | API › not while a plan runs; › owners, admins | verified |
+| DATA-DELETE | Name/phone/email/password erased; signed out everywhere; board content and visits deleted; photos deleted; stays ended and nameless; reviews and issues kept without a name; bills kept; same number can sign up again | `privacy.ts` `deleteMyAccount`; `lib/storage.ts` `remove`; `users.deleted_at` | API › afterwards my name and board posts are gone…; › password; › open hostel stay ends | verified; revert-checked (stays and posts: 2 fail; ending stays: 1 fails) |
+| DATA-WEB | "Your data" on `/account`; JSON download; delete page with what happens, reason when blocked, DELETE + password; signed-out confirmation page | `app/account/page.tsx`, `export/route.ts`, `delete/page.tsx`, `deleted/page.tsx`, `actions.ts` `deleteAccountAction` | e2e `account-data.spec.ts` (download, delete, signed out; axe on both pages) | verified |
+| DATA-GATES | Gates | — | typecheck 4/4; lint clean (361 files); shared 62; web unit 20; mobile 56 (55 + 1); API 288 (283 + 5); `e2e:fresh` 85/85 (84 + 1); `expo export --platform android` exit 0 | verified 2026-11-13 |
+| DATA-APP | Profile → share the export; delete screen | `apps/mobile/app/(tabs)/profile.tsx`, `app/delete-account.tsx`, `lib/privacy.ts` | `apps/mobile/test/stay.test.ts` › data rights; typecheck | logic verified; screens unverified on a device |
+
 
 ## Later PRPs (rows filled when each PRP is generated)
 

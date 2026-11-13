@@ -1,10 +1,12 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export interface Storage {
   put(key: string, data: Uint8Array): Promise<void>;
   get(key: string): Promise<{ data: Uint8Array<ArrayBuffer>; contentType: string } | null>;
+  /** Deletes the file; a key that is not there is fine (erasing twice is harmless). */
+  remove(key: string): Promise<void>;
 }
 
 const TYPES: Record<string, string> = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
@@ -26,6 +28,11 @@ export class LocalStorage implements Storage {
     } catch {
       return null;
     }
+  }
+
+  async remove(key: string) {
+    if (!/^[a-z0-9_]+\.(jpg|png|webp)$/.test(key)) return;
+    await rm(path.join(this.dir, key), { force: true });
   }
 }
 

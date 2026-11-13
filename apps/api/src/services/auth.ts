@@ -223,7 +223,7 @@ function dummyPasswordHash() {
  * One atomic upsert: the window resets after 15 minutes; the 5th attempt in a window sets the lock, so parallel
  * guesses can't exceed 5 attempts per window.
  */
-async function takeLoginAttempt(phone: string, now: Date): Promise<boolean> {
+export async function takeLoginAttempt(phone: string, now: Date): Promise<boolean> {
   const t = schema.loginThrottle;
   const cutoff = new Date(now.getTime() - LOGIN_LOCK_MINUTES * 60_000).toISOString();
   const lockUntil = new Date(now.getTime() + LOGIN_LOCK_MINUTES * 60_000).toISOString();
@@ -245,11 +245,11 @@ async function takeLoginAttempt(phone: string, now: Date): Promise<boolean> {
   return rows.length > 0;
 }
 
-async function clearLoginAttempts(phone: string) {
+export async function clearLoginAttempts(phone: string) {
   await getDb().delete(schema.loginThrottle).where(eq(schema.loginThrottle.phone, phone));
 }
 
-function locked() {
+export function locked() {
   return new AppError('login_locked', `Too many attempts. Try again in ${LOGIN_LOCK_MINUTES} minutes.`, 429);
 }
 

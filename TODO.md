@@ -34,7 +34,9 @@ Each needs: a spec note in `docs/superpowers/specs/`, API + web + app, edge case
 - [x] **1b. In-app signals for residents**: unread counts for updates on their issues. Built 2026-11-13: spec
       `docs/superpowers/specs/2026-11-13-resident-signals.md`, migration 0015, API/web/app, ledger rows SIGNALS-*.
       App screens not run on a device.
-- [ ] **1c. Account deletion and data export (DPDP Act 2023)**: reviews kept but anonymised. Not in the code.
+- [x] **1c. Account deletion and data export (DPDP Act 2023)**: built 2026-11-13: spec
+      `docs/superpowers/specs/2026-11-13-account-deletion-and-export.md`, migration 0016, API/web/app, ledger DATA-*.
+      **Owner questions in the spec**: how long bills are kept, a waiting period, owner self-deletion.
 
 ## 2. Bugs and gaps found in the code (each needs a test that fails without the fix)
 
