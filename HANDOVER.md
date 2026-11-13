@@ -8,7 +8,8 @@ All work is on GitHub (`thesuigeneris/hostel`) and **merged into `main`**. All 1
 
 | Branch | Commit | Note |
 |---|---|---|
-| `main`, `dev`, `persona-admin`, `claude/eager-hawking-4exijr` | `b58a0e9` plus this docs commit | Same code. `main` is production; build on `dev`. |
+| `main`, `persona-admin`, `claude/eager-hawking-4exijr` | `b58a0e9` | `main` is production. |
+| `dev` | `main` + docs/test commits | Build here. |
 | `claude/loving-euler-m0b2ku` | `b58a0e9` | Working branch of the session that landed the admin work; safe to delete. |
 | `claude/project-thread-*`, `claude/hostels-best-of-both`, `claude/hostels-platform` | old | Fully merged history; safe to delete (owner's call). |
 
@@ -31,7 +32,7 @@ Specs (the personas addendum wins on conflicts): `docs/superpowers/specs/2026-10
 
 ## 2. Repository and Git state (verified 2026-11-13)
 
-- `main` = `dev` = `b58a0e9` (+ the commit that adds the docs in this file's commit). Migrations `0000`–`0013`.
+- `main` = `b58a0e9` (production); `dev` = `main` + docs/test commits. Migrations `0000`–`0013`.
 - `mudgala5540/Hostel` (the owner's other account) is an **empty repo**: no commits, branches or PRs. Pushing there was refused by the permission classifier; ask the owner if it is wanted.
 - `CLAUDE.md` says no merges/PRs/deployments without the owner's approval; the owner has approved merging to `main` and pushing to `dev` for this body of work. For anything new, ask first.
 - Commit trailers: follow the attribution instruction given in the session (earlier commits carry `Co-Authored-By` and `Claude-Session` lines).
@@ -43,7 +44,7 @@ Bun 1.4.4 monorepo (the lockfile is format v2; Bun 1.3 cannot read it).
 | Area | What | Where |
 |---|---|---|
 | API | Hono, Drizzle ORM, postgres-js, zod. Routes thin; logic and authz in services | `apps/api/src/{routes,services,lib,db}` |
-| DB | PostgreSQL 16, forward-only Drizzle migrations `0000`–`0011` on `dev` | `apps/api/src/db/schema.ts`, `apps/api/migrations/` |
+| DB | PostgreSQL 16, forward-only Drizzle migrations `0000`–`0013` | `apps/api/src/db/schema.ts`, `apps/api/migrations/` |
 | Contract | zod schemas, types, typed client, pricing/time rules | `packages/shared/src/` |
 | Website | Next.js 15 App Router, server actions, Tailwind, tokens in `lib/tokens.ts`, primitives `components/ui.tsx` | `apps/web` |
 | Mobile | Expo SDK 58, expo-router; owner/admin/seeker/resident screens | `apps/mobile` |
@@ -78,7 +79,7 @@ Each area has a ledger section in `PRPs/LEDGER.md` with file, function, test and
 - **Admins**: listing and partner decisions (conditional, whole checklist enforced), moderation, owner billing (waive audited), refunds due, payouts, revenue from live payments only, audit log, recently changed listings, audited admin actions in owner workspaces.
 - **Money**: payment modes (live/test/simulated/waived), late-payment revive or refund queue, cancelled-move refund (migration 0013), no payment call inside the booking transaction, no overbooking.
 - **Platform**: password login without SMS, demo isolation, rate limits (`TRUST_PROXY`), CSP nonces, production settings check, Docker deployment with HTTPS and backup/restore, Android app (all personas).
-- **Docs**: `docs/product/acceptance.md`, `edge-cases.md` (all rows now closed or verified), `audit-{seeker,resident,owner,admin}.md`.
+- **Docs**: `docs/product/acceptance.md`, `edge-cases.md` (every numbered case is closed or verified; the cross-cutting rules X1–X8 have no status yet), `audit-{seeker,resident,owner,admin}.md`.
 
 Verified on `b58a0e9` on 2026-11-13: typecheck 4/4, lint clean, shared 62, web unit 20, mobile 51, **API 270/270**, **browser suite 83/83 (6.5 min)**. Added after that: `apps/api/test/trust-boundaries.test.ts` (2 tests). Never run: Android on a device, real Razorpay/MSG91, real TLS certificates, off-machine backup copy.
 
@@ -126,6 +127,8 @@ PGPASSWORD=postgres createdb -h localhost -U postgres hostels_e2e_x 2>/dev/null
 | Final E2E verification, merge to main, close superseded PRs | **Done** for the code: gates pass on `b58a0e9`; merged to `main`; all PRs merged | see section 4 |
 
 ## 7. Next tasks, in priority order
+
+**The live checklist is `TODO.md`** (checked against the code on 2026-11-13; it also lists the bugs and the Docker test run this section leaves out).
 
 1. **Build the three approved product gaps** (owner said yes): (a) change food plan or diet from the next bill without cancelling; (b) in-app signals: unread counts for residents' issue updates (the owner's needs-response badge exists); (c) account deletion and data export for India's DPDP Act 2023, keeping reviews anonymised. Each needs a spec note in `docs/superpowers/specs/`, API + web + app, edge cases and tests.
 2. **Admin per-screen audit** (the gap in `audit-admin.md`): states, error words, keyboard-only, admin table paging beyond 500 rows; add an `admin:revoke` script (admin granted with `admin:grant` cannot be revoked today).
