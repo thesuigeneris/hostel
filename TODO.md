@@ -65,9 +65,15 @@ Each needs: a spec note in `docs/superpowers/specs/`, API + web + app, edge case
 - [ ] **Signed private-photo links** can be shared for up to 90 minutes, including by someone who has just left.
 - [ ] **Older private photos keep public `pho_` keys** (no real users; resetting dev databases is enough).
 - [ ] **One-off axe failure** on `/stay` after a Like (`resident-journey` e2e): watch for flakiness.
-- [ ] **Intermittent hydration error on an issue page**: React #418 on `/issues/:id`, caught by the `workspaces` e2e
-      once in four full runs (2026-11-17), passing on re-run. Not `timeAgo`: that page is a Server Component, so the
-      HTML and the RSC payload come from one render. Needs a reproduction before a fix.
+- [ ] **Intermittent hydration attribute mismatch** (QA 2026-11-17, `.gstack/qa-reports/qa-report-localhost-2026-11-17.md`).
+      React in full: "some attributes of the server rendered HTML didn't match the client properties. This won't be
+      patched up... a SSR-ed Client Component used a server/client branch `if (typeof window !== 'undefined')`".
+      It fires on **click navigation, not on a direct `goto`**, which is why a 16/16 page sweep is clean and the e2e
+      suite only catches it about once in four runs. Attributes are not patched, so the wrong value stays in the DOM.
+      Ruled out: `timeAgo` (those pages are Server Components), `components/motion.tsx` (`useSyncExternalStore` with a
+      correct `() => false` server snapshot), `components/FilterDrawer.tsx` (`matchMedia` only inside `useEffect`).
+      To finish it: capture the dev console **without truncating the text** and click-navigate until it fires; the
+      development message names the offending attribute and component stack.
 
 ## 3. Admin per-screen audit (the gap in `audit-admin.md`)
 
