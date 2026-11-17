@@ -72,8 +72,10 @@ Each needs: a spec note in `docs/superpowers/specs/`, API + web + app, edge case
       suite only catches it about once in four runs. Attributes are not patched, so the wrong value stays in the DOM.
       Ruled out: `timeAgo` (those pages are Server Components), `components/motion.tsx` (`useSyncExternalStore` with a
       correct `() => false` server snapshot), `components/FilterDrawer.tsx` (`matchMedia` only inside `useEffect`).
-      To finish it: capture the dev console **without truncating the text** and click-navigate until it fires; the
-      development message names the offending attribute and component stack.
+      To finish it, run `bun apps/web/scripts/hunt-hydration.mjs [laps]` against the dev servers: it click-navigates
+      and prints the **whole** React message, whose tail names the offending attribute and component stack. The e2e
+      suite cannot tell you this: it runs a production build, where React minifies the error to a bare `#418`.
+      Not wired into CI, so it never makes a run flaky.
 
 ## 3. Admin per-screen audit (the gap in `audit-admin.md`)
 
