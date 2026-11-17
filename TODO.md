@@ -55,11 +55,19 @@ Each needs: a spec note in `docs/superpowers/specs/`, API + web + app, edge case
 - [x] **First bill payable after the 30-minute hold**: until the job runs the bed is still held, so paying confirms
       the plan, and the pay page says the hold has run out and to pay now; once the job has run the bill is void.
       Tests: `cancel-payment-race.test.ts` › paying a first bill after the hold; shared `seeker.test.ts` › bed hold.
-- [ ] **Owner-added residents can be fictitious**: their reviews count. Consider rent records or an admin spot-check
-      before they count in the rating.
+- [x] **Owner-added residents can be fictitious**: fixed 2026-11-17 with the rent-record rule (owner chose it over an
+      admin spot-check). The review still shows, labelled, but counts toward the rating only once a rent record backs
+      the stay: one shared predicate `services/review-rating.ts`, used by `ratingsFor` and the search CTEs.
+      Ledger TRUST-RENT; `resident-trust.test.ts` fails without the fix.
+- [x] **Empty `RAZORPAY_KEY_SECRET` broke stub payment signatures** (found 2026-11-17): `keySecret()` used `??`, so the
+      empty value `.env.example` ships was signed with instead of the published stub secret, and
+      `POST /payments/:id/verify` answered `signature_invalid`. Fixed with `||`. Ledger PAY-STUB-SECRET.
 - [ ] **Signed private-photo links** can be shared for up to 90 minutes, including by someone who has just left.
 - [ ] **Older private photos keep public `pho_` keys** (no real users; resetting dev databases is enough).
 - [ ] **One-off axe failure** on `/stay` after a Like (`resident-journey` e2e): watch for flakiness.
+- [ ] **Intermittent hydration error on an issue page**: React #418 on `/issues/:id`, caught by the `workspaces` e2e
+      once in four full runs (2026-11-17), passing on re-run. Not `timeAgo`: that page is a Server Component, so the
+      HTML and the RSC payload come from one render. Needs a reproduction before a fix.
 
 ## 3. Admin per-screen audit (the gap in `audit-admin.md`)
 

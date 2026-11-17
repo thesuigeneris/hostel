@@ -5,6 +5,7 @@ import type { z } from 'zod';
 import { getDb } from '../db';
 import { photoUrl } from '../lib/uploads';
 import { slugify } from './listings';
+import { countsTowardRating } from './review-rating';
 
 type Search = z.output<typeof searchSchema>;
 
@@ -33,10 +34,10 @@ function ctes(roomWhere: SQL[]) {
       from room_types r where ${sql.join(roomWhere, sql` and `)} group by r.hostel_id
     ), rv as (
       select hostel_id, round(avg(rating)::numeric, 1)::float as rating, count(*)::int as review_count, sum(rating)::float as rating_sum
-      from reviews where not hidden group by hostel_id
+      from reviews where not hidden and ${countsTowardRating('reviews')} group by hostel_id
     ), prior as (
       select coalesce(avg(r.rating)::float, 0) as mean
-      from reviews r join hostels x on x.id = r.hostel_id and x.status = 'live' where not r.hidden
+      from reviews r join hostels x on x.id = r.hostel_id and x.status = 'live' where not r.hidden and ${countsTowardRating('r')}
     ), ph as (
       select distinct on (hostel_id) hostel_id, url from hostel_photos order by hostel_id, sort_order
     )`;

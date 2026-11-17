@@ -14,7 +14,7 @@ export function isRazorpayConfigured(): boolean {
 }
 
 export function getKeyId(): string {
-  return process.env.RAZORPAY_KEY_ID ?? 'rzp_test_stub';
+  return process.env.RAZORPAY_KEY_ID || 'rzp_test_stub';
 }
 
 /** A payment mode that money can arrive in (`waived` is not a payment). */
@@ -44,7 +44,8 @@ export function paymentModeFor(orderId: string): ReceivedMode {
 }
 
 function keySecret(): string {
-  return process.env.RAZORPAY_KEY_SECRET ?? STUB_SIGNATURE_SECRET;
+  // `||` not `??`: an empty RAZORPAY_KEY_SECRET (what .env.example ships) must still fall back to the stub secret.
+  return process.env.RAZORPAY_KEY_SECRET || STUB_SIGNATURE_SECRET;
 }
 
 export async function createOrder(opts: {

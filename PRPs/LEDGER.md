@@ -446,3 +446,15 @@ questions recorded there with safe defaults). Migration `0016_account_deletion`.
 | EXT-RZP | Razorpay test and live | blocked: account needs approval |
 | EXT-DEPLOY | Public deployment | blocked: needs approval |
 | EXT-DEVICE | Native device run | blocked: needs your device or an emulator runner |
+
+## Local verification session (2026-11-17)
+
+Gates run on `dev` at `4586e35` plus the changes in this commit:
+
+- `bun run typecheck` 4/4 exit 0; `bun run lint` 370 files clean.
+- Shared 65, web unit 21, mobile 58, API 295, browser e2e 87/87.
+
+| Req | Requirement | Implementation | Test | Status |
+|---|---|---|---|---|
+| PAY-STUB-SECRET | An empty `RAZORPAY_KEY_SECRET` (what `.env.example` ships) must still sign and verify with the published stub secret | `lib/razorpay.ts` `keySecret`, `getKeyId` | `apps/web/e2e/payments.spec.ts` (payment after the bill closed), `test/payment-modes.test.ts` | verified |
+| TRUST-RENT | An owner-added resident's review counts toward the rating only once a rent record backs the stay; it still shows, labelled | `services/review-rating.ts` `countsTowardRating`, applied in `services/listings.ts` `ratingsFor` and the `services/search.ts` `rv`/`prior` CTEs | `test/resident-trust.test.ts` (fails without the fix: rating 4, count 1) | verified |

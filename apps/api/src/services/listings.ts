@@ -20,6 +20,7 @@ import {
 } from '@hostels/shared';
 import { and, asc, desc, eq, or, sql } from 'drizzle-orm';
 import type { z } from 'zod';
+import { countsTowardRating } from './review-rating';
 import { getDb, schema } from '../db';
 import { clock } from '../lib/clock';
 import { isUniqueViolation } from '../lib/db-errors';
@@ -354,7 +355,7 @@ export async function ratingsFor(hostelId: string): Promise<RatingBreakdown> {
       responsiveness: sql<number | null>`round(avg(${r.responsiveness})::numeric, 1)::float`,
     })
     .from(r)
-    .where(and(eq(r.hostelId, hostelId), eq(r.hidden, false)));
+    .where(and(eq(r.hostelId, hostelId), eq(r.hidden, false), countsTowardRating('reviews')));
   return row!;
 }
 

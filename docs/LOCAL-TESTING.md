@@ -138,7 +138,7 @@ bun run lint
 Browser tests (about 5 minutes; they build the website and use their own database and ports, so your data is safe):
 
 ```bash
-bunx playwright install chromium                                   # once
+(cd apps/web && ./node_modules/.bin/playwright install chromium)   # once; the pinned Playwright, not bunx
 docker compose exec postgres createdb -U postgres hostels_e2e     # once (or: createdb hostels_e2e)
 (cd apps/web && bun run e2e:fresh)
 ```
