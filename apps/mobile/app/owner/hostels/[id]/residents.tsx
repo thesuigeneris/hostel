@@ -1,4 +1,4 @@
-import { dateLabel, istDate, type Residency, residencyLabel, rupees, SHARING_LABEL } from '@hostels/shared';
+import { dateLabel, istDate, phoneLabel, type Residency, residencyLabel, rupees, SHARING_LABEL } from '@hostels/shared';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Text } from 'react-native';
@@ -123,7 +123,7 @@ function ResidentCard({ r, roomLabel, hostelId, a, onEnded, today }: { r: Reside
         <Badge label={label} tone={r.status === 'invited' || leaving ? 'food' : 'green'} />
         {r.source === 'subscription' && <Badge label="Subscriber" tone="green" />}
       </Row>
-      <P muted>+91 {r.phone} · {roomLabel} · {rupees(r.monthlyRent)} · since {dateLabel(r.startDate)}</P>
+      <P muted>{phoneLabel(r.phone)} · {roomLabel} · {rupees(r.monthlyRent)} · since {dateLabel(r.startDate)}</P>
       {r.source === 'subscription' && <P muted>Their stay ends with their plan.</P>}
       {r.source === 'owner' && r.status === 'invited' && (
         <Button small title="Withdraw invite" variant="secondary" busy={a.busy === key} onPress={() => submit(today)} />

@@ -118,7 +118,24 @@ test('3. an issue with a private photo is resolved, reopened, resolved again and
   await owner.getByRole('button', { name: 'Mark resolved' }).click();
   await expect(owner.getByText('Electrician replaced the tube light.')).toBeVisible();
 
-  await page.goto(issuePath);
+  // In-app signals (1b): the hostel's answer shows as new in the menu, on My hostel and in the list, until opened.
+  await page.goto('/stay');
+  const nav = page.getByRole('navigation', { name: 'Main' }).first();
+  await expect(nav.getByRole('link', { name: 'My hostel (1 issue has new updates)' })).toBeVisible();
+  await page.getByRole('link', { name: `1 of your issues at ${home.name} have new updates` }).click();
+  await expect(page).toHaveURL(/tab=issues&show=mine/);
+  const row = page.getByRole('link', { name: new RegExp(issueTitle) });
+  await expect(row.getByText('1 new update')).toBeVisible();
+  expect(await pageProblems(page, 'issues with a new update')).toEqual([]);
+  await row.click();
+  await expect(page).toHaveURL(new RegExp(issuePath));
+  const ownerUpdate = page.getByRole('listitem').filter({ hasText: 'Electrician replaced the tube light.' });
+  await expect(ownerUpdate.getByText('New', { exact: true })).toBeVisible();
+  // Opening it read it: on the next page the menu badge is gone and nothing is marked new.
+  await page.reload();
+  await expect(page.getByRole('listitem').filter({ hasText: 'Electrician replaced the tube light.' }).getByText('New', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('navigation', { name: 'Main' }).first().getByRole('link', { name: 'My hostel', exact: true })).toBeVisible();
+
   await expect(page.getByText(/Confirm the fix or reopen it by/)).toBeVisible();
   await page.locator('textarea[name=message]').fill('Still flickers after 10 pm.');
   await page.getByRole('button', { name: 'Still broken, reopen' }).click();

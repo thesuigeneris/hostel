@@ -1,4 +1,4 @@
-import { istDate, residencyLabel } from '@hostels/shared';
+import { istDate, phoneLabel, residencyLabel } from '@hostels/shared';
 import { addResidentAction, endResidentAction } from '@/app/owner/actions';
 import { SubmitButton } from '@/components/SubmitButton';
 import { Upsell } from '@/components/Upsell';
@@ -59,7 +59,7 @@ export default async function ResidentsPage({ params, searchParams }: Props) {
               <tr key={r.id}>
                 <Td>
                   <div className="font-medium [overflow-wrap:anywhere]">{r.name || '—'}</div>
-                  <div className="text-xs text-ink-muted">+91 {r.phone}</div>
+                  <div className="text-xs text-ink-muted">{phoneLabel(r.phone)}</div>
                 </Td>
                 <Td>{room(r.roomTypeId) ? SHARING_LABEL[room(r.roomTypeId)!.sharing] : '—'}</Td>
                 <Td className="tabular-nums">{rupees(r.monthlyRent)}</Td>

@@ -49,6 +49,12 @@ import { adminOwnerInvoices, adminOwnerPlans, voidOwnerInvoice } from '../servic
 import { countRefundsDue, listPaymentExceptions, markRefunded } from '../services/refunds';
 import { moderateReview } from '../services/residents';
 
+/** A page of an admin table: at most 200 rows, newest first in each service. */
+const pageQuery = {
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+  offset: z.coerce.number().int().min(0).max(100_000).default(0),
+};
+
 export const adminRoutes = new Hono<AppEnv>()
   .use('/admin/*', requireAuth('admin'))
   .get('/admin/stats', async (c) => {
@@ -192,10 +198,10 @@ export const adminRoutes = new Hono<AppEnv>()
 
   // Subscriptions, moves, bills.
   .get('/admin/subscriptions', async (c) => {
-    const { status } = parseQuery(c, z.object({ status: z.enum(SUBSCRIPTION_STATUSES).optional() }));
-    return c.json(await adminSubscriptions(status));
+    const { status, limit, offset } = parseQuery(c, z.object({ status: z.enum(SUBSCRIPTION_STATUSES).optional(), ...pageQuery }));
+    return c.json(await adminSubscriptions(status, { limit, offset }));
   })
-  .get('/admin/moves', async (c) => c.json(await adminMoves()))
+  .get('/admin/moves', async (c) => c.json(await adminMoves(parseQuery(c, z.object(pageQuery)))))
   .get('/admin/invoices/overdue', async (c) => c.json(await overdueInvoices()))
 
   // Owner plans and platform bills.

@@ -64,6 +64,38 @@ test('2. schedule a move, see where to, and cancel it', async ({ browser }) => {
   await page.context().close();
 });
 
+test('2b. change the food plan from the next bill, see it on the account page, and keep the current plan', async ({ browser }) => {
+  const page = await signIn(browser, SUBSCRIBER, { next: '/account' });
+  await page.getByRole('link', { name: 'Change food plan' }).click();
+  await expect(page).toHaveURL(/\/account\/food/);
+  expect(await pageProblems(page, '/account/food')).toEqual([]);
+  // Keyboard: the plan cards are radios (visually hidden behind their card), picked with Space.
+  const twoMeals = page.getByRole('radio', { name: /Breakfast \+ dinner/ });
+  await twoMeals.focus();
+  await page.keyboard.press('Space');
+  await expect(twoMeals).toBeChecked();
+  await page.getByRole('radio', { name: 'Non-veg' }).check();
+  await page.getByRole('button', { name: 'Save change' }).click();
+  await expect(page).toHaveURL(/\/account\?ok=/);
+  await expect(page.getByText(/Food plan change saved\. It starts with your bill from \d+ \w+ \d{4}\./)).toBeVisible();
+  await expect(page.getByText(/Food plan changes to Breakfast \+ dinner \(non-veg\) from \d+ \w+ \d{4}, with that bill\./)).toBeVisible();
+  expect(await pageProblems(page, '/account with a food plan change')).toEqual([]);
+
+  // Asking for the plan you already have says so in plain words.
+  await page.goto('/account/food');
+  await page.locator('label', { hasText: 'Full board' }).click();
+  await expect(page.getByRole('radio', { name: /Full board/ })).toBeChecked();
+  await page.getByRole('radio', { name: 'Veg', exact: true }).check();
+  await page.getByRole('button', { name: 'Save change' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'already your food plan' })).toBeVisible();
+
+  await page.goto('/account');
+  await page.getByRole('button', { name: 'Keep my current plan' }).click();
+  await expect(page.getByText('Food plan change cancelled. Your plan stays as it is.')).toBeVisible();
+  await expect(page.getByText(/Food plan changes to/)).toHaveCount(0);
+  await page.context().close();
+});
+
 test('3. cancel the plan: later skips earn no credit and the page says why; the paid bill has no pay button', async ({ browser }) => {
   const page = await signIn(browser, SUBSCRIBER, { next: '/account' });
   page.once('dialog', (d) => d.accept());

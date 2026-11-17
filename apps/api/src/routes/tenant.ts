@@ -1,6 +1,7 @@
 import {
   directorySchema,
 
+  foodPlanChangeSchema,
   moveSchema,
   reasonSchema,
   reviewInputSchema,
@@ -15,6 +16,7 @@ import { parse, parseBody, parseQuery } from '../lib/validate';
 import { type AppEnv, requireAuth } from '../middleware/auth';
 import { cancelSubscription, myInvoices, mySubscription, subscribe } from '../services/billing';
 import { myMenu, skipMeal, unskipMeal } from '../services/food';
+import { cancelFoodChange, scheduleFoodChange } from '../services/food-plan';
 import { cancelMove, myMoves, scheduleMove } from '../services/moves';
 import {
   flagReview,
@@ -63,6 +65,10 @@ export const tenantRoutes = new Hono<AppEnv>()
   .get('/me/moves', signedIn, async (c) => c.json(await myMoves(c.get('user'))))
   .post('/me/moves', signedIn, async (c) => c.json(await scheduleMove(c.get('user'), await parseBody(c, moveSchema)), 201))
   .delete('/me/moves/:id', signedIn, async (c) => c.json(await cancelMove(c.get('user'), c.req.param('id'))))
+
+  // Food plan or diet change from the next bill.
+  .post('/me/food-plan', signedIn, async (c) => c.json(await scheduleFoodChange(c.get('user'), await parseBody(c, foodPlanChangeSchema)), 201))
+  .delete('/me/food-plan/:id', signedIn, async (c) => c.json(await cancelFoodChange(c.get('user'), c.req.param('id'))))
 
   // Residencies and reviews: any signed-in user (owners can be residents elsewhere).
   .get('/me/residencies', signedIn, async (c) => c.json(await myResidencies(c.get('user'))))

@@ -99,6 +99,27 @@
       "when": 1794548343630,
       "tag": "0013_move_cancelled_refund",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794553975434,
+      "tag": "0014_food_plan_changes",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1794554791517,
+      "tag": "0015_issue_reads",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794555423408,
+      "tag": "0016_account_deletion",
+      "breakpoints": true
     }
   ]
 }

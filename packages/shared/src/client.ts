@@ -1,11 +1,13 @@
 import type {
   ChangePasswordInput,
+  DeleteAccountInput,
   HostelInput,
   HostelUpdateInput,
   IssueInput,
   IssueUpdateInput,
   LoginInput,
   MenuWeekInput,
+  FoodPlanChangeInput,
   MoveInput,
   PostInput,
   RegisterInput,
@@ -46,7 +48,10 @@ import type {
   IssueStatus,
   IssueView,
   MenuWeek,
+  DeletionStatus,
+  FoodPlanChange,
   MoveRequest,
+  MySignals,
   MyMenu,
   MyResidency,
   MySubscription,
@@ -160,6 +165,11 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
       get: () => request<User>('/me'),
       update: (input: UpdateMeInput) => request<User>('/me', { method: 'PATCH', body: input }),
       setPassword: (input: ChangePasswordInput) => request<{ ok: true }>('/me/password', { body: input }),
+      /** Everything we hold about me, as one JSON document (DPDP Act 2023). */
+      exportData: () => request<Record<string, unknown>>('/me/export'),
+      deletionStatus: () => request<DeletionStatus>('/me/deletion'),
+      /** Deletes the account and signs out everywhere. Cannot be undone. */
+      deleteAccount: (input: DeleteAccountInput) => request<{ ok: true }>('/me/delete', { body: input }),
       subscription: () => request<MySubscription | null>('/me/subscription'),
       cancelSubscription: () => request<Subscription>('/me/subscription/cancel', { method: 'POST' }),
       invoices: () => request<Invoice[]>('/me/invoices'),
@@ -169,6 +179,9 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
       moves: () => request<MoveRequest[]>('/me/moves'),
       move: (input: MoveInput) => request<MoveRequest>('/me/moves', { body: input }),
       cancelMove: (id: string) => request<MoveRequest>(`/me/moves/${id}`, { method: 'DELETE' }),
+      /** Change the food plan or diet from the next unpaid bill; replaces a change already scheduled. */
+      changeFoodPlan: (input: FoodPlanChangeInput) => request<FoodPlanChange>('/me/food-plan', { body: input }),
+      cancelFoodPlanChange: (id: string) => request<FoodPlanChange>(`/me/food-plan/${id}`, { method: 'DELETE' }),
       visits: () => request<MyVisit[]>('/me/visits'),
       cancelVisit: (id: string) => request<VisitRequest>(`/me/visits/${seg(id)}`, { method: 'DELETE' }),
       residencies: () => request<MyResidency[]>('/me/residencies'),
@@ -216,6 +229,8 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
       directory: (hostelId: string) => request<{ name: string; sharing: SharingType | null; since: string }[]>(`/hostels/${hostelId}/directory`),
       /** Issues I reported at any hostel, newest first; read-only at hostels I've moved out of. */
       myIssues: () => request<IssueView[]>('/me/issues'),
+      /** Badge counts: my issues with updates I haven't opened yet. */
+      signals: () => request<MySignals>('/me/signals'),
     },
     payments: {
       page: (invoiceId: string) => request<PaymentPage>(`/payments/${invoiceId}`),
@@ -291,9 +306,10 @@ export function createApiClient(baseUrl: string, getToken: TokenSource = () => n
         request<FoodPartner>('/admin/food-partners', { body: input }),
       updateFoodPartner: (id: string, input: Partial<{ name: string; cuisine: string; logoUrl: string | null; active: boolean }>) =>
         request<FoodPartner>(`/admin/food-partners/${id}`, { method: 'PATCH', body: input }),
-      subscriptions: (status?: string) =>
-        request<{ subscription: Subscription; user: { id: string; name: string; phone: string }; hostelName: string }[]>('/admin/subscriptions', { query: { status } }),
-      moves: () => request<MoveRequest[]>('/admin/moves'),
+      /** Newest first, a page at a time (default 100, at most 200). */
+      subscriptions: (filter: { status?: string; limit?: number; offset?: number } = {}) =>
+        request<{ subscription: Subscription; user: { id: string; name: string; phone: string }; hostelName: string }[]>('/admin/subscriptions', { query: filter }),
+      moves: (page: { limit?: number; offset?: number } = {}) => request<MoveRequest[]>('/admin/moves', { query: page }),
       overdue: () => request<{ invoice: Invoice; userName: string; phone: string; hostelName: string }[]>('/admin/invoices/overdue'),
       ownerInvoices: (filter: { status?: string; mode?: PaymentMode; overdue?: boolean; q?: string } = {}) =>
         request<AdminOwnerInvoice[]>('/admin/owner-invoices', { query: filter }),

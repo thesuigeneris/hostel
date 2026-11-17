@@ -3,9 +3,12 @@
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useEffect, useMemo } from 'react';
+import { mapTiles } from '@hostels/shared';
 import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 
-// Keyless OpenStreetMap tiles; a plain CSS pin avoids bundling Leaflet's marker images.
+// Free, keyless OpenStreetMap tiles unless a tile provider is configured (`mapTiles`, docs/RUN.md "Maps"). Read at
+// build time. A plain CSS pin avoids bundling Leaflet's marker images.
+const TILES = mapTiles(process.env.NEXT_PUBLIC_MAP_TILE_URL, process.env.NEXT_PUBLIC_MAP_ATTRIBUTION);
 const pin = (verified: boolean) =>
   L.divIcon({
     className: '',
@@ -14,9 +17,6 @@ const pin = (verified: boolean) =>
     iconSize: [28, 28],
     iconAnchor: [14, 14],
   });
-
-// OpenStreetMap's licence asks for a link to its copyright page.
-const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 export type MapPoint = { id: string; lat: number; lng: number; label: string; href?: string; verified?: boolean; sub?: string };
 
@@ -33,7 +33,7 @@ export function HostelMap({ points, height = 420, zoom = 13 }: { points: MapPoin
   return (
     <div style={{ height }} className="overflow-hidden rounded-2xl border border-line">
       <MapContainer center={center} zoom={zoom} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }}>
-        <TileLayer attribution={OSM_ATTRIBUTION} url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <TileLayer attribution={TILES.attribution} url={TILES.url} maxZoom={TILES.maxZoom} />
         {points.map((p) => (
           <Marker key={p.id} position={[p.lat, p.lng]} icon={pin(p.verified ?? false)} title={p.label} alt={p.label}>
             <Popup>
@@ -59,7 +59,7 @@ export function PinPicker({ lat, lng, onChange }: { lat: number; lng: number; on
   return (
     <div className="h-72 overflow-hidden rounded-2xl border border-line">
       <MapContainer center={[lat, lng]} zoom={15} style={{ height: '100%', width: '100%' }}>
-        <TileLayer attribution={OSM_ATTRIBUTION} url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <TileLayer attribution={TILES.attribution} url={TILES.url} maxZoom={TILES.maxZoom} />
         <Marker
           position={[lat, lng]}
           icon={icon}

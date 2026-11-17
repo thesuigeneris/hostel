@@ -12,7 +12,8 @@
     "db:seed": "bun run src/db/seed.ts",
     "db:reset": "bun run src/db/seed.ts --reset",
     "db:studio": "drizzle-kit studio",
-    "admin:grant": "bun run src/scripts/grant-admin.ts"
+    "admin:grant": "bun run src/scripts/grant-admin.ts",
+    "admin:revoke": "bun run src/scripts/revoke-admin.ts"
   },
   "dependencies": {
     "@hostels/shared": "workspace:*",

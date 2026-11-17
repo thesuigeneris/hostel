@@ -1,23 +1,29 @@
 import { HOSTEL_STATUSES, type HostelStatus } from '@hostels/shared';
 import Link from 'next/link';
 import { SubmitButton } from '@/components/SubmitButton';
-import { Back, Card, Empty, Flash, Input, PageHeader, pillClass, StatusBadge } from '@/components/ui';
+import { Back, Card, Empty, Flash, Input, PageHeader, pageParam, pillClass, PrevNext, StatusBadge } from '@/components/ui';
 import { api } from '@/lib/api';
 import { dateLabel, GENDER_LABEL } from '@/lib/format';
 import { approveAction, rejectAction } from '../actions';
 
 const STATUS_NAMES: Record<HostelStatus, string> = { draft: 'Draft', pending: 'In review', live: 'Live', rejected: 'Rejected' };
 
-type Props = { searchParams: Promise<{ status?: string; q?: string; error?: string; ok?: string }> };
+type Props = { searchParams: Promise<{ status?: string; q?: string; page?: string; error?: string; ok?: string }> };
+
+const PAGE = 25;
 
 export default async function AdminListings({ searchParams }: Props) {
   const q = await searchParams;
   const status: HostelStatus = HOSTEL_STATUSES.includes(q.status as HostelStatus) ? (q.status as HostelStatus) : 'pending';
   const client = await api();
   const search = q.q?.trim() || undefined;
-  const hostels = await client.admin.hostels({ status, q: search });
+  const page = pageParam(q.page);
+  // One more than a page, to know whether there is a next one.
+  const found = await client.admin.hostels({ status, q: search, limit: PAGE + 1, offset: (page - 1) * PAGE });
+  const hostels = found.slice(0, PAGE);
   const details = await Promise.all(hostels.map((h) => client.admin.hostel(h.id)));
-  const path = `/admin/listings?status=${status}${search ? `&q=${encodeURIComponent(search)}` : ''}`;
+  const base = `/admin/listings?status=${status}${search ? `&q=${encodeURIComponent(search)}` : ''}`;
+  const path = page > 1 ? `${base}&page=${page}` : base;
 
   return (
     <>
@@ -74,6 +80,7 @@ export default async function AdminListings({ searchParams }: Props) {
           ))}
         </div>
       )}
+      <PrevNext page={page} hasMore={found.length > PAGE} href={(p) => `${base}&page=${p}`} label="Listing pages" />
     </>
   );
 }

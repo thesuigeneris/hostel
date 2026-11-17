@@ -365,6 +365,68 @@ Branch `persona-admin` (admin/ops work, migration `0012_admin_oversight`) merged
 Not done here: `docs/product/audit-admin.md` (the admin agent's checklist was never written); the "Recently changed"
 screens are covered by typecheck and API tests only, the app screen is unverified on a device.
 
+## Product gap 1a: change food plan or diet from the next bill
+
+Spec: `docs/superpowers/specs/2026-11-13-food-plan-change.md` (approved by the owner 2026-11-13). Migration
+`0014_food_plan_changes`.
+
+| Req | Requirement | Implementation | Test | Status |
+|---|---|---|---|---|
+| FOOD-CHANGE | Change food plan/diet from the first unpaid period; unpaid bills from then re-made; paid ones kept; job applies it on its day | `services/food-plan.ts` `scheduleFoodChange`, `cancelFoodChange`, `applyDueFoodChanges`; `food-plan-state.ts` `planOn`; `billing.ts` `createInvoiceForPeriod`, `mySubscription`, `cancelSubscription`; `routes/tenant.ts` | API `food-plan-change.test.ts` (7) | verified; revert-checked (billing: 3 fail; headcount: 1 fails) |
+| FOOD-CHANGE-DATES | Menu, skips and kitchen headcount use the plan in force on each date; dropped meals' skips removed | `food.ts` `myMenu`, `checkSkippable`, `headcount` | API › skips and the kitchen follow the plan in force | verified; revert-checked (headcount) |
+| FOOD-CHANGE-RULES | Same plan refused (diet ignored without food); food only where served (incl. a move's hostel); a move to a no-food hostel refused while a food change waits; plan ending drops it | `food-plan.ts`, `moves.ts` `scheduleMove` | API › cancelled or replaced; › no food; › a plan that ends | verified |
+| FOOD-CHANGE-WEB | `/account/food`; notice with "Keep my current plan" on `/account`; errors in plain words | `app/account/food/page.tsx`, `app/account/actions.ts`, `app/account/page.tsx` | e2e `resident-daily.spec.ts` › 2b (axe on both pages; plan picked by keyboard) | verified |
+| FOOD-CHANGE-GATES | Gates | — | typecheck 4/4; lint clean (350 files); shared 62; web unit 20; mobile 53 (51 + 2); API 279 (272 + 7); `e2e:fresh` 84/84 (83 + 1); `expo export --platform android` exit 0 | verified 2026-11-13 |
+| FOOD-CHANGE-APP | Same in the app: screen, notice and cancel on My Stay | `apps/mobile/app/food-plan.tsx`, `lib/foodPlan.ts`, `(tabs)/stay.tsx` | `apps/mobile/test/stay.test.ts` › food plan change (2); typecheck | screen logic verified; screen unverified on a device |
+
+## Product gap 1b: in-app signals for residents
+
+Spec: `docs/superpowers/specs/2026-11-13-resident-signals.md` (approved by the owner 2026-11-13). Migration `0015_issue_reads`.
+
+| Req | Requirement | Implementation | Test | Status |
+|---|---|---|---|---|
+| SIGNALS-API | Updates by others on issues I reported are unread until I open (or write on) the issue; only the reporter; automatic closes count | `services/issue-reads.ts` `unreadCounts`, `markSeen`, `mySignals`; `issues.ts` `decorate`, `issueDetail` (`isNew`); `GET /me/signals` | API `resident-signals.test.ts` (4) | verified; revert-checked (without marking read: fails) |
+| SIGNALS-WEB | Menu badge on "My hostel" (words for screen readers), per-hostel link to my issues, "N new updates" in lists, "New" in the timeline | `components/NavLinks.tsx`, `SiteHeader.tsx`, `app/layout.tsx`, `app/stay/page.tsx`, `components/Community.tsx`, `app/issues/[id]/page.tsx` | e2e `resident-journey.spec.ts` › 3 (badge, link, list, New, cleared after; axe) | verified; menu clears on the next page (spec, known limit) |
+| SIGNALS-GATES | Gates | — | typecheck 4/4; lint clean (353 files); shared 62; web unit 20; mobile 55 (53 + 2); API 283 (279 + 4); `e2e:fresh` 84/84; `expo export --platform android` exit 0 | verified 2026-11-13 |
+| SIGNALS-APP | My Stay tab badge (refreshed on start, return to app, each minute), per-stay buttons, list and timeline badges | `apps/mobile/app/(tabs)/_layout.tsx`, `(tabs)/stay.tsx`, `components/Community.tsx`, `app/issue/[id].tsx`, `lib/signals.ts` | `apps/mobile/test/stay.test.ts` › in-app signals (2); typecheck | logic verified; screens unverified on a device |
+
+## Product gap 1c: account deletion and data export (DPDP Act 2023)
+
+Spec: `docs/superpowers/specs/2026-11-13-account-deletion-and-export.md` (approved by the owner 2026-11-13; three open
+questions recorded there with safe defaults). Migration `0016_account_deletion`.
+
+| Req | Requirement | Implementation | Test | Status |
+|---|---|---|---|---|
+| DATA-EXPORT | A copy of everything we hold about me, without secrets or payment references | `services/privacy.ts` `exportMyData`; `GET /me/export` | API `account-deletion.test.ts` › a copy of my data | verified |
+| DATA-DELETE-GUARD | Not while a plan runs, a bill is due, a refund is owed, or for owners/admins/demo; told why | `privacy.ts` `blocker`, `deletionStatus`; `GET /me/deletion` | API › not while a plan runs; › owners, admins | verified |
+| DATA-DELETE | Name/phone/email/password erased; signed out everywhere; board content and visits deleted; photos deleted; stays ended and nameless; reviews and issues kept without a name; bills kept; same number can sign up again | `privacy.ts` `deleteMyAccount`; `lib/storage.ts` `remove`; `users.deleted_at` | API › afterwards my name and board posts are gone…; › password; › open hostel stay ends | verified; revert-checked (stays and posts: 2 fail; ending stays: 1 fails) |
+| DATA-WEB | "Your data" on `/account`; JSON download; delete page with what happens, reason when blocked, DELETE + password; signed-out confirmation page | `app/account/page.tsx`, `export/route.ts`, `delete/page.tsx`, `deleted/page.tsx`, `actions.ts` `deleteAccountAction` | e2e `account-data.spec.ts` (download, delete, signed out; axe on both pages) | verified |
+| DATA-GATES | Gates | — | typecheck 4/4; lint clean (361 files); shared 62; web unit 20; mobile 56 (55 + 1); API 288 (283 + 5); `e2e:fresh` 85/85 (84 + 1); `expo export --platform android` exit 0 | verified 2026-11-13 |
+| DATA-APP | Profile → share the export; delete screen | `apps/mobile/app/(tabs)/profile.tsx`, `app/delete-account.tsx`, `lib/privacy.ts` | `apps/mobile/test/stay.test.ts` › data rights; typecheck | logic verified; screens unverified on a device |
+
+## Admin per-screen review, admin:revoke, paging; paid-early move guard
+
+| Req | Requirement | Implementation | Test | Status |
+|---|---|---|---|---|
+| MOVE-PAID-AHEAD | A move date on or before a month already paid at the current room is refused, saying when it can be (owner default (b), 2026-11-13) | `moves.ts` `scheduleMove` | API `cancelled-moves.test.ts` › a move after the next month was paid early | verified; revert-checked |
+| CANCEL-PAY-RACE | Cancelling and paying a pending plan at the same moment: one outcome, no deadlock | `billing.ts` `cancelSubscription` (locks the plan's unpaid bills first, as payments do) | API `cancel-payment-race.test.ts` (cancel first; payment first) | verified; revert-checked (deadlock, 500) |
+| HOLD-AFTER-30 | A first bill paid after the 30-minute hold but before the job confirms the plan (bed still held); after the job it is void | `billing.ts`, `payments.ts` (unchanged); web pay page hold text | API › paying a first bill after the hold; shared › bed hold | verified |
+| ADMIN-REVOKE | `admin:revoke` takes admin away (live sessions too); owner if they own a hostel, else tenant; warns when the phone is still in ADMIN_PHONES | `auth.ts` `revokeAdmin`; `src/scripts/revoke-admin.ts`; docs RUN, DEPLOY, security review | API `auth.test.ts` › admin:revoke | verified |
+| ADMIN-PAGING | Admin listings, verified partners, subscriptions and moves page through every row, stable order, limits enforced | `routes/admin.ts` `pageQuery`; `billing.ts` `adminSubscriptions`; `moves.ts` `adminMoves`; web `PrevNext`, `pageParam`; listings, partners, billing pages | API `admin-paging.test.ts`; e2e `owner-admin.spec.ts` › admin tables page | verified (web); app shows the first page |
+| ADMIN-NAV | Admin menu named, current page marked, "Recently changed" listed; empty Food partners state | `components/AdminNav.tsx`; `app/admin/food/page.tsx` | e2e `workspaces.spec.ts` admin sweep (now with `/admin/changes`) | see gates |
+| ADMIN-MODERATION-FORM | Keep keeps, hide hides, show again shows (web form): the choice is a hidden field or the button's own action, never the button's value; unknown refused | `app/admin/actions.ts` `moderateReviewAction`, `keepReviewAction`, `moderateContentAction`, `keepContentAction`; `app/admin/moderation/page.tsx` | e2e `owner-admin.spec.ts` › moderation (keep, hide, show again; public page checked) | verified; it failed before the fix (keep → hidden) |
+| ADMIN-KEYBOARD | Partner checklist and moderation completed with the keyboard only | — (native controls) | e2e `personas.spec.ts` › 1; `owner-admin.spec.ts` › moderation keyboard | see gates |
+| ADMIN-BATCH-GATES | Gates for this batch | — | typecheck 4/4; lint clean (365 files); shared 63 (+1); web unit 20; mobile 56; API 294 (288 + 6); `e2e:fresh` 87/87 (85 + 2); `expo export --platform android` exit 0 (before the moderation fix; app unchanged since) | verified 2026-11-13 |
+| PHONE-LABEL | Deleted accounts read "Deleted account" in staff tables, not a placeholder phone | `@hostels/shared` `phoneLabel`; admin billing, owner roster and rent (web and app) | typecheck | verified by type and read-through |
+
+## Free maps (owner, 2026-11-13: "use Leaflet / free maps, scalable")
+
+| Req | Requirement | Implementation | Test | Status |
+|---|---|---|---|---|
+| MAPS-FREE | Website and app use Leaflet with free OpenStreetMap tiles; no Google Maps SDK or key | web `components/Map.tsx`; app `components/LeafletView.tsx`, `HostelMap.tsx`, `owner/PinPicker.tsx`, `lib/leafletMap.ts`; `react-native-maps` removed, `react-native-webview` 14.0.1 (Expo SDK 58's version); `app.config.ts` without the maps plugin | mobile `stay.test.ts` › free maps (2: pinned Leaflet hashes, script-safe names, checked messages); the generated page loaded in Chromium with Leaflet served from the npm copy (hashes match; markers, popup "open", picker tap and `setPin` messages, no errors); `expo export --platform android` exit 0 | verified in Chromium; not run on a device |
+| MAPS-GATES | Gates | — | typecheck 4/4; lint clean (369 files); shared 65 (+2); web unit 21 (+1); mobile 58 (+2); API 294; `e2e:fresh` 87/87; `expo export --platform android` exit 0 | verified 2026-11-13 |
+| MAPS-SCALE | Tile provider is a setting: URL + credit line (web build, app build, Docker build args); CSP allows the configured host; bad values fall back to OpenStreetMap | `@hostels/shared` `mapTiles`, `tileImageSource`, `DEFAULT_MAP_TILES`, `LEAFLET_CDN`; web `middleware.ts`, `lib/csp.ts`; `deploy/web.Dockerfile`, `compose.prod.yml`, `.env.prod.example`; docs `RUN.md` "Maps" | shared `maps.test.ts` (2); web `csp.test.ts` › map tiles; Docker web image built with a provider URL: its CSP `img-src` named that host | verified |
+
 
 ## Later PRPs (rows filled when each PRP is generated)
 
@@ -384,3 +446,15 @@ screens are covered by typecheck and API tests only, the app screen is unverifie
 | EXT-RZP | Razorpay test and live | blocked: account needs approval |
 | EXT-DEPLOY | Public deployment | blocked: needs approval |
 | EXT-DEVICE | Native device run | blocked: needs your device or an emulator runner |
+
+## Local verification session (2026-11-17)
+
+Gates run on `dev` at `4586e35` plus the changes in this commit:
+
+- `bun run typecheck` 4/4 exit 0; `bun run lint` 370 files clean.
+- Shared 65, web unit 21, mobile 58, API 295, browser e2e 87/87.
+
+| Req | Requirement | Implementation | Test | Status |
+|---|---|---|---|---|
+| PAY-STUB-SECRET | An empty `RAZORPAY_KEY_SECRET` (what `.env.example` ships) must still sign and verify with the published stub secret | `lib/razorpay.ts` `keySecret`, `getKeyId` | `apps/web/e2e/payments.spec.ts` (payment after the bill closed), `test/payment-modes.test.ts` | verified |
+| TRUST-RENT | An owner-added resident's review counts toward the rating only once a rent record backs the stay; it still shows, labelled | `services/review-rating.ts` `countsTowardRating`, applied in `services/listings.ts` `ratingsFor` and the `services/search.ts` `rv`/`prior` CTEs | `test/resident-trust.test.ts` (fails without the fix: rating 4, count 1) | verified |

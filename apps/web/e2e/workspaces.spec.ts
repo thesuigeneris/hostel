@@ -56,7 +56,7 @@ test('owner workspace: accessible and fits every width', async ({ browser }) => 
 
 test('admin workspace: accessible and fits every width', async ({ browser }) => {
   const page = await signIn(browser, ADMIN);
-  const paths = ['/admin', '/admin/listings', '/admin/partners', '/admin/billing', '/admin/payouts', '/admin/issues', '/admin/moderation', '/admin/food', '/admin/audit'];
+  const paths = ['/admin', '/admin/listings', '/admin/changes', '/admin/partners', '/admin/billing', '/admin/payouts', '/admin/issues', '/admin/moderation', '/admin/food', '/admin/audit'];
   expect(await sweep(page, paths)).toEqual([]);
 });
 

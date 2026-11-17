@@ -21,6 +21,7 @@ import {
   toggleUpvote,
   updateIssue,
 } from '../services/community';
+import { mySignals } from '../services/issue-reads';
 import { residentDirectory } from '../services/residents';
 
 /** Resident-facing: issues and the community board. Membership is checked per hostel in the services. */
@@ -33,6 +34,9 @@ export const residentRoutes = new Hono<AppEnv>()
   .use('/comments/*', requireAuth())
   .use('/me/issues', requireAuth())
   .get('/me/issues', async (c) => c.json(await myIssues(c.get('user'))))
+  .use('/me/signals', requireAuth())
+  // What the person hasn't seen yet, for the badges in the app and on the website.
+  .get('/me/signals', async (c) => c.json(await mySignals(c.get('user'))))
   .get('/hostels/:id/issues', async (c) => {
     const { status } = parseQuery(c, z.object({ status: z.enum(ISSUE_STATUSES).optional() }));
     return c.json(await hostelIssues(c.get('user'), c.req.param('id'), status));

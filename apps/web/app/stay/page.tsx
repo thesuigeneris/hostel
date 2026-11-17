@@ -13,7 +13,18 @@ type Props = { searchParams: Promise<{ error?: string; ok?: string }> };
 export default async function StayPage({ searchParams }: Props) {
   const q = await searchParams;
   await requireUser('/stay');
-  const stays = await (await api()).me.residencies();
+  const client = await api();
+  const [stays, myIssues] = await Promise.all([client.me.residencies(), client.resident.myIssues().catch(() => [])]);
+  // Issues I reported, per hostel, with updates I haven't opened: the same count as the badge in the menu.
+  const newAt = (hostelId: string) => myIssues.filter((i) => i.hostelId === hostelId && i.unreadUpdates > 0).length;
+  const newLink = (hostelId: string, name: string) => {
+    const n = newAt(hostelId);
+    return n > 0 ? (
+      <LinkButton href={`/stay/${hostelId}?tab=issues&show=mine`} variant="secondary" size="sm" aria-label={`${n} of your issues at ${name} have new updates`}>
+        <Badge tone="info">{n} new</Badge> Updates on your issues
+      </LinkButton>
+    ) : null;
+  };
   const invites = stays.filter((s) => s.status === 'invited');
   const current = stays.filter((s) => s.status === 'active');
   const past = stays.filter((s) => s.status === 'ended');
@@ -70,6 +81,7 @@ export default async function StayPage({ searchParams }: Props) {
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <LinkButton href={`/stay/${s.hostel.id}`} size="sm">Open</LinkButton>
+              {newLink(s.hostel.id, s.hostel.name)}
               <LinkButton href={`/stay/${s.hostel.id}?tab=issues`} variant="secondary" size="sm">Report an issue</LinkButton>
               {s.canReview && <LinkButton href={`/stay/${s.hostel.id}?tab=review`} variant="secondary" size="sm">{s.hasReview ? 'Edit review' : 'Write a review'}</LinkButton>}
               {s.source === 'owner' ? (
@@ -104,6 +116,7 @@ export default async function StayPage({ searchParams }: Props) {
                   <div className="text-sm text-ink-soft">{dateLabel(s.startDate)} – {dateLabel(s.endDate)}</div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  {newLink(s.hostel.id, s.hostel.name)}
                   <LinkButton href={`/stay/${s.hostel.id}?tab=issues`} variant="ghost" size="sm" aria-label={`Your issues at ${s.hostel.name}`}>
                     Your issues
                   </LinkButton>

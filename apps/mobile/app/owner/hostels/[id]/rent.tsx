@@ -1,4 +1,4 @@
-import { ApiError, istDate, monthLabel, monthOf, RENT_METHODS, type RentSheet, rupees, titleCase } from '@hostels/shared';
+import { ApiError, istDate, monthLabel, monthOf, phoneLabel, RENT_METHODS, type RentSheet, rupees, titleCase } from '@hostels/shared';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Text } from 'react-native';
@@ -75,7 +75,7 @@ function RentRow({ row, month, today, hostelId, a, onSaved }: { row: RentSheet['
         <Text style={{ color: theme.colors.text, fontWeight: '600', flex: 1 }}>{row.name || '—'}</Text>
         <StatusBadge status={row.status === 'unpaid' ? 'due' : row.status} />
       </Row>
-      <P muted>+91 {row.phone} · due {rupees(row.amountDue)}</P>
+      <P muted>{phoneLabel(row.phone)} · due {rupees(row.amountDue)}</P>
       <Field label="Amount paid" keyboardType="number-pad" value={d.amountPaid} onChangeText={(v) => setD({ ...d, amountPaid: v.replace(/\D/g, '') })} maxLength={7} />
       <Field label="Paid on" hint="YYYY-MM-DD. Leave empty if not paid." value={d.paidOn} onChangeText={(v) => setD({ ...d, paidOn: v })} maxLength={10} />
       <Choice label="How" value={d.method} options={RENT_METHODS.map((m) => ({ value: m, label: m === 'upi' ? 'UPI' : titleCase(m) }))} onChange={(method) => setD({ ...d, method })} />

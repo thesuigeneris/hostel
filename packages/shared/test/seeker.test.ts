@@ -88,3 +88,12 @@ describe('client paths', () => {
     ]);
   });
 });
+
+describe('bed hold', () => {
+  test('lasts 30 minutes from subscribing; at exactly 30 it has ended, and the time is said in IST', async () => {
+    const { bedHold } = await import('../src/seeker');
+    const at = '2026-11-09T06:00:00.000Z'; // 11:30 am IST
+    expect(bedHold(at, new Date('2026-11-09T06:29:59Z'))).toMatchObject({ ended: false, until: '12:00 pm' });
+    expect(bedHold(at, new Date('2026-11-09T06:30:00Z')).ended).toBe(true);
+  });
+});

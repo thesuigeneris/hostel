@@ -1,4 +1,4 @@
-import { type AdminPaymentException, dateLabel, FOOD_PLANS, OWNER_PLANS, PAYMENT_MODE_LABEL, REFUND_REASON_LABEL, rupees } from '@hostels/shared';
+import { type AdminPaymentException, dateLabel, FOOD_PLANS, OWNER_PLANS, PAYMENT_MODE_LABEL, phoneLabel, REFUND_REASON_LABEL, rupees } from '@hostels/shared';
 import { Stack } from 'expo-router';
 import { type ReactNode, useState } from 'react';
 import { Text } from 'react-native';
@@ -58,14 +58,14 @@ function AdminBilling() {
       {tab === 'overdue' && (overdue.length === 0 ? <P muted>Nothing overdue.</P> : overdue.map((o) => (
         <Card key={o.invoice.id}>
           <Row><Title>{o.userName || '—'} · {o.hostelName}</Title><StatusBadge status="overdue" /></Row>
-          <P muted>+91 {o.phone} · {rupees(o.invoice.totalAmount)} · due {dateLabel(o.invoice.dueDate)}</P>
+          <P muted>{phoneLabel(o.phone)} · {rupees(o.invoice.totalAmount)} · due {dateLabel(o.invoice.dueDate)}</P>
         </Card>
       )))}
       {tab === 'subs' && (subs.length === 0 ? <P muted>No subscriptions yet.</P> : subs.map((x) => (
         <Card key={x.subscription.id}>
           <Row><Title>{x.user.name || '—'} · {x.hostelName}</Title><StatusBadge status={x.subscription.status} /></Row>
           <P muted>
-            +91 {x.user.phone} · {FOOD_PLANS[x.subscription.mealPlan].label} · since {dateLabel(x.subscription.startDate)}
+            {phoneLabel(x.user.phone)} · {FOOD_PLANS[x.subscription.mealPlan].label} · since {dateLabel(x.subscription.startDate)}
             {x.subscription.cancelAt ? ` · ends ${dateLabel(x.subscription.cancelAt)}` : ''}
           </P>
         </Card>
@@ -105,7 +105,7 @@ function RefundCard({ refund: r, onDone }: { refund: AdminPaymentException; onDo
     <Card>
       <Row><Title>{r.payer.name || '—'} · {r.hostelName}</Title><StatusBadge status={r.status} /></Row>
       <P muted>
-        +91 {r.payer.phone} · {rupees(r.amount)} · {PAYMENT_MODE_LABEL[r.paymentMode]} · received {dateLabel(r.createdAt)}
+        {phoneLabel(r.payer.phone)} · {rupees(r.amount)} · {PAYMENT_MODE_LABEL[r.paymentMode]} · received {dateLabel(r.createdAt)}
       </P>
       <P>{REFUND_REASON_LABEL[r.reason]}</P>
       {r.status === 'refunded' ? (

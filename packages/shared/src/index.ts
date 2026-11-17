@@ -10,3 +10,4 @@ export * from './seeker';
 export * from './time';
 export * from './types';
 export * from './owner';
+export * from './maps';

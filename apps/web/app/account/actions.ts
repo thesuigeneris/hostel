@@ -3,7 +3,9 @@
 import { ApiError, type Diet, type Meal, type MealPlan } from '@hostels/shared';
 import { redirect } from 'next/navigation';
 import { run, safePath, str } from '@/lib/actions';
-import { api } from '@/lib/api';
+import { cookies } from 'next/headers';
+import { api, SESSION_COOKIE } from '@/lib/api';
+import { dateLabel } from '@/lib/format';
 
 const back = (form: FormData, fallback: string) => safePath(str(form, '_back'), fallback);
 
@@ -109,10 +111,32 @@ export async function scheduleMoveAction(form: FormData) {
   });
 }
 
+export async function changeFoodPlanAction(form: FormData) {
+  const mealPlan = str(form, 'mealPlan') as MealPlan;
+  const diet = (str(form, 'diet') || 'veg') as Diet;
+  await run('/account/food', async () => (await api()).me.changeFoodPlan({ mealPlan, diet }), {
+    to: (c) => `/account?ok=${encodeURIComponent(`Food plan change saved. It starts with your bill from ${dateLabel(c.effectiveFrom)}.`)}`,
+  });
+}
+
+export async function cancelFoodPlanChangeAction(form: FormData) {
+  await run('/account', async () => (await api()).me.cancelFoodPlanChange(str(form, 'changeId')), { ok: 'Food plan change cancelled. Your plan stays as it is.' });
+}
+
 export async function cancelMoveAction(form: FormData) {
   await run('/account', async () => (await api()).me.cancelMove(str(form, 'moveId')), { ok: 'Move cancelled' });
 }
 
 export async function cancelVisitAction(form: FormData) {
   await run('/account', async () => (await api()).me.cancelVisit(str(form, 'visitId')), { ok: 'Visit request withdrawn' });
+}
+
+/** Deletes the account (DPDP Act 2023), then forgets the session here too. */
+export async function deleteAccountAction(form: FormData) {
+  const password = str(form, 'password') || undefined;
+  await run('/account/delete', async () => {
+    const result = await (await api()).me.deleteAccount({ confirm: str(form, 'confirm'), password });
+    (await cookies()).delete(SESSION_COOKIE);
+    return result;
+  }, { to: '/account/deleted' });
 }

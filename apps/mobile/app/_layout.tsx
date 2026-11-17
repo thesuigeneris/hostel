@@ -24,6 +24,8 @@ export default function RootLayout() {
           <Stack.Screen name="hostel/[slug]" options={{ title: '' }} />
           <Stack.Screen name="subscribe/[slug]" options={{ title: 'Subscribe' }} />
           <Stack.Screen name="move" options={{ title: 'Move' }} />
+          <Stack.Screen name="food-plan" options={{ title: 'Change food plan' }} />
+          <Stack.Screen name="delete-account" options={{ title: 'Delete my account' }} />
           <Stack.Screen name="home/[hostelId]" options={{ title: 'My hostel' }} />
           <Stack.Screen name="issue/[id]" options={{ title: 'Issue' }} />
           <Stack.Screen name="hostels-in/[area]" options={{ title: 'Hostels' }} />

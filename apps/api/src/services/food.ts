@@ -1,4 +1,4 @@
-import type { ISODate, Meal, MenuWeek, User } from '@hostels/shared';
+import type { Diet, ISODate, Meal, MealPlan, MenuWeek, User } from '@hostels/shared';
 import {
   addDays,
   canChangeSkip,
@@ -20,6 +20,7 @@ import { clock } from '../lib/clock';
 import { AppError, notFound } from '../lib/errors';
 import { ownedHostel, requirePlanTier } from './access';
 import { creditWindow, openSubscription } from './billing';
+import { planOn, scheduledFoodChange } from './food-plan-state';
 
 async function loadWeek(hostelId: string, start: string): Promise<MenuWeek | null> {
   const db = getDb();
@@ -160,6 +161,7 @@ export async function myMenu(user: User, days = 7) {
     .where(and(eq(schema.mealSkips.subscriptionId, sub.id), gte(schema.mealSkips.date, today), lte(schema.mealSkips.date, end)));
   const skipped = new Set(skips.map((s) => `${s.date}:${s.meal}`));
   const partners = await db.select().from(schema.foodPartners);
+  const change = await scheduledFoodChange(db, sub.id);
   const weeks = new Map<string, MenuWeek | null>();
   const out = [];
   for (let d = 0; d < days; d++) {
@@ -175,7 +177,7 @@ export async function myMenu(user: User, days = 7) {
       theme: week?.theme ?? null,
       meals: MEALS.map((meal) => {
         const item = week?.items.find((i) => i.date === date && i.meal === meal);
-        const inPlan = inService && planIncludesMeal(sub.mealPlan, meal);
+        const inPlan = inService && planIncludesMeal(planOn(sub, change, date).mealPlan, meal);
         return {
           meal,
           inPlan,
@@ -194,7 +196,9 @@ export async function myMenu(user: User, days = 7) {
 }
 
 async function checkSkippable(sub: typeof schema.subscriptions.$inferSelect, date: string, meal: Meal) {
-  if (!planIncludesMeal(sub.mealPlan, meal)) throw new AppError('meal_not_in_plan', `Your plan does not include ${meal}`);
+  // The plan in force that day: a food plan change scheduled from the next bill counts from its first day.
+  const { mealPlan } = planOn(sub, await scheduledFoodChange(getDb(), sub.id), date);
+  if (!planIncludesMeal(mealPlan, meal)) throw new AppError('meal_not_in_plan', `Your plan does not include ${meal} that day`);
   if (date < sub.startDate || (sub.cancelAt && date > sub.cancelAt)) throw new AppError('invalid_state', 'That date is outside your plan');
   if (!canChangeSkip(date, meal, clock.now())) {
     throw new AppError('cutoff_passed', `Too late to change ${meal} on ${date}; the cut-off has passed`);
@@ -239,11 +243,14 @@ export async function headcount(user: User, hostelId: string, date: string) {
   const db = getDb();
   const s = schema.subscriptions;
   const m = schema.moveRequests;
+  const f = schema.foodPlanChanges;
   const eating = await db
-    .select({ id: s.id, mealPlan: s.mealPlan, diet: s.diet })
+    .select({ id: s.id, mealPlan: sql<MealPlan>`coalesce(${f.mealPlan}, ${s.mealPlan})`, diet: sql<Diet>`coalesce(${f.diet}, ${s.diet})` })
     .from(s)
     // A subscription has at most one scheduled move; once its date has come, the tenant eats at the destination.
     .leftJoin(m, and(eq(m.subscriptionId, s.id), eq(m.status, 'scheduled'), lte(m.moveDate, date)))
+    // Likewise a food plan change scheduled from the next bill counts from its first day.
+    .leftJoin(f, and(eq(f.subscriptionId, s.id), eq(f.status, 'scheduled'), lte(f.effectiveFrom, date)))
     .where(
       and(
         eq(s.status, 'active'),

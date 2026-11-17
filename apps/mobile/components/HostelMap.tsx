@@ -1,25 +1,32 @@
 import type { HostelSummary } from '@hostels/shared';
 import { router } from 'expo-router';
-import MapView, { Marker } from 'react-native-maps';
-import { theme } from '@/lib/theme';
+import { LeafletView } from './LeafletView';
 
-const HYDERABAD = { latitude: 17.4435, longitude: 78.3772, latitudeDelta: 0.12, longitudeDelta: 0.12 };
+const HYDERABAD = { lat: 17.4435, lng: 78.3772 };
 
+/** Hostels on a free Leaflet map; tapping a hostel's name in its popup opens it (on the list map). */
 export function HostelMap({ hostels, height = 420, center }: { hostels: Pick<HostelSummary, 'id' | 'slug' | 'name' | 'lat' | 'lng' | 'isVerified' | 'minRent'>[]; height?: number; center?: { lat: number; lng: number } }) {
-  const first = center ?? (hostels[0] ? { lat: hostels[0].lat, lng: hostels[0].lng } : null);
-  const region = first ? { latitude: first.lat, longitude: first.lng, latitudeDelta: hostels.length > 1 ? 0.08 : 0.01, longitudeDelta: hostels.length > 1 ? 0.08 : 0.01 } : HYDERABAD;
+  const many = hostels.length > 1;
+  const first = center ?? (hostels[0] ? { lat: hostels[0].lat, lng: hostels[0].lng } : HYDERABAD);
   return (
-    <MapView style={{ height, borderRadius: theme.radius.md }} initialRegion={region}>
-      {hostels.map((h) => (
-        <Marker
-          key={h.id}
-          coordinate={{ latitude: h.lat, longitude: h.lng }}
-          title={h.name}
-          description={h.minRent ? `From ₹${h.minRent.toLocaleString('en-IN')}/month` : undefined}
-          pinColor={h.isVerified ? theme.colors.brand : theme.colors.food}
-          onCalloutPress={() => hostels.length > 1 && router.push(`/hostel/${h.slug}`)}
-        />
-      ))}
-    </MapView>
+    <LeafletView
+      label={many ? `Map of ${hostels.length} hostels` : `Map showing ${hostels[0]?.name ?? 'the hostel'}`}
+      style={{ height }}
+      page={{
+        center: first,
+        zoom: many ? 13 : 16,
+        fit: many,
+        pins: hostels.map((h) => ({
+          id: h.id,
+          lat: h.lat,
+          lng: h.lng,
+          label: h.name,
+          sub: h.minRent ? `From ₹${h.minRent.toLocaleString('en-IN')}/month` : undefined,
+          verified: h.isVerified,
+          slug: many ? h.slug : undefined,
+        })),
+      }}
+      onOpen={(slug) => router.push(`/hostel/${slug}`)}
+    />
   );
 }

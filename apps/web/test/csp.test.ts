@@ -14,6 +14,13 @@ describe('content security policy', () => {
     expect(prod).toContain("frame-ancestors 'none'");
   });
 
+  test('map tiles: OpenStreetMap by default; a configured provider replaces it in img-src', () => {
+    expect(directive(contentSecurityPolicy('x', { dev: false, apiOrigin: 'https://api.example.in' }), 'img-src')).toContain('https://*.tile.openstreetmap.org');
+    const other = contentSecurityPolicy('x', { dev: false, apiOrigin: 'https://api.example.in', tileSource: 'https://tiles.example.com' });
+    expect(directive(other, 'img-src')).toContain('https://tiles.example.com');
+    expect(directive(other, 'img-src')).not.toContain('openstreetmap');
+  });
+
   test('nonces are long and never repeat', () => {
     const seen = new Set(Array.from({ length: 500 }, newNonce));
     expect(seen.size).toBe(500);

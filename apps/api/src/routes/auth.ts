@@ -1,5 +1,6 @@
 import {
   changePasswordSchema,
+  deleteAccountSchema,
   demoLoginSchema,
   handoffRedeemSchema,
   loginSchema,
@@ -26,6 +27,7 @@ import {
   verifyOtp,
 } from '../services/auth';
 import { toUser } from '../services/mappers';
+import { deleteMyAccount, deletionStatus, exportMyData } from '../services/privacy';
 
 export const authRoutes = new Hono<AppEnv>()
   .get('/auth/methods', async (c) => c.json(await authMethods()))
@@ -39,6 +41,14 @@ export const authRoutes = new Hono<AppEnv>()
     const input = await parseBody(c, changePasswordSchema);
     return c.json(await changePassword(c.get('user'), c.get('token'), input));
   })
+  // Data rights (DPDP Act 2023): a copy of my data, and deleting my account.
+  .get('/me/export', requireAuth(), async (c) => {
+    c.header('Content-Disposition', 'attachment; filename="hostels-my-data.json"');
+    c.header('Cache-Control', 'no-store');
+    return c.json(await exportMyData(c.get('user')));
+  })
+  .get('/me/deletion', requireAuth(), async (c) => c.json(await deletionStatus(c.get('user'))))
+  .post('/me/delete', requireAuth(), async (c) => c.json(await deleteMyAccount(c.get('user'), await parseBody(c, deleteAccountSchema))))
   .post('/auth/otp', async (c) => {
     const { phone } = await parseBody(c, requestOtpSchema);
     return c.json(await requestOtp(phone));

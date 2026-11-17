@@ -53,6 +53,9 @@ export const changePasswordSchema = z.object({
   newPassword: rawPassword,
 });
 export type ChangePasswordInput = z.input<typeof changePasswordSchema>;
+/** Deleting an account (DPDP Act 2023): typed confirmation, and the password when the account has one. */
+export const deleteAccountSchema = z.object({ confirm: z.string().max(20), password: rawPassword.optional() });
+export type DeleteAccountInput = z.input<typeof deleteAccountSchema>;
 export type RequestOtpInput = z.input<typeof requestOtpSchema>;
 
 export const verifyOtpSchema = z.object({
@@ -224,6 +227,9 @@ export const skipSchema = z.object({ date: isoDate, meal: z.enum(MEALS) });
 export type SkipInput = z.input<typeof skipSchema>;
 
 export const moveSchema = z.object({ toRoomTypeId: z.string().min(1), moveDate: isoDate });
+/** Change the food plan or diet from the next bill. */
+export const foodPlanChangeSchema = z.object({ mealPlan: z.enum(MEAL_PLANS), diet: z.enum(DIETS) });
+export type FoodPlanChangeInput = z.input<typeof foodPlanChangeSchema>;
 export type MoveInput = z.input<typeof moveSchema>;
 
 export const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Use YYYY-MM');

@@ -4,7 +4,7 @@ import { getDb, schema } from '../src/db';
 import { seed } from '../src/db/seed';
 import { DEMO_PHONES } from '../src/db/seed-data';
 import { sha256Hex } from '../src/lib/crypto';
-import { grantAdmin, requestOtp, verifyOtp } from '../src/services/auth';
+import { grantAdmin, requestOtp, revokeAdmin, verifyOtp } from '../src/services/auth';
 import { call, login, resetDb } from './helpers';
 
 beforeEach(resetDb);
@@ -155,6 +155,22 @@ describe('roles', () => {
     const again = await login('9876543210');
     expect((await call('/me', { token: again })).body.role).toBe('admin');
     expect((await call('/admin/hostels', { token: again })).status).toBe(200);
+  });
+
+  test('admin:revoke takes admin away from live sessions; a phone still in ADMIN_PHONES is flagged', async () => {
+    const token = await login('9876543210');
+    await grantAdmin('9876543210');
+    expect((await call('/admin/hostels', { token })).status).toBe(200);
+    const revoked = await revokeAdmin('9876543210');
+    expect(revoked).toMatchObject({ wasAdmin: true, stillInAdminPhones: false, user: { role: 'tenant' } });
+    expect((await call('/admin/hostels', { token })).status).toBe(403);
+    expect((await call('/me', { token: await login('9876543210') })).body.role).toBe('tenant');
+    expect((await revokeAdmin('9876543210')).wasAdmin).toBe(false);
+    await expect(revokeAdmin('9876500001')).rejects.toThrow('No account');
+
+    // 9000000001 is in ADMIN_PHONES for tests: revoking works, but the caller is told the list would grant it again.
+    await login('9000000001');
+    expect(await revokeAdmin('9000000001')).toMatchObject({ wasAdmin: true, stillInAdminPhones: true });
   });
 
   test('the seeded demo admin keeps admin without ADMIN_PHONES', async () => {

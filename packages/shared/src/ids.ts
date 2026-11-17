@@ -27,7 +27,8 @@ export type IdPrefix =
   | 'pap'
   | 'aud'
   | 'lch'
-  | 'pex';
+  | 'pex'
+  | 'fpc';
 
 const ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyz';
 

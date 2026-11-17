@@ -2,6 +2,7 @@ import {
   dateLabel,
   FOOD_PLANS,
   type Invoice,
+  type IssueView,
   type MyMenu,
   type MyResidency,
   type MySubscription,
@@ -18,11 +19,12 @@ import { api, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { confirm } from '@/lib/confirm';
 import { openPayment } from '@/lib/pay';
+import { newUpdatesAt } from '@/lib/signals';
 import { groupStays, skipControl } from '@/lib/stay';
 import { theme } from '@/lib/theme';
 import { useLoad } from '@/lib/useLoad';
 
-type Data = { mine: MySubscription | null; menu: MyMenu | null; invoices: Invoice[]; stays: MyResidency[] };
+type Data = { mine: MySubscription | null; menu: MyMenu | null; invoices: Invoice[]; stays: MyResidency[]; myIssues: IssueView[] };
 
 const lifeTab = (hostelId: string, tab: string) => router.push({ pathname: '/home/[hostelId]', params: { hostelId, tab } });
 
@@ -31,10 +33,15 @@ export default function MyStay() {
   const { data, error, loading, refreshing, refresh, reload } = useLoad<Data | null>(async () => {
     if (!user) return null;
     // Any role can hold a plan: an owner may live in someone else's hostel.
-    const [mine, stays, invoices] = await Promise.all([api.me.subscription(), api.me.residencies(), api.me.invoices()]);
+    const [mine, stays, invoices, myIssues] = await Promise.all([
+      api.me.subscription(),
+      api.me.residencies(),
+      api.me.invoices(),
+      api.resident.myIssues().catch(() => []),
+    ]);
     const active = mine?.subscription.status === 'active';
     const menu = active && mine.subscription.mealPlan !== 'none' ? await api.me.menu(7).catch(() => null) : null;
-    return { mine, menu, invoices, stays };
+    return { mine, menu, invoices, stays, myIssues };
   }, [user?.id]);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -156,9 +163,25 @@ export default function MyStay() {
               )}
             </View>
           )}
+          {mine.scheduledFoodChange && (
+            <Row style={{ justifyContent: 'space-between' }}>
+              <P>
+                Food plan changes to {FOOD_PLANS[mine.scheduledFoodChange.mealPlan].label}
+                {mine.scheduledFoodChange.mealPlan !== 'none' ? ` (${mine.scheduledFoodChange.diet})` : ''} from {dateLabel(mine.scheduledFoodChange.effectiveFrom)}, with that bill.
+              </P>
+              <Button
+                small
+                variant="secondary"
+                title="Keep my current plan"
+                busy={busyKey === 'food'}
+                onPress={() => act('food', () => api.me.cancelFoodPlanChange(mine.scheduledFoodChange!.id), 'Food plan change cancelled. Your plan stays as it is.')}
+              />
+            </Row>
+          )}
           {sub.status === 'active' && !sub.cancelAt && (
             <Row>
               {!mine.scheduledMove && <Button small variant="secondary" title="Move hostel or room" onPress={() => router.push('/move')} />}
+              <Button small variant="secondary" title="Change food plan" onPress={() => router.push('/food-plan')} />
               <Button small variant="secondary" title="Hostel community" onPress={() => router.push(`/home/${mine.hostel.id}`)} />
               <Button
                 small
@@ -237,6 +260,14 @@ export default function MyStay() {
               </Pressable>
               <Row>
                 <Button small title="Open" label={`Open ${s.hostel.name}`} onPress={() => router.push(`/home/${s.hostel.id}`)} />
+                {newUpdatesAt(data.myIssues, s.hostel.id) > 0 && (
+                  <Button
+                    small
+                    title={`${newUpdatesAt(data.myIssues, s.hostel.id)} new on your issues`}
+                    label={`${newUpdatesAt(data.myIssues, s.hostel.id)} of your issues at ${s.hostel.name} have new updates`}
+                    onPress={() => lifeTab(s.hostel.id, 'issues')}
+                  />
+                )}
                 <Button small variant="secondary" title="Report an issue" onPress={() => lifeTab(s.hostel.id, 'issues')} />
                 {s.canReview && <Button small variant="secondary" title={s.hasReview ? 'Edit review' : 'Write a review'} onPress={() => lifeTab(s.hostel.id, 'review')} />}
                 {s.source === 'owner' && (
@@ -294,7 +325,13 @@ export default function MyStay() {
                 <P muted>{dateLabel(s.startDate)} – {dateLabel(s.endDate)}</P>
               </Pressable>
               <Row>
-                <Button small variant="ghost" title="Your issues" label={`Your issues at ${s.hostel.name}`} onPress={() => lifeTab(s.hostel.id, 'issues')} />
+                <Button
+                  small
+                  variant={newUpdatesAt(data.myIssues, s.hostel.id) > 0 ? 'secondary' : 'ghost'}
+                  title={newUpdatesAt(data.myIssues, s.hostel.id) > 0 ? `Your issues (${newUpdatesAt(data.myIssues, s.hostel.id)} new)` : 'Your issues'}
+                  label={`Your issues at ${s.hostel.name}${newUpdatesAt(data.myIssues, s.hostel.id) > 0 ? `, ${newUpdatesAt(data.myIssues, s.hostel.id)} with new updates` : ''}`}
+                  onPress={() => lifeTab(s.hostel.id, 'issues')}
+                />
                 {s.canReview ? (
                   <Button small variant="secondary" title={s.hasReview ? 'Edit review' : 'Review your stay'} onPress={() => lifeTab(s.hostel.id, 'review')} />
                 ) : s.hasReview ? <Badge label="Reviewed" tone="green" /> : null}

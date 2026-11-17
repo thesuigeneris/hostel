@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { mapTiles, tileImageSource } from '@hostels/shared';
 import { contentSecurityPolicy, newNonce } from './lib/csp';
 
 /**
@@ -11,6 +12,8 @@ export function middleware(req: NextRequest) {
   const policy = contentSecurityPolicy(nonce, {
     dev: process.env.NODE_ENV !== 'production',
     apiOrigin: process.env.CSP_API_ORIGIN ?? 'http://localhost:4000',
+    // The map's tile host, from the same setting the map reads (free OpenStreetMap tiles by default).
+    tileSource: tileImageSource(mapTiles(process.env.NEXT_PUBLIC_MAP_TILE_URL).url),
   });
   const headers = new Headers(req.headers);
   headers.set('content-security-policy', policy);

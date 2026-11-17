@@ -1,15 +1,22 @@
-import type { User } from '@hostels/shared';
+import type { MySignals, User } from '@hostels/shared';
 import Link from 'next/link';
 import { logoutAction } from '@/app/login/actions';
 import { type NavItem, NavLinks } from './NavLinks';
 import { buttonClass } from './ui';
 
-function navFor(user: User | null): NavItem[] {
+function navFor(user: User | null, signals: MySignals | null): NavItem[] {
   const links: NavItem[] = [{ href: '/hostels', label: 'Find a hostel' }];
+  // Updates on issues I reported that I haven't opened yet (in-app signals, no push).
+  const updates = signals?.issuesWithUpdates ?? 0;
+  const myHostel: NavItem = {
+    href: '/stay',
+    label: 'My hostel',
+    badge: { count: updates, label: `${updates} ${updates === 1 ? 'issue has' : 'issues have'} new updates` },
+  };
   if (!user || user.role === 'tenant') links.push({ href: '/for-owners', label: 'For owners' });
-  if (user?.role === 'tenant') links.push({ href: '/account', label: 'My plan' }, { href: '/stay', label: 'My hostel' });
-  // Owners and admins can hold a plan at someone else's hostel too.
-  else if (user) links.push({ href: '/account', label: 'My plan' });
+  if (user?.role === 'tenant') links.push({ href: '/account', label: 'My plan' }, myHostel);
+  // Owners and admins can hold a plan, and report issues, at someone else's hostel too.
+  else if (user) links.push({ href: '/account', label: 'My plan' }, ...(updates > 0 ? [myHostel] : []));
   if (user?.role === 'owner' || user?.role === 'admin') links.push({ href: '/owner', label: 'Owner dashboard' });
   if (user?.role === 'admin') links.push({ href: '/admin', label: 'Admin' });
   return links;
@@ -24,8 +31,8 @@ function Logo() {
   );
 }
 
-export function SiteHeader({ user }: { user: User | null }) {
-  const items = navFor(user);
+export function SiteHeader({ user, signals = null }: { user: User | null; signals?: MySignals | null }) {
+  const items = navFor(user, signals);
   const account = user ? (
     <>
       <Link href={user.role === 'tenant' ? '/account' : '/owner'} className="hidden max-w-40 truncate text-sm text-ink-soft no-underline hover:text-brand sm:block">

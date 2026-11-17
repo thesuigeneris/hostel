@@ -30,6 +30,11 @@ export function IssueList({ issues, emptyText = 'No issues reported. Nice.' }: {
                 {i.title}
               </span>
               <span className="flex items-center gap-2">
+                {i.unreadUpdates > 0 && (
+                  <Badge tone="info">
+                    {i.unreadUpdates} new {i.unreadUpdates === 1 ? 'update' : 'updates'}
+                  </Badge>
+                )}
                 {i.needsResponse && <Badge tone="red">Waiting on hostel</Badge>}
                 <StatusBadge kind="issue" status={i.status} />
               </span>

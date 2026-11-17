@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { ADMIN, DEMO_OWNER, apiGet, signIn } from './helpers';
+import { apiPost } from './a11y';
+import { ADMIN, DEMO_OWNER, DEMO_TENANT, apiGet, apiToken, publicGet, signIn } from './helpers';
 
 /**
  * Owner and admin tools added with the partner standards work:
@@ -79,5 +80,63 @@ test('admin filters owner bills, waives one, and the audit log records it', asyn
   await expect(admin.getByRole('heading', { name: partner.name }).or(admin.getByText(partner.name).first())).toBeVisible();
   await admin.goto('/admin/listings?status=live&q=zzzz-no-such-hostel');
   await expect(admin.getByText(/No live listings match/)).toBeVisible();
+  await admin.context().close();
+});
+
+test('admin tables page with Previous and Next, keeping filters', async ({ browser }) => {
+  const admin = await signIn(browser, ADMIN, { next: '/admin/listings?status=live&page=2' });
+  const pages = admin.getByRole('navigation', { name: 'Listing pages' });
+  await expect(pages.getByText('Page 2')).toBeVisible();
+  await expect(pages.getByRole('link', { name: 'Previous' })).toHaveAttribute('href', '/admin/listings?status=live&page=1');
+
+  await admin.goto('/admin/billing?bills=paid&subs=2');
+  const subs = admin.getByRole('navigation', { name: 'Subscription pages' });
+  await expect(subs.getByText('Page 2')).toBeVisible();
+  await expect(subs.getByRole('link', { name: 'Previous' })).toHaveAttribute('href', '/admin/billing?bills=paid&subs=1#subs');
+  await admin.context().close();
+});
+
+test('moderation: keep with the keyboard only, then hide with a rule and show again; the public page follows each', async ({ browser }) => {
+  // A reader flags a seeded review.
+  const cards = (await publicGet<{ items: { slug: string }[] }>('/hostels?limit=50')).items;
+  let reviewId = '';
+  let slug = '';
+  for (const c of cards) {
+    const reviews = await publicGet<{ id: string }[]>(`/hostels/${c.slug}/reviews`);
+    if (reviews.length) {
+      reviewId = reviews[0]!.id;
+      slug = c.slug;
+      break;
+    }
+  }
+  expect(reviewId).not.toBe('');
+  await apiPost(await apiToken(DEMO_TENANT), `/reviews/${reviewId}/flag`, { reason: 'Mentions a staff member by full name' });
+
+  const admin = await signIn(browser, ADMIN, { next: '/admin/moderation' });
+  const card = admin.locator('div.rounded-2xl', { hasText: 'Mentions a staff member by full name' }).first();
+  await expect(card).toBeVisible();
+  await card.getByLabel('Note').focus();
+  await admin.keyboard.type('Names a staff member, but kindly; fine to keep');
+  await admin.keyboard.press('Tab'); // to "Hide review"
+  await admin.keyboard.press('Tab'); // to "Keep it"
+  await expect(card.getByRole('button', { name: 'Keep it' })).toBeFocused();
+  await admin.keyboard.press('Enter');
+  await expect(admin.getByText('Review kept; its flags are dismissed')).toBeVisible();
+  // Kept means still public (the button's value was once lost and the review was hidden instead).
+  const publicIds = async () => (await publicGet<{ id: string }[]>(`/hostels/${slug}/reviews`)).map((r) => r.id);
+  expect(await publicIds()).toContain(reviewId);
+
+  // Flagged again (allowed once an admin has acted), then hidden with a rule.
+  await apiPost(await apiToken(DEMO_TENANT), `/reviews/${reviewId}/flag`, { reason: 'Shares a phone number in the text' });
+  await admin.reload();
+  const again = admin.locator('div.rounded-2xl', { hasText: 'Shares a phone number in the text' }).first();
+  await again.getByLabel('Rule it breaks').selectOption({ index: 1 });
+  await again.getByRole('button', { name: 'Hide review' }).click();
+  await expect(admin.getByText('Review hidden', { exact: true })).toBeVisible();
+  expect(await publicIds()).not.toContain(reviewId);
+
+  await admin.getByRole('button', { name: /^Show the review by .* again$/ }).first().click();
+  await expect(admin.getByText('Review is visible again')).toBeVisible();
+  expect(await publicIds()).toContain(reviewId);
   await admin.context().close();
 });

@@ -5,7 +5,7 @@ import { parseCoord } from '@/lib/owner';
 import { theme } from '@/lib/theme';
 import { UseMyLocation } from './UseMyLocation';
 
-// react-native-maps has no web build. The web preview takes the pin as typed coordinates instead, with a link to check it.
+// The WebView map has no web build. The web preview takes the pin as typed coordinates instead, with a link to check it.
 export function PinPicker({ lat, lng, onChange }: { lat: number; lng: number; onChange: (lat: number, lng: number) => void }) {
   const [la, setLa] = useState(lat.toFixed(6));
   const [ln, setLn] = useState(lng.toFixed(6));

@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cx } from './ui';
 
-export type NavItem = { href: string; label: string };
+/** `badge`: a count for the eye, with words for screen readers (e.g. updates on my issues I haven't opened). */
+export type NavItem = { href: string; label: string; badge?: { count: number; label: string } };
 
 /** Primary navigation with the current section marked for sighted and screen-reader users alike. */
 export function NavLinks({ items, variant }: { items: NavItem[]; variant: 'bar' | 'menu' }) {
@@ -25,6 +26,12 @@ export function NavLinks({ items, variant }: { items: NavItem[]; variant: 'bar' 
               )}
             >
               {l.label}
+              {l.badge && l.badge.count > 0 && (
+                <span className="ml-1.5 inline-flex min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-xs font-semibold leading-5 text-white">
+                  <span aria-hidden="true">{l.badge.count}</span>
+                  <span className="sr-only">({l.badge.label})</span>
+                </span>
+              )}
             </Link>
           </li>
         );

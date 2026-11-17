@@ -6,3 +6,7 @@ const extra = (Constants.expoConfig?.extra ?? {}) as Extra;
 /** On a physical phone, point these at your laptop's LAN address, e.g. EXPO_PUBLIC_API_URL=http://192.168.1.10:4000. */
 export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? extra.apiUrl ?? 'http://localhost:4000';
 export const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? extra.webUrl ?? 'http://localhost:3000';
+
+/** Map tiles: free OpenStreetMap by default; a provider's raster URL and credit line to scale (docs/RUN.md, "Maps"). */
+export const MAP_TILE_URL = process.env.EXPO_PUBLIC_MAP_TILE_URL;
+export const MAP_ATTRIBUTION = process.env.EXPO_PUBLIC_MAP_ATTRIBUTION;

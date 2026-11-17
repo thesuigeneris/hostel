@@ -137,3 +137,81 @@ describe('meal skips (M4, M6)', () => {
     expect(skipControl(day, { ...meal, credit: 0, skipped: true })).toMatchObject({ title: 'Undo skip', skippedNote: 'Skipped · no credit' });
   });
 });
+
+describe('food plan change (1a)', () => {
+  const sub = { mealPlan: 'full', diet: 'veg' } as const;
+  test('a hostel without food offers only no food; a scheduled change is picked first', async () => {
+    const { foodPlanChoices } = await import('../lib/foodPlan');
+    const mine = { subscription: sub, scheduledFoodChange: null } as never;
+    expect(foodPlanChoices(mine, true)).toEqual({ plans: ['full', 'two-meals', 'none'], mealPlan: 'full', diet: 'veg' });
+    expect(foodPlanChoices(mine, false).plans).toEqual(['none']);
+    const pending = { subscription: sub, scheduledFoodChange: { mealPlan: 'two-meals', diet: 'non-veg' } } as never;
+    expect(foodPlanChoices(pending, true)).toMatchObject({ mealPlan: 'two-meals', diet: 'non-veg' });
+  });
+  test('saving the plan already in force is caught before asking; diet does not matter without food', async () => {
+    const { sameAsNow } = await import('../lib/foodPlan');
+    expect(sameAsNow(sub, 'full', 'veg')).toBe(true);
+    expect(sameAsNow(sub, 'full', 'non-veg')).toBe(false);
+    expect(sameAsNow({ mealPlan: 'none', diet: 'veg' }, 'none', 'non-veg')).toBe(true);
+  });
+});
+
+describe('in-app signals (1b)', () => {
+  test('the tab badge shows only when an issue has something new', async () => {
+    const { tabBadge } = await import('../lib/signals');
+    expect(tabBadge(null)).toBeUndefined();
+    expect(tabBadge({ issuesWithUpdates: 0, issueUpdates: 0 })).toBeUndefined();
+    expect(tabBadge({ issuesWithUpdates: 2, issueUpdates: 5 })).toBe(2);
+  });
+  test('new updates are counted per hostel and worded for one or many', async () => {
+    const { newUpdatesAt, newUpdatesLabel } = await import('../lib/signals');
+    const issues = [
+      { hostelId: 'a', unreadUpdates: 2 },
+      { hostelId: 'a', unreadUpdates: 0 },
+      { hostelId: 'b', unreadUpdates: 1 },
+    ];
+    expect(newUpdatesAt(issues, 'a')).toBe(1);
+    expect(newUpdatesAt(issues, 'c')).toBe(0);
+    expect(newUpdatesLabel(1)).toBe('1 new update');
+    expect(newUpdatesLabel(3)).toBe('3 new updates');
+    expect(newUpdatesLabel(0)).toBeNull();
+  });
+});
+
+describe('data rights (1c)', () => {
+  test('the delete form needs DELETE typed, and the password when the account has one', async () => {
+    const { deleteFormProblem, exportText } = await import('../lib/privacy');
+    expect(deleteFormProblem('delete', '', false)).toBe('Type DELETE to confirm.');
+    expect(deleteFormProblem(' DELETE ', '', false)).toBeNull();
+    expect(deleteFormProblem('DELETE', '', true)).toBe('Enter your password.');
+    expect(deleteFormProblem('DELETE', 'secret words', true)).toBeNull();
+    expect(exportText({ a: 1 })).toBe('{\n  "a": 1\n}');
+  });
+});
+
+describe('free maps (Leaflet in a WebView)', () => {
+  test('the page pins Leaflet with integrity hashes, uses the tiles given, and hostel names cannot break out of the script', async () => {
+    const { leafletHtml, scriptJson } = await import('../lib/leafletMap');
+    const { DEFAULT_MAP_TILES } = await import('@hostels/shared');
+    const html = leafletHtml({
+      pins: [{ id: 'a', lat: 17.44, lng: 78.35, label: 'Sri Sai </script><script>alert(1)</script>', slug: 'sri-sai' }],
+      center: { lat: 17.44, lng: 78.35 },
+      zoom: 13,
+      tiles: DEFAULT_MAP_TILES,
+      colors: { verified: '#1F5C46', other: '#E08A2E' },
+    });
+    expect(html).toContain('integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="');
+    expect(html).toContain('tile.openstreetmap.org');
+    expect(html).not.toContain('</script><script>alert(1)');
+    expect(scriptJson('</script>')).toBe('"\\u003c/script\\u003e"');
+  });
+
+  test('messages from the map are checked before use', async () => {
+    const { mapMessage } = await import('../lib/leafletMap');
+    expect(mapMessage('{"type":"open","slug":"sri-sai-pg"}')).toEqual({ type: 'open', slug: 'sri-sai-pg' });
+    expect(mapMessage('{"type":"open","slug":"../admin"}')).toBeNull();
+    expect(mapMessage('{"type":"pin","lat":17.4412345678,"lng":78.35}')).toEqual({ type: 'pin', lat: 17.441235, lng: 78.35 });
+    expect(mapMessage('{"type":"pin","lat":200,"lng":0}')).toBeNull();
+    expect(mapMessage('not json')).toBeNull();
+  });
+});

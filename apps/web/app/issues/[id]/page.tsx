@@ -124,6 +124,7 @@ export default async function IssuePage({ params, searchParams }: Props) {
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{u.author}</span>
               {u.byOwner && <Badge tone="green">Hostel</Badge>}
+              {u.isNew && <Badge tone="info">New</Badge>}
               {u.toStatus && <span className="text-ink-muted">moved it to <StatusBadge kind="issue" status={u.toStatus} /></span>}
               <span className="text-xs text-ink-muted">{timeAgo(u.createdAt)}</span>
             </div>

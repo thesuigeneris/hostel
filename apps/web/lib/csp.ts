@@ -7,15 +7,15 @@
  * not run. `'unsafe-eval'` only in development, for fast refresh.
  *
  * Images: every photo is an upload served from the API's origin (outside photo links are refused by the API), map
- * tiles come from OpenStreetMap, and Razorpay Checkout may show its own images. Styles keep `'unsafe-inline'`: React
+ * tiles come from the configured tile host (OpenStreetMap by default), and Razorpay Checkout may show its own images. Styles keep `'unsafe-inline'`: React
  * and the motion library set inline styles, which cannot carry a nonce.
  */
-export function contentSecurityPolicy(nonce: string, opts: { dev: boolean; apiOrigin: string }) {
+export function contentSecurityPolicy(nonce: string, opts: { dev: boolean; apiOrigin: string; tileSource?: string }) {
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}'${opts.dev ? " 'unsafe-eval'" : ''} https://checkout.razorpay.com`,
     "style-src 'self' 'unsafe-inline'",
-    `img-src 'self' data: blob: ${opts.apiOrigin} https://*.tile.openstreetmap.org https://*.razorpay.com`,
+    `img-src 'self' data: blob: ${opts.apiOrigin} ${opts.tileSource ?? 'https://*.tile.openstreetmap.org'} https://*.razorpay.com`,
     "font-src 'self' data:",
     "connect-src 'self' https://*.razorpay.com https://lumberjack.razorpay.com",
     'frame-src https://api.razorpay.com https://checkout.razorpay.com',

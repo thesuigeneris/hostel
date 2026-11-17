@@ -249,3 +249,27 @@ describe('T11: names on reviews and in the neighbour list', () => {
     expect(JSON.stringify(dir)).not.toContain('98765');
   });
 });
+
+describe('An owner-added review counts toward the rating only once a rent record backs the stay', () => {
+  const ratingsOf = async () =>
+    ((await call(`/hostels/${pro.hostel.slug}`)).body as { ratings: { rating: number | null; reviewCount: number } }).ratings;
+
+  test('the review is public at once, but the stars ignore it until the owner records rent', async () => {
+    const r = await invite('2026-11-09');
+    expect((await call(`/me/residencies/${r.residencyId}/accept`, { token: r.token, method: 'POST' })).status).toBe(200);
+    setClock('2026-11-23T06:00:00Z'); // day 14, when the review window opens
+    expect((await review(r.token)).status).toBe(200);
+
+    // Only the owner's word says this person lived here, so the rating stays empty.
+    expect(await ratingsOf()).toMatchObject({ rating: null, reviewCount: 0 });
+
+    const rent = await call(`/owner/hostels/${pro.hostel.id}/rent/${r.residencyId}`, {
+      token: ownerToken,
+      method: 'PUT',
+      body: { month: '2026-11', amountPaid: 7000 },
+    });
+    expect(rent.status).toBe(200);
+
+    expect(await ratingsOf()).toMatchObject({ rating: 4, reviewCount: 1 });
+  });
+});
